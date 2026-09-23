@@ -14,6 +14,7 @@ from nexus.config import OrdersSettings
 from nexus.contracts import CreateOrderRequest, HealthResponse, HealthStatus, OrderResponse
 from nexus.lab.control import create_failure_router
 from nexus.lab.failures import FailureController, FailureDefinition, FailureEffect
+from nexus.observability import install_observability
 from nexus.services.orders.database import OrderRepository, OrdersDatabase
 from nexus.web import ServiceError, install_service_foundation
 
@@ -50,14 +51,25 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         resolved_database.ping()
         app.state.database = resolved_database
-        yield
-        resolved_database.dispose()
+        if runtime.metrics is not None:
+            runtime.metrics.set_database_health(True)
+        try:
+            yield
+        finally:
+            runtime.shutdown()
+            resolved_database.dispose()
 
-    app = FastAPI(title="NEXUS Orders Service", version="0.3.0", lifespan=lifespan)
+    app = FastAPI(title="NEXUS Orders Service", version="0.4.0", lifespan=lifespan)
     install_service_foundation(
         app,
         resolved_settings.service_name,
         resolved_settings.log_level,
+    )
+    runtime = install_observability(
+        app,
+        resolved_settings,
+        resolved_settings.service_name,
+        resolved_database.engine,
     )
 
     if resolved_settings.lab_failures_enabled:
@@ -70,6 +82,8 @@ def create_app(
     )
     def health() -> HealthResponse | JSONResponse:
         if controller.is_active(FailureEffect.SERVICE_UNAVAILABLE):
+            if runtime.metrics is not None:
+                runtime.metrics.set_database_health(True)
             body = HealthResponse(
                 service="orders",
                 status=HealthStatus.UNHEALTHY,
@@ -77,6 +91,8 @@ def create_app(
             )
             return JSONResponse(status_code=503, content=body.model_dump(mode="json"))
         if controller.is_active(FailureEffect.DEPENDENCY_UNAVAILABLE):
+            if runtime.metrics is not None:
+                runtime.metrics.set_database_health(False)
             body = HealthResponse(
                 service="orders",
                 status=HealthStatus.UNHEALTHY,
@@ -86,12 +102,16 @@ def create_app(
         try:
             resolved_database.ping()
         except SQLAlchemyError:
+            if runtime.metrics is not None:
+                runtime.metrics.set_database_health(False)
             body = HealthResponse(
                 service="orders",
                 status=HealthStatus.UNHEALTHY,
                 dependencies={"database": HealthStatus.UNHEALTHY},
             )
             return JSONResponse(status_code=503, content=body.model_dump(mode="json"))
+        if runtime.metrics is not None:
+            runtime.metrics.set_database_health(True)
         return HealthResponse(
             service="orders",
             status=HealthStatus.HEALTHY,

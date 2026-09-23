@@ -1,0 +1,57 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+      "id": 1,
+      "targets": [{"expr": "sum by (service) (rate(nexus_http_requests_total[1m]))", "legendFormat": "{{service}}", "refId": "A"}],
+      "title": "Request rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+      "id": 2,
+      "targets": [{"expr": "sum by (service) (rate(nexus_http_requests_total{status_class=~\"4xx|5xx\"}[1m]))", "legendFormat": "{{service}}", "refId": "A"}],
+      "title": "Error rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+      "id": 3,
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le, service) (rate(nexus_http_request_duration_seconds_bucket[1m])))", "legendFormat": "{{service}}", "refId": "A"}],
+      "title": "P95 request latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 4,
+      "targets": [{"expr": "sum by (dependency) (rate(nexus_dependency_failures_total[1m]))", "legendFormat": "{{dependency}}", "refId": "A"}],
+      "title": "Dependency failures",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 1, "min": 0}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 5,
+      "targets": [{"expr": "nexus_database_health{service=\"orders\"}", "legendFormat": "PostgreSQL", "refId": "A"}],
+      "title": "Orders database health",
+      "type": "stat"
+    }
+  ],
+  "schemaVersion": 40,
+  "tags": ["nexus", "aegisops"],
+  "templating": {"list": []},
+  "time": {"from": "now-15m", "to": "now"},
+  "title": "AegisOps Overview",
+  "uid": "aegisops-overview",
+  "version": 1
+}

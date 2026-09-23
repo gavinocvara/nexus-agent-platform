@@ -1,5 +1,8 @@
 """Deterministic Users service for the AegisOps lab."""
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
@@ -7,6 +10,7 @@ from nexus.config import UsersSettings
 from nexus.contracts import HealthResponse, HealthStatus, UserResponse
 from nexus.lab.control import create_failure_router
 from nexus.lab.failures import FailureController, FailureDefinition, FailureEffect
+from nexus.observability import install_observability
 from nexus.web import ServiceError, install_service_foundation
 
 _USERS = {
@@ -28,12 +32,21 @@ def create_app(
 
     resolved_settings = settings or UsersSettings()
     controller = failure_controller or FailureController(USER_FAILURES)
-    app = FastAPI(title="NEXUS Users Service", version="0.3.0")
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            runtime.shutdown()
+
+    app = FastAPI(title="NEXUS Users Service", version="0.4.0", lifespan=lifespan)
     install_service_foundation(
         app,
         resolved_settings.service_name,
         resolved_settings.log_level,
     )
+    runtime = install_observability(app, resolved_settings, resolved_settings.service_name)
 
     if resolved_settings.lab_failures_enabled:
         app.include_router(create_failure_router(controller))

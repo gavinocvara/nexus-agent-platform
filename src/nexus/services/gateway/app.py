@@ -16,6 +16,8 @@ from nexus.contracts import (
     OrderResponse,
     UserResponse,
 )
+from nexus.observability import install_observability
+from nexus.observability.metrics import DependencyTimer, ServiceMetrics
 from nexus.web import (
     CORRELATION_HEADER,
     ServiceError,
@@ -28,8 +30,11 @@ async def _request_downstream(
     client: httpx.AsyncClient,
     method: str,
     url: str,
+    dependency: str,
+    metrics: ServiceMetrics | None,
     json_body: dict[str, Any] | None = None,
 ) -> Any:
+    timer = DependencyTimer(metrics, dependency)
     try:
         response = await client.request(
             method,
@@ -38,11 +43,14 @@ async def _request_downstream(
             headers={CORRELATION_HEADER: get_correlation_id()},
         )
     except httpx.RequestError as exc:
+        timer.record(None)
         raise ServiceError(
             503,
             "downstream_unavailable",
             "A required downstream service is unavailable",
         ) from exc
+
+    timer.record(response.status_code)
 
     if response.is_error:
         try:
@@ -78,15 +86,22 @@ def create_app(
             timeout=resolved_settings.request_timeout_seconds,
             transport=transport,
         ) as client:
+            runtime.tracing.instrument_httpx(client)
             app.state.http_client = client
-            yield
+            try:
+                yield
+            finally:
+                runtime.tracing.uninstrument_httpx(client)
+                runtime.shutdown()
 
-    app = FastAPI(title="NEXUS API Gateway", version="0.3.0", lifespan=lifespan)
+    app = FastAPI(title="NEXUS API Gateway", version="0.4.0", lifespan=lifespan)
     install_service_foundation(
         app,
         resolved_settings.service_name,
         resolved_settings.log_level,
     )
+    runtime = install_observability(app, resolved_settings, resolved_settings.service_name)
+    app.state.metrics = runtime.metrics
 
     @app.get("/health", response_model=HealthResponse, response_model_exclude_none=True)
     def health() -> HealthResponse:
@@ -98,6 +113,8 @@ def create_app(
             request.app.state.http_client,
             "GET",
             f"{users_url}/users/{user_id}",
+            "users",
+            request.app.state.metrics,
         )
         return UserResponse.model_validate(payload)
 
@@ -107,6 +124,8 @@ def create_app(
             request.app.state.http_client,
             "POST",
             f"{orders_url}/orders",
+            "orders",
+            request.app.state.metrics,
             payload.model_dump(mode="json"),
         )
         return OrderResponse.model_validate(response_payload)
@@ -117,6 +136,8 @@ def create_app(
             request.app.state.http_client,
             "GET",
             f"{orders_url}/orders/{order_id}",
+            "orders",
+            request.app.state.metrics,
         )
         return OrderResponse.model_validate(payload)
 

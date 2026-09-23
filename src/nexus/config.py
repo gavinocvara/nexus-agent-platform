@@ -27,6 +27,9 @@ class NexusSettings(BaseSettings):
     env: NexusEnvironment = NexusEnvironment.DEVELOPMENT
     log_level: str = Field(default="INFO", min_length=1)
     lab_failures_enabled: bool = False
+    metrics_enabled: bool = False
+    otel_enabled: bool = False
+    otel_exporter_endpoint: str = Field(default="http://localhost:4317", min_length=1)
 
 
 class GatewaySettings(NexusSettings):

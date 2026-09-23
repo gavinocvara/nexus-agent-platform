@@ -5,12 +5,14 @@ import logging
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar, Token
 from datetime import UTC, datetime
+from time import perf_counter
 from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from opentelemetry import trace
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
@@ -35,7 +37,11 @@ class JsonFormatter(logging.Formatter):
             "message": record.getMessage(),
             "correlation_id": get_correlation_id(),
         }
-        for field in ("method", "path", "status_code"):
+        span_context = trace.get_current_span().get_span_context()
+        if span_context.is_valid:
+            payload["trace_id"] = format(span_context.trace_id, "032x")
+            payload["span_id"] = format(span_context.span_id, "016x")
+        for field in ("method", "path", "status_code", "duration_ms"):
             value = getattr(record, field, None)
             if value is not None:
                 payload[field] = value
@@ -78,6 +84,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         supplied_id = request.headers.get(CORRELATION_HEADER, "").strip()
         correlation_id = supplied_id[:128] if supplied_id else str(uuid4())
         token: Token[str] = _correlation_id.set(correlation_id)
+        started = perf_counter()
         try:
             response = await call_next(request)
             response.headers[CORRELATION_HEADER] = correlation_id
@@ -88,6 +95,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                     "method": request.method,
                     "path": request.url.path,
                     "status_code": response.status_code,
+                    "duration_ms": round((perf_counter() - started) * 1000, 3),
                 },
             )
             return response
