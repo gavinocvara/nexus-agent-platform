@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nexus-agent-platform"
+version = "0.1.0"
+description = "NEXUS agentic engineering platform foundation."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [
+  { name = "NEXUS Project" },
+]
+dependencies = [
+  "pydantic>=2.8,<3",
+  "pydantic-settings>=2.4,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.11,<2",
+  "pytest>=8.3,<9",
+  "ruff>=0.6,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nexus"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "F",
+  "I",
+  "UP",
+  "B",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["nexus"]
