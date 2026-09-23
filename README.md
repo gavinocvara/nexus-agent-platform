@@ -5,6 +5,8 @@ provides the AegisOps distributed-systems lab that later diagnostic agents will
 observe, disrupt, repair, and evaluate. Phase 2 turns it into a deterministic
 incident laboratory with isolated evaluator ground truth. Phase 3 adds operational
 metrics, logs, and distributed traces without exposing those answers.
+Phase 4 adds bounded read-only diagnostics, and Phase 5 adds one evidence-grounded
+AegisOps investigator plus an isolated evaluation harness.
 
 The governing specifications are `NEXUS_PROJECT_INSTRUCTIONS.md`,
 `NEXUS_MASTER_BUILD_PROMPT.md`, and `BRAIN.md`.
@@ -188,3 +190,32 @@ py -m nexus.diagnostics logs orders --window 5m --limit 20
 
 See `docs/runbooks/diagnostics.md` for every command and
 `docs/adr/0005-typed-diagnostic-boundary.md` for the security architecture.
+
+## AegisOps Investigator
+
+Phase 5 implements exactly one `aegisops.investigator` through the OpenAI Agents SDK.
+It receives only the eleven registered diagnostic tools and returns a strict diagnosis
+covering status, component, failure class, hypotheses, evidence references,
+alternatives, confidence, and the next read-only diagnostic action. Every evidence
+claim names a recorded tool call and an exact result value. There are no handoffs,
+sessions, memory, write/remediation tools, or ambient machine capabilities.
+
+Live execution is opt-in and requires `NEXUS_AGENT_ENABLED=true` plus an
+`OPENAI_API_KEY` in the untracked environment. Run one generic investigation with:
+
+```powershell
+py -m nexus.aegisops investigate
+```
+
+With the Compose lab running, the explicit live evaluator command is:
+
+```powershell
+py -m nexus.evaluation.aegisops --runs 1
+```
+
+It runs every scenario, passes only the generic prompt to the agent, scores against
+ground truth outside agent context, and guarantees reset and recovery verification.
+Local reports are written below ignored `.nexus/evaluations/aegisops/`. No live model
+benchmark is claimed by the deterministic test suite. See
+`docs/runbooks/aegisops-investigator.md` and
+`docs/adr/0006-single-aegisops-investigator.md`.

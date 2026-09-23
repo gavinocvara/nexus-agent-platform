@@ -39,8 +39,16 @@
 - Hard evaluator, raw-query, ambient-access, and prompt-injection boundaries
 - Five-scenario evidence sufficiency evaluation against the real stack
 
+## Phase 5 — First AegisOps Investigator (Complete)
+
+- One OpenAI Agents SDK investigator behind a framework-neutral runtime adapter
+- Exact read-only registry/policy tool intersection with hard call, turn, and time limits
+- Structured diagnosis, machine-checkable evidence provenance, and typed failure states
+- Ground-truth-isolated five-scenario harness with deterministic scoring and recovery
+- Scripted no-key safety, policy, provenance, injection, and lifecycle validation
+
 ## Later Phases
 
-The full sequence is governed by `NEXUS_MASTER_BUILD_PROMPT.md`: first investigator
-agent, evaluation, Brain v1, Atlas v1, AegisOps remediation, Kubernetes, PatchForge,
+The full sequence is governed by `NEXUS_MASTER_BUILD_PROMPT.md`: live evaluation and
+benchmark history, Brain v1, Atlas v1, AegisOps remediation, Kubernetes, PatchForge,
 SentinelQA, Engram evolution, and integrated NEXUS workflows.

@@ -31,6 +31,9 @@ jobs:
       - name: Pytest
         run: python -m pytest
 
+      - name: Validate deterministic investigator boundary
+        run: python -m pytest tests/unit/test_aegisops_contracts.py tests/unit/test_aegisops_runtime.py tests/unit/test_aegisops_evaluation.py
+
       - name: Validate scenario ground truth
         run: python -m nexus.lab.scenarios validate
 

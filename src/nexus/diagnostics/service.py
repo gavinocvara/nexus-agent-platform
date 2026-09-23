@@ -3,6 +3,7 @@
 import re
 from time import perf_counter
 from typing import TypeVar
+from uuid import uuid4
 
 from pydantic import BaseModel
 
@@ -85,17 +86,19 @@ class DiagnosticServiceLayer:
         started: float,
         result_count: int,
     ) -> ResultT:
-        self.session.record(
-            DiagnosticAuditEvent(
-                session_id=self.session.session_id,
-                tool=result.tool,
-                normalized_arguments=json_safe_arguments(arguments),
-                success=result.success,
-                duration_ms=(perf_counter() - started) * 1000,
-                backend=result.source,
-                result_count=result_count,
-            )
+        tool_call_id = uuid4()
+        result.tool_call_id = tool_call_id
+        event = DiagnosticAuditEvent(
+            session_id=self.session.session_id,
+            tool_call_id=tool_call_id,
+            tool=result.tool,
+            normalized_arguments=json_safe_arguments(arguments),
+            success=result.success,
+            duration_ms=(perf_counter() - started) * 1000,
+            backend=result.source,
+            result_count=result_count,
         )
+        self.session.record(event, result)
         return result
 
     def list_services(self) -> ServiceInventoryResult:

@@ -67,3 +67,7 @@ typed investigator contract.
 - The in-memory audit/session foundation is not yet durable policy enforcement;
   Atlas, authenticated identities, persistent audit storage, and budgets remain later
   milestones.
+
+Phase 5 subsequently adds per-call IDs, a separate in-memory evidence ledger, and a
+session call ceiling as described by ADR 0006. Durable policy enforcement remains an
+Atlas concern.

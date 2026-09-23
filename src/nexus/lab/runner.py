@@ -87,7 +87,7 @@ class ScenarioRunner:
         if response.status_code != 200 or failure.get("failure_id") != scenario.id:
             raise ScenarioRunError("Failure activation state did not match the scenario")
 
-    def _verify_health(
+    def verify_health(
         self,
         service: ScenarioService,
         expected_status: int,
@@ -100,7 +100,7 @@ class ScenarioRunner:
                 f"expected {expected_status}"
             )
 
-    def _observe(
+    def observe(
         self,
         expectation: ExpectedObservation,
         client: httpx.Client,
@@ -143,14 +143,14 @@ class ScenarioRunner:
         with httpx.Client(timeout=15, transport=self._transport) as client:
             self.reset(scenario, client)
             health_service = ScenarioService(scenario.recovery.health_service.value)
-            self._verify_health(health_service, 200, client)
+            self.verify_health(health_service, 200, client)
             lifecycle = ScenarioLifecycle.BASELINE_VERIFIED
             symptom_error: ScenarioRunError | None = None
             try:
                 self.activate(scenario, client)
                 lifecycle = ScenarioLifecycle.ACTIVE
                 observations = [
-                    self._observe(expectation, client) for expectation in scenario.expected_symptoms
+                    self.observe(expectation, client) for expectation in scenario.expected_symptoms
                 ]
                 lifecycle = ScenarioLifecycle.SYMPTOMS_VERIFIED
             except ScenarioRunError as exc:
@@ -158,7 +158,7 @@ class ScenarioRunner:
             finally:
                 self.reset(scenario, client)
                 lifecycle = ScenarioLifecycle.RESET
-            self._verify_health(health_service, scenario.recovery.expected_status, client)
+            self.verify_health(health_service, scenario.recovery.expected_status, client)
             lifecycle = ScenarioLifecycle.RECOVERY_VERIFIED
             if symptom_error is not None:
                 raise symptom_error

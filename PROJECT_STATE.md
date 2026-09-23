@@ -2,8 +2,8 @@
 
 ## Current Milestone
 
-Phase 4 - Typed Read-Only Diagnostic Tool Layer and Investigator Access Boundary
-complete. Phase 5 has not started.
+Phase 5 - Single AegisOps Investigator and Evaluation Baseline complete. No Phase 6
+implementation has started.
 
 ## Repository
 
@@ -45,6 +45,21 @@ complete. Phase 5 has not started.
 - Evaluator-side proof that permitted evidence yields five distinct fingerprints for
   the five existing scenarios without scenario knowledge in production diagnostics.
 - Typed diagnostic boundary architecture record and operator runbook.
+- One `aegisops.investigator` implemented through a narrow OpenAI Agents SDK adapter.
+- Exact eleven-tool SDK surface validated against the Phase 4 registry and policy;
+  construction fails closed on drift, writable metadata, or unexpected risk.
+- Structured diagnosis contracts for diagnosed, insufficient-evidence, and diagnostic-
+  backend-failure outcomes, with bounded hypotheses and exact evidence references.
+- Stable tool-call IDs shared by results and audit metadata, with full evidence retained
+  separately in a defensive in-memory session ledger.
+- Typed agent settings, opt-in live execution, hard diagnostic-call/turn/time limits,
+  explicit run failure states, and run records with nullable model usage.
+- Five-scenario evaluator that exposes only a generic prompt to the agent, verifies
+  evidence values, scores safety and efficiency, and resets in a mandatory `finally`.
+- Reproducibility metadata and ignored local evaluation output under `.nexus/`.
+- Scripted no-key validation for policy, schema, provenance, limits, evaluator
+  isolation, prompt injection, unsafe verbal actions, scoring, and recovery.
+- Single-investigator architecture record and operator/evaluation runbook.
 
 ## Validation Commands
 
@@ -60,6 +75,8 @@ py -m pytest
 py -m nexus.lab.scenarios validate
 py -m nexus.diagnostics services
 py -m nexus.diagnostics system-health
+py -m nexus.aegisops investigate
+py -m nexus.evaluation.aegisops --runs 1
 docker compose config
 docker compose up --build --detach --wait
 $env:RUN_INTEGRATION = "1"
@@ -72,22 +89,16 @@ docker compose down --volumes
 
 ## Latest Validation
 
-- Editable installation and `py -m pip check` passed for version 0.5.0.
-- `py -m ruff format --check .` and `py -m ruff check .` passed for 70 files.
-- `py -m mypy` passed with no issues in 37 source files.
-- `py -m pytest` passed 50 tests; 16 Compose integration tests were deselected.
+- Editable installation and `py -m pip check` passed for version 0.6.0.
+- `py -m ruff format --check .` and `py -m ruff check .` passed for 89 files.
+- `py -m mypy` passed with no issues in 51 source files.
+- `py -m pytest` passed 65 tests; 16 Compose integration tests were deselected.
 - All 5 version 1 scenario files passed typed catalog validation.
-- CLI inventory serialization, whitespace checks, secret scan, and governing-file
-  comparison passed.
-- GitHub Actions run `35830240997` passed for commit `6158657`:
-  - Python install, Ruff, mypy, 50 unit/service tests, and scenario validation passed.
-  - Compose validation, builds, startup, health, and observability readiness passed.
-  - All 16 PostgreSQL, incident, observability, diagnostic, sufficiency, and isolation
-    integration tests passed.
-  - Diagnostic CLI topology, health, metrics, dependency, and log commands passed.
-  - Five scenario evidence fingerprints were distinct using only permitted results.
-  - Three representative incidents exposed required evidence, reset, and recovered.
-  - Compose teardown and volume cleanup passed.
+- Deterministic Phase 5 tests exercised all five scenarios with scripted engines and
+  no API key; these are wiring/safety results, not a live model benchmark.
+- Whitespace, tracked-file secret-pattern, package metadata, CLI-disabled-state, and
+  governing-file integrity checks passed.
+- Phase 5 GitHub Actions validation is pending the first pushed Phase 5 commit.
 
 ## Safety Boundary
 
@@ -113,6 +124,16 @@ docker compose down --volumes
   trace text is explicitly untrusted data and is never executed or interpreted.
 - Audit events contain normalized arguments and execution metadata, not evidence or
   backend payloads.
+- Agent construction exposes only the exact registry/policy intersection and rejects
+  capability drift before model execution.
+- The agent context contains only diagnostics, its session, and a run ID; it has no
+  evaluator, scenario, expected answer, credentials, or ambient access object.
+- Telemetry instructions are untrusted data. The agent is instructed to gather and
+  challenge evidence, abstain when needed, omit hidden reasoning, and never remediate.
+- Evidence claims are checked against exact values in recorded diagnostic results.
+- Model execution is disabled by default; API credentials are read only from the
+  process environment and are never placed in agent context or run records.
+- Agents SDK tracing is off by default and, if enabled, excludes sensitive content.
 
 ## Known Issues
 
@@ -133,11 +154,17 @@ docker compose down --volumes
 - Diagnostic sessions and audit records are in-memory and single-process. Persistent
   identity, policy enforcement, durable audit storage, and budgets belong to Atlas.
 - The diagnostic CLI is a developer interface, not an authenticated network service.
+- No live model evaluation has been run in this phase on the current host, so NEXUS
+  makes no investigator accuracy, latency, token, or cost benchmark claim yet.
+- Deterministic unsafe-output detection is lexical and supplements, rather than
+  replaces, future model-based or policy-based safety evaluation.
+- The Phase 5 evaluator writes one complete report after all runs; durable incremental
+  run history and trend comparisons remain Phase 6 work.
 
 ## Next Step
 
-Begin Phase 5 with one AegisOps investigator agent behind the existing diagnostic
-service and policy. Give it no ambient tools, require structured hypotheses with
-supporting and conflicting evidence, retain diagnostic audit records, and evaluate it
-against the five scenarios with accuracy, tool-call count, latency, and unsafe-output
-measures. Do not add remediation, multiple agents, Atlas runtime, MCP, or memory yet.
+Begin Phase 6 by running and reviewing an explicit live-model baseline, then add
+versioned benchmark history and regression comparison around the existing evaluator.
+Keep the single-agent, read-only boundary; do not add remediation, multiple agents,
+Atlas runtime, MCP, or memory until evidence from the baseline justifies the next
+architectural step.

@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Annotated, Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
@@ -74,6 +75,7 @@ class DiagnosticResult(BaseModel):
 
     model_config = StrictModelConfig
 
+    tool_call_id: UUID | None = None
     tool: str
     observed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     source: DiagnosticSource

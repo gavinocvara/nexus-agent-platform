@@ -86,8 +86,10 @@ with DiagnosticServiceLayer() as diagnostics:
     audit = diagnostics.session.audit_records()
 ```
 
-Audit records contain tool, timestamp, normalized arguments, success/failure,
-duration, backend, and result count. They contain no log messages or trace bodies.
+Audit records contain a stable tool-call ID, tool, timestamp, normalized arguments,
+success/failure, duration, backend, and result count. Complete results are retained in
+a separate in-memory session evidence ledger for provenance validation; audit events
+still contain no log messages, trace bodies, or duplicated evidence.
 
 ## Explicitly Unsupported
 
