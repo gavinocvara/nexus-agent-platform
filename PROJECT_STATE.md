@@ -3,7 +3,7 @@
 ## Current Milestone
 
 Phase 6 - Reproducible AegisOps Baseline Benchmarking and Regression History:
-structured-output framework repair in validation, live baseline pending.
+structured-output framework repair complete, live micro-test and baseline pending.
 
 The memoryless Phase 5 investigator is frozen as `aegisops-memoryless-v1`. No prompt,
 tool, model guidance, scoring, scenario, memory, multi-agent, remediation, Atlas, or
@@ -114,8 +114,16 @@ py -m pytest -m integration tests/integration
 - Governing files are unchanged from approved Phase 5 commit `67081f3`.
 - Whitespace and tracked-file secret-pattern scans passed.
 - CLI command discovery and origin/`main` Git configuration passed.
-- The pre-repair GitHub validation below remains the latest remote result until the
-  structured-output repair is committed and pushed.
+- GitHub Actions run `35915953170` passed for structured-output repair commit
+  `e014a878b16a6c59212dbc708ba2e0e1975dde5c`; both `validate` and
+  `compose-integration` completed successfully.
+- A clean local Compose rebuild started all ten application, database, telemetry, and
+  dashboard containers. Gateway, Users, Orders, Prometheus, Loki, Tempo, Grafana, and
+  both evaluator controls returned healthy responses.
+- Clean-tree preflight on the repaired commit passed live opt-in, model
+  `gpt-5.6-sol`, Git identity, all five scenarios, the 11-tool policy boundary, all
+  application services, all observability backends, and both evaluator controls. It
+  exited `2` solely because `OPENAI_API_KEY` is absent from the current process.
 - GitHub Actions run `35901974987` passed for Phase 6 implementation commit
   `0c75809a67980cc7b70cd7804759a9ee42705397`:
   - `validate` passed installation, Ruff, strict mypy, all 86 non-integration tests,
@@ -159,8 +167,8 @@ py -m pytest -m integration tests/integration
 
 ## Next Step
 
-On a Docker-capable machine with genuine credentials, commit any remaining work so the
-tree is clean, run `preflight`, then `smoke --confirm-live`. If smoke exposes only
-model-quality weaknesses, run `baseline --runs 3 --confirm-live`, review every run,
-and lock the accepted session as `aegisops-memoryless-v1`. Do not begin Brain v1
-without that genuine baseline unless the project owner explicitly chooses to.
+Supply `OPENAI_API_KEY` locally without committing it, rerun clean-tree preflight, and
+run exactly one no-tools `gpt-5.6-sol` structured-output micro-test through the repaired
+adapter. Stop and review that result before authorizing the five-scenario smoke. Do
+not begin Brain v1 without a genuine accepted baseline unless the project owner
+explicitly chooses to.
