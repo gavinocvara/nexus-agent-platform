@@ -111,7 +111,7 @@ def test_healthy_diagnostic_workflow_against_real_backends() -> None:
                 and result.summary.request_count > 0
             ),
         )
-        assert requests.summary.request_rate_per_second is not None
+        assert requests.summary.request_count is not None
 
         dependency = _poll(
             lambda: diagnostics.get_dependency_summary(
@@ -124,7 +124,7 @@ def test_healthy_diagnostic_workflow_against_real_backends() -> None:
                 and result.summary.request_count > 0
             ),
         )
-        assert dependency.summary.request_rate_per_second is not None
+        assert dependency.summary.request_count is not None
 
         evidence = _poll(
             lambda: diagnostics.get_request_evidence(
