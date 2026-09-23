@@ -5,8 +5,9 @@ provides the AegisOps distributed-systems lab that later diagnostic agents will
 observe, disrupt, repair, and evaluate. Phase 2 turns it into a deterministic
 incident laboratory with isolated evaluator ground truth. Phase 3 adds operational
 metrics, logs, and distributed traces without exposing those answers.
-Phase 4 adds bounded read-only diagnostics, and Phase 5 adds one evidence-grounded
-AegisOps investigator plus an isolated evaluation harness.
+Phase 4 adds bounded read-only diagnostics, Phase 5 adds one evidence-grounded
+AegisOps investigator, and Phase 6 adds reproducible benchmark history and comparison
+without changing that investigator's behavior.
 
 The governing specifications are `NEXUS_PROJECT_INSTRUCTIONS.md`,
 `NEXUS_MASTER_BUILD_PROMPT.md`, and `BRAIN.md`.
@@ -207,15 +208,46 @@ Live execution is opt-in and requires `NEXUS_AGENT_ENABLED=true` plus an
 py -m nexus.aegisops investigate
 ```
 
-With the Compose lab running, the explicit live evaluator command is:
+With the Compose lab running, first verify all live boundaries without making a model
+request:
 
 ```powershell
-py -m nexus.evaluation.aegisops --runs 1
+py -m nexus.evaluation.aegisops preflight
 ```
 
-It runs every scenario, passes only the generic prompt to the agent, scores against
-ground truth outside agent context, and guarantees reset and recovery verification.
-Local reports are written below ignored `.nexus/evaluations/aegisops/`. No live model
-benchmark is claimed by the deterministic test suite. See
+Then explicitly authorize one paid smoke investigation per scenario:
+
+```powershell
+py -m nexus.evaluation.aegisops smoke --confirm-live
+```
+
+It passes only the generic prompt to the agent and scores against ground truth outside
+agent context. No live model benchmark is claimed by the deterministic test suite. See
 `docs/runbooks/aegisops-investigator.md` and
 `docs/adr/0006-single-aegisops-investigator.md`.
+
+## Reproducible Benchmarking
+
+Phase 6 freezes Phase 5 behavior as `aegisops-memoryless-v1`. Every session records a
+clean Git identity, model and runtime versions, behavior hashes, limits, deterministic
+run order, and schema versions. Each attempted run is written atomically below ignored
+`.nexus/benchmarks/aegisops/`; summaries preserve aggregate, calibration, scenario,
+tool-use, evidence-quality, latency, and optional token metrics.
+
+Official runs recreate the full Compose stack and volumes before every investigation,
+perform deterministic healthy warm-up traffic, and verify reset/recovery afterward.
+Model failures remain in history. A recovery failure quarantines the session. Resume,
+comparison, and immutable baseline-lock commands are available:
+
+```powershell
+py -m nexus.evaluation.aegisops baseline --runs 3 --confirm-live
+py -m nexus.evaluation.aegisops resume <session-id> --confirm-live
+py -m nexus.evaluation.aegisops compare <baseline-session> <candidate-session>
+py -m nexus.evaluation.aegisops lock <session-id> --name aegisops-memoryless-v1
+```
+
+Dirty-tree runs require `--allow-dirty`, are marked non-reproducible, and cannot be
+locked. Comparisons report factual deltas, configurable threshold crossings, and
+identity warnings; they never declare a winner. See
+`docs/runbooks/aegisops-benchmarking.md` and
+`docs/adr/0007-reproducible-aegisops-benchmarking.md`.

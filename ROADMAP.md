@@ -47,8 +47,19 @@
 - Ground-truth-isolated five-scenario harness with deterministic scoring and recovery
 - Scripted no-key safety, policy, provenance, injection, and lifecycle validation
 
+## Phase 6 — Reproducible AegisOps Baseline Benchmarking (Infrastructure Complete)
+
+- Frozen `aegisops-memoryless-v1` identity with behavior, environment, and version hashes
+- Secret-safe live preflight and explicit smoke/repeated live execution gates
+- Atomic per-run benchmark persistence, recovery-aware resume, and baseline locking
+- Aggregate, calibration, scenario, tool-use, evidence, and efficiency analysis
+- Deterministic comparison reports with compatibility warnings and configurable thresholds
+- Clean-stack-per-run contamination control and deterministic non-scenario warm-up
+- Live smoke and official baseline pending genuine credentials and a Docker runtime
+
 ## Later Phases
 
-The full sequence is governed by `NEXUS_MASTER_BUILD_PROMPT.md`: live evaluation and
-benchmark history, Brain v1, Atlas v1, AegisOps remediation, Kubernetes, PatchForge,
-SentinelQA, Engram evolution, and integrated NEXUS workflows.
+The full sequence is governed by `NEXUS_MASTER_BUILD_PROMPT.md`: accepted live
+baseline, Brain v1, Atlas v1, AegisOps remediation, Kubernetes, PatchForge,
+SentinelQA, Engram evolution, and integrated NEXUS workflows. Brain v1 should not
+begin without a genuine baseline unless the project owner explicitly chooses to.

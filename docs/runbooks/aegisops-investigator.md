@@ -45,10 +45,12 @@ model errors produce explicit statuses and exit `2`.
 
 ## Live Evaluation
 
-With Compose healthy and the live-agent settings enabled:
+With Compose healthy and the live-agent settings enabled, run preflight and explicitly
+authorize the five-scenario smoke:
 
 ```powershell
-py -m nexus.evaluation.aegisops --runs 1
+py -m nexus.evaluation.aegisops preflight
+py -m nexus.evaluation.aegisops smoke --confirm-live
 ```
 
 The harness evaluates all five version 1 scenarios. For each repetition it verifies
@@ -56,11 +58,12 @@ baseline health, activates the scenario, produces its expected symptom through a
 ordinary API, sends only the generic prompt to the investigator, scores the result,
 then resets and verifies recovery in `finally`.
 
-Reports are written under `.nexus/evaluations/aegisops/`, which Git ignores. They
+Reports are written under `.nexus/benchmarks/aegisops/`, which Git ignores. They
 record timestamp, Git SHA, NEXUS version, model, instruction and registry hashes,
 scenario schema, limits, scores, latency, tool and turn counts, and token usage when
 the SDK supplies it. They do not establish a benchmark until a real live run has been
-completed and reviewed.
+completed and reviewed. Repeated baseline, resume, comparison, and lock procedures
+are documented in `docs/runbooks/aegisops-benchmarking.md`.
 
 ## Scoring
 

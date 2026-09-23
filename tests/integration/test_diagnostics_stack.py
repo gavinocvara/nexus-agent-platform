@@ -213,6 +213,36 @@ def test_users_latency_evidence_uses_only_diagnostic_tools() -> None:
         _reset("users")
 
 
+def test_reset_prevents_prior_scenario_evidence_from_contaminating_next_run() -> None:
+    unavailable_id = f"diagnostic-contamination-a-{int(time())}"
+    latency_id = f"diagnostic-contamination-b-{int(time())}"
+    _reset("users")
+    try:
+        _activate("users", "users_unavailable")
+        assert _exercise("users_unavailable", unavailable_id).status_code == 503
+        _reset("users")
+        _activate("users", "users_latency")
+        assert _exercise("users_latency", latency_id).status_code == 200
+
+        with DiagnosticServiceLayer() as diagnostics:
+            evidence = _poll(
+                lambda: diagnostics.get_request_evidence(
+                    CorrelationInput(correlation_id=latency_id)
+                ),
+                lambda result: (
+                    len(result.events) >= 2
+                    and any((event.duration_ms or 0) >= 1300 for event in result.events)
+                ),
+            )
+
+        serialized = evidence.model_dump_json()
+        assert unavailable_id not in serialized
+        assert latency_id in serialized
+        assert all(event.status_code != 503 for event in evidence.events)
+    finally:
+        _reset("users")
+
+
 def test_orders_database_unavailable_evidence_uses_only_diagnostic_tools() -> None:
     correlation_id = "diagnostic-orders-database"
     _reset("orders")

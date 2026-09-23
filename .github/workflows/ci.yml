@@ -34,6 +34,9 @@ jobs:
       - name: Validate deterministic investigator boundary
         run: python -m pytest tests/unit/test_aegisops_contracts.py tests/unit/test_aegisops_runtime.py tests/unit/test_aegisops_evaluation.py
 
+      - name: Validate deterministic benchmark infrastructure
+        run: python -m pytest tests/unit/test_aegisops_benchmark.py tests/unit/test_aegisops_comparison.py tests/unit/test_aegisops_preflight.py
+
       - name: Validate scenario ground truth
         run: python -m nexus.lab.scenarios validate
 

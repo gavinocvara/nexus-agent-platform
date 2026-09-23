@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nexus-agent-platform"
-version = "0.6.0"
+version = "0.7.0"
 description = "NEXUS agentic engineering platform and AegisOps systems lab."
 readme = "README.md"
 requires-python = ">=3.12"

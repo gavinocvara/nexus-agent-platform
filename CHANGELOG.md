@@ -6,6 +6,18 @@ All meaningful changes to NEXUS are recorded here.
 
 ### Added
 
+- A versioned `aegisops-memoryless-v1` identity covering Git state, behavior hashes,
+  execution limits, scenario catalog, evaluator schemas, and runtime versions.
+- Secret-safe live preflight plus explicit smoke, repeated baseline, resume, compare,
+  and immutable baseline-lock commands.
+- Atomic per-run benchmark history with recovery verification, partial-run survival,
+  deterministic ordering, clean-stack isolation, and healthy telemetry warm-up.
+- Aggregate, confidence-calibration, per-scenario, tool-use, evidence-quality, usage,
+  latency, and diagnostic-efficiency analysis.
+- Deterministic benchmark fixtures and tests for persistence, resume, comparisons,
+  thresholds, clean-tree policy, secret safety, and sequential contamination.
+- A reproducible-benchmarking ADR and live benchmark operator runbook.
+
 - A single `aegisops.investigator` using the OpenAI Agents SDK with exactly the
   eleven Phase 4 read-only diagnostic tools and no handoffs, memory, or write access.
 - Structured diagnoses, stable tool-call provenance, a separate evidence ledger,
@@ -53,6 +65,10 @@ All meaningful changes to NEXUS are recorded here.
   and integration tests.
 
 ### Changed
+
+- Advanced the package to version 0.7.0 for Phase 6 benchmark infrastructure.
+- Extended normalized model usage with request, cached-input, cache-write, and
+  reasoning-token details when the pinned Agents SDK supplies them.
 
 - Advanced the package to version 0.6.0 for the Phase 5 investigator baseline.
 - Diagnostic results and audit events now share a stable `tool_call_id`; complete

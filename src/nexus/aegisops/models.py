@@ -91,9 +91,13 @@ class Diagnosis(BaseModel):
 class ModelUsage(BaseModel):
     model_config = StrictConfig
 
+    request_count: int | None = Field(default=None, ge=0)
     input_tokens: int | None = Field(default=None, ge=0)
     output_tokens: int | None = Field(default=None, ge=0)
     total_tokens: int | None = Field(default=None, ge=0)
+    cached_input_tokens: int | None = Field(default=None, ge=0)
+    cache_write_input_tokens: int | None = Field(default=None, ge=0)
+    reasoning_output_tokens: int | None = Field(default=None, ge=0)
 
 
 class InvestigationRunRecord(BaseModel):

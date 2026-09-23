@@ -86,9 +86,13 @@ class OpenAIAgentsEngine:
             raise TypeError("Agent SDK returned an invalid structured diagnosis")
         sdk_usage = result.context_wrapper.usage
         usage = ModelUsage(
+            request_count=sdk_usage.requests,
             input_tokens=sdk_usage.input_tokens,
             output_tokens=sdk_usage.output_tokens,
             total_tokens=sdk_usage.total_tokens,
+            cached_input_tokens=sdk_usage.input_tokens_details.cached_tokens,
+            cache_write_input_tokens=sdk_usage.input_tokens_details.cache_write_tokens,
+            reasoning_output_tokens=sdk_usage.output_tokens_details.reasoning_tokens,
         )
         return EngineOutcome(
             diagnosis=result.final_output,
