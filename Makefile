@@ -1,4 +1,4 @@
-.PHONY: compose-clean compose-down compose-up format install-dev integration lint test typecheck validate
+.PHONY: compose-clean compose-down compose-up format install-dev integration lint scenarios test typecheck validate
 
 install-dev:
 	py -m pip install -e ".[dev]"
@@ -16,6 +16,9 @@ test:
 	py -m pytest
 
 validate: lint typecheck test
+
+scenarios:
+	py -m nexus.lab.scenarios validate
 
 compose-up:
 	docker compose up --build --detach --wait

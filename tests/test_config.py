@@ -6,6 +6,7 @@ def test_default_settings_are_development_safe() -> None:
 
     assert settings.env is NexusEnvironment.DEVELOPMENT
     assert settings.log_level == "INFO"
+    assert settings.lab_failures_enabled is False
 
 
 def test_settings_accept_environment_overrides(monkeypatch) -> None:

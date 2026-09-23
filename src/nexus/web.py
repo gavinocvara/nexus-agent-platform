@@ -35,6 +35,10 @@ class JsonFormatter(logging.Formatter):
             "message": record.getMessage(),
             "correlation_id": get_correlation_id(),
         }
+        for field in ("method", "path", "status_code"):
+            value = getattr(record, field, None)
+            if value is not None:
+                payload[field] = value
         return json.dumps(payload, separators=(",", ":"))
 
 

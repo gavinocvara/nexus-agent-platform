@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "users_latency",
+  "title": "Users service deterministic latency",
+  "description": "Every normal user lookup is delayed by exactly 1500 milliseconds.",
+  "target": {"service": "users"},
+  "fault": {"type": "latency", "delay_ms": 1500},
+  "expected_root_cause": {
+    "component": "users",
+    "failure": "deterministic request-processing delay"
+  },
+  "expected_symptoms": [
+    {
+      "description": "Gateway user lookup remains successful but slow",
+      "via": "gateway",
+      "method": "GET",
+      "path": "/users/1",
+      "expected_status": 200,
+      "minimum_duration_ms": 1300
+    }
+  ],
+  "expected_unaffected_components": ["gateway health", "orders", "postgres"],
+  "activation": {"controller_service": "users", "failure_id": "users_latency"},
+  "recovery": {"reset_required": true, "health_service": "users", "expected_status": 200},
+  "tags": ["users", "latency", "downstream"],
+  "difficulty": "basic"
+}

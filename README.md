@@ -85,3 +85,30 @@ and returns HTTP 503 when the database is unavailable. Requests accept or genera
 `X-Correlation-ID`; the Gateway forwards it downstream and every response returns
 it. Logs are JSON objects containing timestamp, level, service, message, and
 correlation ID.
+
+## Deterministic Incident Lab
+
+Phase 2 adds five versioned scenarios under `lab/scenarios/v1`. Each scenario has
+typed evaluator ground truth, deterministic symptoms, and a mandatory reset. The
+service runtime receives only its operational fault type; ordinary APIs never
+return scenario IDs, injected configuration, or expected root cause.
+
+Lab controls are disabled by default. The Compose lab explicitly enables them on
+Users and Orders with `NEXUS_LAB_FAILURES_ENABLED=true`. The Gateway never exposes
+or proxies control routes. Do not enable this setting in a normal deployment: the
+control plane is intentionally privileged and has no production authentication.
+
+With Compose running, evaluator commands are:
+
+```powershell
+py -m nexus.lab.scenarios validate
+py -m nexus.lab.scenarios list
+py -m nexus.lab.scenarios status
+py -m nexus.lab.scenarios activate users_latency
+py -m nexus.lab.scenarios reset
+py -m nexus.lab.scenarios run orders_database_unavailable
+```
+
+`run` verifies a healthy baseline, activates and checks expected symptoms, resets
+in a `finally` path, and verifies recovery. Ground-truth files and evaluator output
+must not be exposed to future investigator agents or diagnostic tools.

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "id": "orders_latency",
+  "title": "Orders service deterministic latency",
+  "description": "Every normal order operation is delayed by exactly 1500 milliseconds.",
+  "target": {"service": "orders"},
+  "fault": {"type": "latency", "delay_ms": 1500},
+  "expected_root_cause": {
+    "component": "orders",
+    "failure": "deterministic request-processing delay"
+  },
+  "expected_symptoms": [
+    {
+      "description": "Gateway order creation remains successful but slow",
+      "via": "gateway",
+      "method": "POST",
+      "path": "/orders",
+      "expected_status": 201,
+      "minimum_duration_ms": 1300,
+      "request_body": {"user_id": 1, "item": "scenario-probe", "quantity": 1}
+    }
+  ],
+  "expected_unaffected_components": ["gateway health", "users", "postgres health"],
+  "activation": {"controller_service": "orders", "failure_id": "orders_latency"},
+  "recovery": {"reset_required": true, "health_service": "orders", "expected_status": 200},
+  "tags": ["orders", "latency", "downstream"],
+  "difficulty": "basic"
+}

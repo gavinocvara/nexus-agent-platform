@@ -81,7 +81,7 @@ def create_app(
             app.state.http_client = client
             yield
 
-    app = FastAPI(title="NEXUS API Gateway", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="NEXUS API Gateway", version="0.3.0", lifespan=lifespan)
     install_service_foundation(
         app,
         resolved_settings.service_name,

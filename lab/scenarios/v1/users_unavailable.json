@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "id": "users_unavailable",
+  "title": "Users service unavailable",
+  "description": "Users remains running but rejects normal health and lookup traffic.",
+  "target": {"service": "users"},
+  "fault": {"type": "service_unavailable"},
+  "expected_root_cause": {
+    "component": "users",
+    "failure": "request handling unavailable"
+  },
+  "expected_symptoms": [
+    {
+      "description": "Gateway user lookup fails",
+      "via": "gateway",
+      "method": "GET",
+      "path": "/users/1",
+      "expected_status": 503
+    }
+  ],
+  "expected_unaffected_components": ["gateway process", "orders", "postgres"],
+  "activation": {"controller_service": "users", "failure_id": "users_unavailable"},
+  "recovery": {"reset_required": true, "health_service": "users", "expected_status": 200},
+  "tags": ["users", "availability", "downstream"],
+  "difficulty": "basic"
+}

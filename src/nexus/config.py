@@ -26,6 +26,7 @@ class NexusSettings(BaseSettings):
 
     env: NexusEnvironment = NexusEnvironment.DEVELOPMENT
     log_level: str = Field(default="INFO", min_length=1)
+    lab_failures_enabled: bool = False
 
 
 class GatewaySettings(NexusSettings):
