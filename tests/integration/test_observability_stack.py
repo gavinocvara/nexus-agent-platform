@@ -15,6 +15,19 @@ ORDERS = "http://localhost:8002"
 PROMETHEUS = "http://localhost:9090"
 LOKI = "http://localhost:3100"
 TEMPO = "http://localhost:3200"
+GRAFANA = "http://localhost:3000"
+PROHIBITED_GROUND_TRUTH = (
+    "users_unavailable",
+    "users_latency",
+    "orders_unavailable",
+    "orders_latency",
+    "orders_database_unavailable",
+    "expected_root_cause",
+    "expected_unaffected_components",
+    "activation instructions",
+    "difficulty",
+    "failure_id",
+)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -78,6 +91,10 @@ def _reset(service_url: str) -> None:
     assert response.json()["active"] is False
 
 
+def _assert_ground_truth_absent(value: str) -> None:
+    assert all(term not in value for term in PROHIBITED_GROUND_TRUTH)
+
+
 def test_request_is_correlated_across_metrics_logs_and_trace() -> None:
     correlation_id = f"observability-{int(time())}"
     created = httpx.post(
@@ -88,6 +105,7 @@ def test_request_is_correlated_across_metrics_logs_and_trace() -> None:
     )
     assert created.status_code == 201
     assert created.headers["X-Correlation-ID"] == correlation_id
+    _assert_ground_truth_absent(created.text)
 
     metric = _poll(
         lambda: _prometheus_value(
@@ -129,6 +147,7 @@ def test_users_unavailable_produces_operational_error_evidence() -> None:
             timeout=10,
         )
         assert response.status_code == 503
+        _assert_ground_truth_absent(response.text)
         failure_count = _poll(
             lambda: _prometheus_value(
                 'nexus_dependency_failures_total{service="gateway",dependency="users",status_class="5xx"}'
@@ -157,6 +176,7 @@ def test_users_latency_produces_slow_success_evidence() -> None:
         elapsed = perf_counter() - started
         assert response.status_code == 200
         assert elapsed >= 1.3
+        _assert_ground_truth_absent(response.text)
         duration_sum = _poll(
             lambda: _prometheus_value(
                 'nexus_dependency_request_duration_seconds_sum{service="gateway",dependency="users",status_class="2xx"}'
@@ -187,6 +207,7 @@ def test_database_failure_updates_health_metrics_and_recovers() -> None:
             timeout=10,
         )
         assert response.status_code == 503
+        _assert_ground_truth_absent(response.text)
         database_health = _poll(
             lambda: _prometheus_value(
                 'nexus_database_health{service="orders",dependency="postgres"}'
@@ -210,21 +231,9 @@ def test_telemetry_contains_no_evaluator_ground_truth() -> None:
     metrics = "\n".join(
         httpx.get(f"http://localhost:{port}/metrics", timeout=5).text for port in (8000, 8001, 8002)
     )
-    prohibited = (
-        "users_unavailable",
-        "users_latency",
-        "orders_unavailable",
-        "orders_latency",
-        "orders_database_unavailable",
-        "expected_root_cause",
-        "expected_unaffected_components",
-        "activation instructions",
-        "difficulty",
-        "failure_id",
-    )
-    assert all(term not in metrics for term in prohibited)
+    _assert_ground_truth_absent(metrics)
 
-    for term in prohibited:
+    for term in PROHIBITED_GROUND_TRUTH:
         response = httpx.get(
             f"{LOKI}/loki/api/v1/query_range",
             params={"query": f'{{service=~"gateway|users|orders"}} |= "{term}"', "since": "10m"},
@@ -232,3 +241,21 @@ def test_telemetry_contains_no_evaluator_ground_truth() -> None:
         )
         response.raise_for_status()
         assert response.json()["data"]["result"] == []
+
+    search = httpx.get(f"{TEMPO}/api/search", params={"limit": "20"}, timeout=5)
+    search.raise_for_status()
+    for trace_summary in search.json().get("traces", []):
+        trace_id = trace_summary["traceID"]
+        trace_response = httpx.get(f"{TEMPO}/api/traces/{trace_id}", timeout=5)
+        trace_response.raise_for_status()
+        _assert_ground_truth_absent(trace_response.text)
+
+
+def test_grafana_provisions_data_sources_and_overview_dashboard() -> None:
+    data_sources = httpx.get(f"{GRAFANA}/api/datasources", timeout=5)
+    data_sources.raise_for_status()
+    assert {item["name"] for item in data_sources.json()} >= {"Prometheus", "Loki", "Tempo"}
+
+    dashboard = httpx.get(f"{GRAFANA}/api/dashboards/uid/aegisops-overview", timeout=5)
+    dashboard.raise_for_status()
+    assert dashboard.json()["dashboard"]["title"] == "AegisOps Overview"

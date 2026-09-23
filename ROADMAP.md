@@ -22,9 +22,17 @@
 - Define a small failure catalog with stable identifiers and expected symptoms
 - Keep failure activation disabled by default and observable through service signals
 
+## Phase 3 — Operational Observability (Validation in Progress)
+
+- Bounded Prometheus service and dependency metrics
+- Structured JSON logs collected by Grafana Alloy into Loki
+- Distributed OpenTelemetry traces collected through the Collector into Tempo
+- Provisioned Grafana data sources and AegisOps overview dashboard
+- Cross-signal incident evidence with evaluator ground truth kept isolated
+
 ## Later Phases
 
 The full sequence is governed by `NEXUS_MASTER_BUILD_PROMPT.md`:
-failure injection, observability, diagnostic tools, first investigator agent,
+diagnostic tools, first investigator agent,
 evaluation, Brain v1, Atlas v1, AegisOps remediation, Kubernetes, PatchForge,
 SentinelQA, Engram evolution, and integrated NEXUS workflows.

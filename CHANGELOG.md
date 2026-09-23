@@ -6,6 +6,15 @@ All meaningful changes to NEXUS are recorded here.
 
 ### Added
 
+- Prometheus request, dependency, latency, in-flight, and database-health metrics
+  with bounded labels and normalized route templates.
+- OpenTelemetry request, HTTPX, and SQLAlchemy tracing through an OpenTelemetry
+  Collector to Tempo.
+- Loki log aggregation through Grafana Alloy and a provisioned Grafana overview
+  dashboard with Prometheus, Loki, and Tempo data sources.
+- Telemetry isolation, cardinality, correlation, graceful-failure, and incident
+  integration tests.
+- An operational observability ADR and local runbook.
 - Versioned, typed ground-truth definitions for five deterministic failure scenarios.
 - Ephemeral concurrency-safe failure controllers for Users and Orders.
 - Disabled-by-default lab control APIs with bounded activation and idempotent reset.
@@ -23,6 +32,9 @@ All meaningful changes to NEXUS are recorded here.
 
 ### Changed
 
+- Advanced the package to version 0.4.0 for Phase 3 operational observability.
+- Structured request logs include request duration and real OpenTelemetry trace and
+  span identifiers when an active span exists.
 - Advanced the package to version 0.3.0 for the Phase 2 controlled incident lab.
 - Structured request logs now include method, path, and status code fields already
   supplied by the request middleware.

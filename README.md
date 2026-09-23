@@ -3,7 +3,8 @@
 NEXUS is a local-first engineering platform for auditable agent workflows. Phase 1
 provides the AegisOps distributed-systems lab that later diagnostic agents will
 observe, disrupt, repair, and evaluate. Phase 2 turns it into a deterministic
-incident laboratory with isolated evaluator ground truth.
+incident laboratory with isolated evaluator ground truth. Phase 3 adds operational
+metrics, logs, and distributed traces without exposing those answers.
 
 The governing specifications are `NEXUS_PROJECT_INSTRUCTIONS.md`,
 `NEXUS_MASTER_BUILD_PROMPT.md`, and `BRAIN.md`.
@@ -53,6 +54,10 @@ The endpoints are available at:
 - Gateway: `http://localhost:8000`
 - Users: `http://localhost:8001`
 - Orders: `http://localhost:8002`
+- Grafana: `http://localhost:3000`
+- Prometheus: `http://localhost:9090`
+- Loki: `http://localhost:3100`
+- Tempo: `http://localhost:3200`
 
 Run the genuine PostgreSQL integration paths after startup:
 
@@ -77,6 +82,9 @@ Important variables are:
 - `NEXUS_USERS_SERVICE_URL`
 - `NEXUS_ORDERS_SERVICE_URL`
 - `NEXUS_DATABASE_URL`
+- `NEXUS_METRICS_ENABLED`
+- `NEXUS_OTEL_ENABLED`
+- `NEXUS_OTEL_EXPORTER_ENDPOINT`
 - `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` for Compose substitution
 
 ## Operations Foundation
@@ -113,3 +121,27 @@ py -m nexus.lab.scenarios run orders_database_unavailable
 `run` verifies a healthy baseline, activates and checks expected symptoms, resets
 in a `finally` path, and verifies recovery. Ground-truth files and evaluator output
 must not be exposed to future investigator agents or diagnostic tools.
+
+## Operational Observability
+
+Phase 3 preserves JSON stdout logs and adds Prometheus metrics plus OpenTelemetry
+traces. Grafana Alloy discovers Compose containers and forwards their logs to Loki.
+Services send OTLP/gRPC spans to the OpenTelemetry Collector, which forwards them
+to Tempo. Grafana provisions all three data sources and the **AegisOps Overview**
+dashboard automatically.
+
+Each service exposes `/metrics` when `NEXUS_METRICS_ENABLED=true`. HTTP metrics use
+route templates such as `/users/{user_id}`, status classes, and fixed service names;
+request IDs, correlation IDs, user IDs, order IDs, and scenario data are never metric
+labels. Active request logs contain real `trace_id` and `span_id` fields, while logs
+outside a span omit them. HTTPX and SQLAlchemy spans connect the Gateway, services,
+and PostgreSQL work into one trace.
+
+Metrics and tracing are disabled by default and enabled explicitly by Compose. An
+unavailable trace collector does not make request handling fail. The local lab uses
+anonymous Grafana access and mounts the Docker socket read-only into Alloy; these
+choices are convenient for local development and are not production defaults.
+
+See `docs/runbooks/observability.md` for queries, incident demonstrations, and
+cross-signal correlation steps. The detailed architecture decision is recorded in
+`docs/adr/0004-operational-observability.md`.
