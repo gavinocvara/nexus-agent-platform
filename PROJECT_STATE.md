@@ -111,7 +111,15 @@ py -m pytest -m integration tests/integration
   the 11-tool policy boundary passed; live opt-in, key, clean-tree, and backend checks
   failed as expected in this development state.
 - Docker and the optional Python `build` frontend are not installed on this host.
-  Editable package construction succeeded; Compose integration awaits GitHub CI.
+  Editable package construction succeeded locally.
+- GitHub Actions run `35901974987` passed for Phase 6 implementation commit
+  `0c75809a67980cc7b70cd7804759a9ee42705397`:
+  - `validate` passed installation, Ruff, strict mypy, all 86 non-integration tests,
+    the focused Phase 5 and Phase 6 suites, and scenario validation.
+  - `compose-integration` validated and built Compose, started the complete service
+    and observability stack, passed all 17 integration tests including sequential
+    contamination coverage, exercised diagnostic and incident workflows, and tore
+    the environment down.
 
 ## Live Evaluation State
 
