@@ -38,13 +38,13 @@ py -m pytest
 - `py -m ruff check .` succeeded.
 - `py -m mypy` succeeded with no issues in 3 source files.
 - `py -m pytest` succeeded with 2 tests passing.
+- Initial commit `66ef536` was pushed to `origin/main`.
 
 ## Known Issues
 
-- The GitHub repository is empty, so `origin/main` does not exist until the first push.
 - No application services or agent runtime exist yet.
 
 ## Next Step
 
-Finish Phase 0 validation locally, then start Phase 1 with the smallest AegisOps
-service slice.
+Begin Phase 1 with the smallest AegisOps service slice: a minimal FastAPI
+surface, health checks, local runtime support, and tests.
