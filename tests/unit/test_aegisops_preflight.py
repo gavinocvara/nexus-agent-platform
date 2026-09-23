@@ -9,6 +9,7 @@ from nexus.evaluation.aegisops import identity as identity_module
 from nexus.evaluation.aegisops.benchmark_models import BaselineIdentity
 from nexus.evaluation.aegisops.identity import (
     build_baseline_identity,
+    canonical_hash,
     diagnosis_schema_hash,
     scenario_catalog_hash,
 )
@@ -17,7 +18,12 @@ from nexus.lab.catalog import ScenarioCatalog
 
 PHASE_5_INSTRUCTION_HASH = "d858a63116e8579a4e19a19f01cea5441aa840213380455449528ca385dad456"
 PHASE_5_TOOL_REGISTRY_HASH = "44292aa3ded19cf0e03f086be6716d51099efa78eb97e3517799b713175ff240"
-PHASE_5_DIAGNOSIS_SCHEMA_HASH = "f10168000946760b57a11fadf51efb86566f689e90a338050b0bc7d5c5c4e455"
+PHASE_5_DOMAIN_DIAGNOSIS_SCHEMA_HASH = (
+    "f10168000946760b57a11fadf51efb86566f689e90a338050b0bc7d5c5c4e455"
+)
+REPAIRED_DIAGNOSIS_OUTPUT_SCHEMA_HASH = (
+    "aea17a6803fe3c49f1d1e3268b5f58072e05b5edd5dce9fb72514b96a5b720ab"
+)
 PHASE_5_SCENARIO_CATALOG_HASH = "6b47e28ee3d5c13619903d9885212022c49940224e333188d177a40e46214e2c"
 
 
@@ -26,11 +32,11 @@ def _identity() -> BaselineIdentity:
         git_sha="a" * 40,
         git_dirty=False,
         reproducible=True,
-        nexus_version="0.7.0",
+        nexus_version="0.7.1",
         model="fixture-model",
         instruction_hash=PHASE_5_INSTRUCTION_HASH,
         tool_registry_hash=PHASE_5_TOOL_REGISTRY_HASH,
-        diagnosis_schema_hash=PHASE_5_DIAGNOSIS_SCHEMA_HASH,
+        diagnosis_schema_hash=REPAIRED_DIAGNOSIS_OUTPUT_SCHEMA_HASH,
         scenario_catalog_hash=PHASE_5_SCENARIO_CATALOG_HASH,
         max_turns=10,
         max_tool_calls=12,
@@ -41,14 +47,16 @@ def _identity() -> BaselineIdentity:
     )
 
 
-def test_phase_5_behavior_hashes_are_frozen() -> None:
+def test_frozen_behavior_and_repaired_output_schema_hashes() -> None:
     from nexus.aegisops.instructions import instruction_hash
+    from nexus.aegisops.models import Diagnosis
     from nexus.aegisops.tools import tool_registry_hash
 
     catalog = ScenarioCatalog.load()
     assert instruction_hash() == PHASE_5_INSTRUCTION_HASH
     assert tool_registry_hash() == PHASE_5_TOOL_REGISTRY_HASH
-    assert diagnosis_schema_hash() == PHASE_5_DIAGNOSIS_SCHEMA_HASH
+    assert canonical_hash(Diagnosis.model_json_schema()) == PHASE_5_DOMAIN_DIAGNOSIS_SCHEMA_HASH
+    assert diagnosis_schema_hash() == REPAIRED_DIAGNOSIS_OUTPUT_SCHEMA_HASH
     assert scenario_catalog_hash(catalog) == PHASE_5_SCENARIO_CATALOG_HASH
     assert importlib.metadata.version("openai-agents") == "0.22.3"
 

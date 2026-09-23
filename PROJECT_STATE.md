@@ -3,7 +3,7 @@
 ## Current Milestone
 
 Phase 6 - Reproducible AegisOps Baseline Benchmarking and Regression History:
-infrastructure complete, live baseline pending.
+structured-output framework repair in validation, live baseline pending.
 
 The memoryless Phase 5 investigator is frozen as `aegisops-memoryless-v1`. No prompt,
 tool, model guidance, scoring, scenario, memory, multi-agent, remediation, Atlas, or
@@ -15,7 +15,7 @@ MCP capability was added or tuned.
 - Remote: `https://github.com/gavinocvara/nexus-agent-platform.git`
 - Branch: `main`
 - Approved Phase 5 starting point: `67081f3f877311c2f199686b5d1e1d6287f19e53`
-- Package version: `0.7.0`
+- Package version: `0.7.1`
 
 ## Phase 6 Baseline Identity
 
@@ -25,7 +25,7 @@ MCP capability was added or tuned.
 - Diagnostic tool-registry hash:
   `44292aa3ded19cf0e03f086be6716d51099efa78eb97e3517799b713175ff240`
 - Diagnosis-schema hash:
-  `f10168000946760b57a11fadf51efb86566f689e90a338050b0bc7d5c5c4e455`
+  `aea17a6803fe3c49f1d1e3268b5f58072e05b5edd5dce9fb72514b96a5b720ab`
 - Scenario-catalog hash:
   `6b47e28ee3d5c13619903d9885212022c49940224e333188d177a40e46214e2c`
 - Agents SDK: pinned and installed at `0.22.3`
@@ -33,6 +33,9 @@ MCP capability was added or tuned.
 - Evaluator: `aegisops-evaluator-v1`
 - Runtime identity also records Git SHA/dirty state, NEXUS/model/Python/platform
   versions, max turns, max tool calls, and timeout.
+- The diagnosis hash now covers the unchanged Pydantic domain schema plus the strict
+  provider-facing output schema. The unchanged Phase 5 domain-only schema hash is
+  `f10168000946760b57a11fadf51efb86566f689e90a338050b0bc7d5c5c4e455`.
 
 ## What Exists
 
@@ -62,6 +65,9 @@ MCP capability was added or tuned.
   scenario identity changes. No winner or composite score is produced.
 - SDK request/token detail persistence when exposed by the pinned SDK, without
   inventing absent values or calculating cost.
+- A strict Agents SDK output adapter that replaces Pydantic's provider-incompatible
+  empty `JsonValue` schema, preserves all diagnosis fields, supports compound JSON
+  evidence values, and validates final JSON back into `Diagnosis`.
 - Sequential contamination integration coverage and deterministic clean-stack-per-run
   orchestration coverage.
 - ADR 0007 and the AegisOps benchmarking runbook.
@@ -98,20 +104,18 @@ py -m pytest -m integration tests/integration
 
 ## Latest Local Validation
 
-- Editable installation and `py -m pip check` passed for version `0.7.0`.
-- Ruff formatting and lint passed for 103 files.
-- Strict mypy passed with no issues in 60 source files.
-- `py -m pytest` passed 86 tests; 17 Compose integration tests were deselected.
-- The focused Phase 6 suite passed 21 tests.
+- Editable installation and `py -m pip check` passed for version `0.7.1`.
+- Ruff formatting and lint passed for 105 files.
+- Strict mypy passed with no issues in 61 source files.
+- `py -m pytest` passed 91 tests; 17 Compose integration tests were deselected.
+- The structured-output regression suite passed with the exact no-tools Agents SDK
+  response format and no API request.
 - All 5 version 1 scenario files passed typed catalog validation.
 - Governing files are unchanged from approved Phase 5 commit `67081f3`.
 - Whitespace and tracked-file secret-pattern scans passed.
 - CLI command discovery and origin/`main` Git configuration passed.
-- Local preflight safely exited `2` without a model call: model, scenario catalog, and
-  the 11-tool policy boundary passed; live opt-in, key, clean-tree, and backend checks
-  failed as expected in this development state.
-- Docker and the optional Python `build` frontend are not installed on this host.
-  Editable package construction succeeded locally.
+- The pre-repair GitHub validation below remains the latest remote result until the
+  structured-output repair is committed and pushed.
 - GitHub Actions run `35901974987` passed for Phase 6 implementation commit
   `0c75809a67980cc7b70cd7804759a9ee42705397`:
   - `validate` passed installation, Ruff, strict mypy, all 86 non-integration tests,
@@ -123,18 +127,25 @@ py -m pytest -m integration tests/integration
 
 ## Live Evaluation State
 
-- No `OPENAI_API_KEY` is available in the process environment.
-- Docker is unavailable on the current host.
-- Live smoke was not executed.
+- Docker Engine and Compose are now available on the current host.
+- The intended live baseline model is `gpt-5.6-sol`.
+- The current Codex process does not contain `OPENAI_API_KEY`; live verification
+  remains gated until it is supplied locally without entering source control.
+- No valid live smoke has completed.
 - Official repeated baseline was not executed.
 - No baseline lock manifest or fabricated live result was created.
 - Therefore there are no honest Phase 6 model, tool-use, evidence-quality, accuracy,
   latency, variance, token, or cost findings yet.
+- Smoke sessions `405a7230-22d3-4ffe-be5f-3e688bb86843` and
+  `9bd4dfd4-3a7d-45cd-98dd-d3388c0083d3` failed before generation because the old
+  structured-output transport contained an empty `JsonValue` schema. Both had zero
+  completed runs, tool calls, and token usage and are invalid infrastructure attempts,
+  not benchmark evidence.
 
 ## Known Issues And Technical Debt
 
-- A genuine clean-tree smoke and repeated baseline still require a machine with Docker
-  and an explicitly supplied API key.
+- A genuine clean-tree smoke and repeated baseline still require an explicitly
+  supplied API key.
 - Clean-stack-per-run isolation favors validity over speed and is intentionally costly.
 - Version 1 schemas reject incompatible future data; an explicit migration layer is
   required when schema version 2 is introduced.

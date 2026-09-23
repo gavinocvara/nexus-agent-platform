@@ -46,6 +46,11 @@ Review all run statuses, schema/runtime failures, usage, and evidence validity. 
 tune the investigator after seeing smoke output. Classify framework defects separately
 from model-quality weaknesses.
 
+The pre-baseline sessions `405a7230-22d3-4ffe-be5f-3e688bb86843` and
+`9bd4dfd4-3a7d-45cd-98dd-d3388c0083d3` are invalid infrastructure attempts: the
+provider rejected the old structured-output schema before generation, so neither is
+benchmark evidence and neither may be locked.
+
 ## Repeated Baseline
 
 Run the default three repetitions per scenario only after smoke succeeds:

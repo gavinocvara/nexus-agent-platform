@@ -10,6 +10,7 @@ from nexus import __version__
 from nexus.aegisops.config import AgentSettings
 from nexus.aegisops.instructions import instruction_hash
 from nexus.aegisops.models import Diagnosis
+from nexus.aegisops.output_schema import DIAGNOSIS_OUTPUT_SCHEMA
 from nexus.aegisops.tools import tool_registry_hash
 from nexus.evaluation.aegisops.benchmark_models import BaselineIdentity
 from nexus.lab.catalog import ScenarioCatalog
@@ -32,7 +33,12 @@ def scenario_catalog_hash(catalog: ScenarioCatalog) -> str:
 
 
 def diagnosis_schema_hash() -> str:
-    return canonical_hash(Diagnosis.model_json_schema())
+    return canonical_hash(
+        {
+            "domain": Diagnosis.model_json_schema(),
+            "transport": DIAGNOSIS_OUTPUT_SCHEMA.json_schema(),
+        }
+    )
 
 
 def build_baseline_identity(

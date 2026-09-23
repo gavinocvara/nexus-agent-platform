@@ -20,6 +20,7 @@ from nexus.aegisops.models import (
     ModelUsage,
     RunStatus,
 )
+from nexus.aegisops.output_schema import DIAGNOSIS_OUTPUT_SCHEMA
 from nexus.aegisops.tools import build_sdk_tools
 from nexus.diagnostics.audit import DiagnosticSession, ToolCallBudgetExceeded
 from nexus.diagnostics.service import DiagnosticServiceLayer
@@ -69,7 +70,7 @@ class OpenAIAgentsEngine:
             instructions=INVESTIGATOR_INSTRUCTIONS,
             model=settings.model,
             tools=build_sdk_tools(),
-            output_type=Diagnosis,
+            output_type=DIAGNOSIS_OUTPUT_SCHEMA,
         )
         result = await Runner.run(
             agent,

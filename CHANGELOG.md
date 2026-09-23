@@ -6,6 +6,13 @@ All meaningful changes to NEXUS are recorded here.
 
 ### Added
 
+- A strict `DiagnosisOutputSchema` adapter for the Responses API that preserves the
+  existing Pydantic diagnosis model while replacing its unconstrained `JsonValue`
+  transport node with a supported recursive schema.
+- Regression tests for the exact no-tools Agents SDK response format, closed required
+  objects, diagnosed and insufficient-evidence parsing, compound evidence values, and
+  malformed-output rejection.
+
 - A versioned `aegisops-memoryless-v1` identity covering Git state, behavior hashes,
   execution limits, scenario catalog, evaluator schemas, and runtime versions.
 - Secret-safe live preflight plus explicit smoke, repeated baseline, resume, compare,
@@ -65,6 +72,10 @@ All meaningful changes to NEXUS are recorded here.
   and integration tests.
 
 ### Changed
+
+- Advanced the package to version 0.7.1 for the pre-baseline structured-output repair.
+- Baseline diagnosis identity now hashes both the unchanged domain schema and the
+  provider-facing structured-output schema.
 
 - Advanced the package to version 0.7.0 for Phase 6 benchmark infrastructure.
 - Extended normalized model usage with request, cached-input, cache-write, and

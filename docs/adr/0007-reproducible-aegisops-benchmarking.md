@@ -68,3 +68,24 @@ session and requires a new identity and session.
 - Deterministic CI proves machinery and boundaries, not live model quality.
 - Brain v1 remains blocked on a genuine accepted baseline unless the owner explicitly
   chooses otherwise.
+
+## Pre-Baseline Structured-Output Repair
+
+Before any valid live run completed, two smoke sessions
+`405a7230-22d3-4ffe-be5f-3e688bb86843` and
+`9bd4dfd4-3a7d-45cd-98dd-d3388c0083d3` failed before model generation. Their run
+counts, tool calls, and token usage were all zero, so they are invalid infrastructure
+attempts rather than benchmark evidence.
+
+The automatic Agents SDK schema retained a valid root object but represented
+Pydantic's `JsonValue` definition as an empty schema. Strict Structured Outputs rejects
+that referenced node because it has no type. NEXUS now supplies a narrow strict SDK
+output adapter. It preserves the existing `Diagnosis` model and every diagnosis field,
+uses natural JSON scalar and recursive array values, represents arbitrary object-valued
+evidence through an explicit JSON-encoded object branch, then decodes and validates the
+complete result back into `Diagnosis`. Invalid JSON, invalid object encoding, or any
+domain-validation failure raises a model behavior error.
+
+The baseline identity now hashes the unchanged domain schema together with this
+provider-facing transport schema. The original Phase 5 domain-schema hash remains
+recorded in tests to prove that diagnosis semantics did not change.
