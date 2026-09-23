@@ -2,7 +2,7 @@
 
 ## Current Milestone
 
-Phase 0 - Foundation review gate complete. Phase 1 has not started.
+Phase 1 - AegisOps Distributed Systems Lab complete. Phase 2 has not started.
 
 ## Repository
 
@@ -12,14 +12,15 @@ Phase 0 - Foundation review gate complete. Phase 1 has not started.
 
 ## What Exists
 
-- Governing specifications are present at the repository root:
-  - `NEXUS_PROJECT_INSTRUCTIONS.md`
-  - `NEXUS_MASTER_BUILD_PROMPT.md`
-  - `BRAIN.md`
-- Python package foundation under `src/nexus`.
-- Quality tooling configured in `pyproject.toml`.
-- Baseline CI workflow under `.github/workflows/ci.yml`.
-- Initial documentation and changelog.
+- Independently runnable FastAPI Gateway, Users, and Orders services.
+- Gateway-only external API with typed HTTP calls to downstream services.
+- Deterministic Users data for repeatable lookup behavior.
+- SQLAlchemy Orders persistence in PostgreSQL with Alembic migrations.
+- Docker Compose environment for all services and PostgreSQL.
+- Consistent health responses, JSON error envelopes, structured logging, and
+  `X-Correlation-ID` propagation.
+- Unit/service tests plus real PostgreSQL integration paths through Gateway.
+- CI jobs for Python validation and the complete Compose integration gate.
 
 ## Validation Commands
 
@@ -30,27 +31,38 @@ py -m pip install -e ".[dev]"
 py -m ruff check .
 py -m mypy
 py -m pytest
+docker compose config
+docker compose up --build --detach --wait
+$env:RUN_INTEGRATION = "1"
+py -m pytest -m integration tests/integration
+docker compose down --volumes
 ```
 
 ## Latest Validation
 
-- Phase 0 review gate completed on 2026-09-22.
-- `py -m pip install -e ".[dev]"` succeeded and built the editable package.
-- `py -m pip check` reported no broken requirements.
-- Installed-package smoke checks succeeded for package version, imports, and default settings.
+- Local editable installation and `py -m pip check` passed for version 0.2.0.
 - `py -m ruff check .` passed.
-- `py -m mypy` passed with no issues in 3 source files.
-- `py -m pytest` passed with 2 tests.
-- `git diff --check` passed.
-- The working tree is clean on `main` and synchronized with `origin/main` after the
-  review-gate commit is pushed.
+- `py -m mypy` passed with no issues in 13 source files.
+- `py -m pytest` passed 9 tests; 2 Compose integration tests were deselected.
+- Alembic migration `0001` upgraded a test database successfully.
+- YAML parsing and `git diff --check` passed.
+- GitHub Actions run `35805480904` passed both jobs for implementation commit
+  `f377535`:
+  - Python install, Ruff, mypy, and unit/service tests passed.
+  - Compose configuration validation and all image builds passed.
+  - PostgreSQL, Users, Orders, and Gateway reached healthy state.
+  - Gateway health and both real PostgreSQL integration paths passed.
+  - Compose teardown and volume cleanup passed.
 
 ## Known Issues
 
-- No application services or agent runtime exist yet.
-- No Phase 0 validation failures or repository defects are open.
+- Docker is not installed on the current Windows host; the complete Docker gate is
+  verified on GitHub's Linux runner.
+- FastAPI's current `TestClient` emits an upstream Starlette deprecation warning;
+  behavior is unaffected and tests pass.
+- Failure injection, telemetry, and agents are intentionally absent until later phases.
 
 ## Next Step
 
-Begin Phase 1 with the smallest AegisOps service slice: a minimal FastAPI
-surface, health checks, local runtime support, and tests.
+Begin Phase 2 by adding a small, deterministic, disabled-by-default failure catalog
+with reversible controls and explicit expected symptoms.

@@ -8,7 +8,7 @@
 - Baseline docs and project state
 - Minimal package boundary
 
-## Phase 1 — AegisOps Lab (Validation in Progress)
+## Phase 1 — AegisOps Lab (Complete)
 
 - Gateway, users, and orders service slice
 - Health endpoints
