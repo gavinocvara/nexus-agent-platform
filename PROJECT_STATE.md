@@ -2,7 +2,7 @@
 
 ## Current Milestone
 
-Phase 0 — Foundation.
+Phase 0 - Foundation review gate complete. Phase 1 has not started.
 
 ## Repository
 
@@ -34,15 +34,21 @@ py -m pytest
 
 ## Latest Validation
 
-- `py -m pip install -e ".[dev]"` succeeded.
-- `py -m ruff check .` succeeded.
-- `py -m mypy` succeeded with no issues in 3 source files.
-- `py -m pytest` succeeded with 2 tests passing.
-- Initial commit `66ef536` was pushed to `origin/main`.
+- Phase 0 review gate completed on 2026-09-22.
+- `py -m pip install -e ".[dev]"` succeeded and built the editable package.
+- `py -m pip check` reported no broken requirements.
+- Installed-package smoke checks succeeded for package version, imports, and default settings.
+- `py -m ruff check .` passed.
+- `py -m mypy` passed with no issues in 3 source files.
+- `py -m pytest` passed with 2 tests.
+- `git diff --check` passed.
+- The working tree is clean on `main` and synchronized with `origin/main` after the
+  review-gate commit is pushed.
 
 ## Known Issues
 
 - No application services or agent runtime exist yet.
+- No Phase 0 validation failures or repository defects are open.
 
 ## Next Step
 
