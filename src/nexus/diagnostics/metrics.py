@@ -33,6 +33,8 @@ def build_request_queries(request: RequestSummaryInput) -> dict[str, str]:
     error_labels = f'{labels},status_class=~"4xx|5xx"'
     duration = "nexus_http_request_duration_seconds"
     return {
+        "request_count": f"sum(nexus_http_requests_total{{{labels}}})",
+        "error_count": f"sum(nexus_http_requests_total{{{error_labels}}})",
         "request_rate_per_second": _rate("nexus_http_requests_total", labels, request.window),
         "error_rate_per_second": _rate("nexus_http_requests_total", error_labels, request.window),
         "latency_p50_ms": _quantile(duration, labels, request.window, 0.5),
@@ -48,6 +50,8 @@ def build_dependency_queries(request: DependencySummaryInput) -> dict[str, str]:
     labels = f'service="{request.service.value}",dependency="{request.dependency.value}"'
     duration = "nexus_dependency_request_duration_seconds"
     return {
+        "request_count": f"sum(nexus_dependency_requests_total{{{labels}}})",
+        "failure_count": f"sum(nexus_dependency_failures_total{{{labels}}})",
         "request_rate_per_second": _rate("nexus_dependency_requests_total", labels, request.window),
         "failure_rate_per_second": _rate("nexus_dependency_failures_total", labels, request.window),
         "latency_p50_ms": _quantile(duration, labels, request.window, 0.5),

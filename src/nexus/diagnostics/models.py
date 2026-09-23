@@ -205,6 +205,8 @@ class RequestSummary(BaseModel):
     model_config = StrictModelConfig
     service: ApplicationService
     window: DiagnosticWindow
+    request_count: float | None = None
+    error_count: float | None = None
     request_rate_per_second: float | None = None
     error_rate_per_second: float | None = None
     latency_p50_ms: float | None = None
@@ -226,6 +228,8 @@ class DependencySummary(BaseModel):
     service: ApplicationService
     dependency: DiagnosticService
     window: DiagnosticWindow
+    request_count: float | None = None
+    failure_count: float | None = None
     request_rate_per_second: float | None = None
     failure_rate_per_second: float | None = None
     latency_p50_ms: float | None = None

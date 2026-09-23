@@ -82,9 +82,10 @@ def test_prometheus_adapter_normalizes_values() -> None:
     adapter = PrometheusAdapter(_settings(), httpx.MockTransport(handler))
     summary = adapter.request_summary(RequestSummaryInput(service="gateway", window="1m"))
     adapter.close()
+    assert summary.request_count == 0.125
     assert summary.request_rate_per_second == 0.125
     assert summary.latency_p95_ms == 125
-    assert len(seen_queries) == 6
+    assert len(seen_queries) == 8
 
 
 @pytest.mark.parametrize(

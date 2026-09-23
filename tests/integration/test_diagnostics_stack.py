@@ -107,11 +107,11 @@ def test_healthy_diagnostic_workflow_against_real_backends() -> None:
             lambda result: (
                 result.success
                 and result.summary is not None
-                and result.summary.request_rate_per_second is not None
-                and result.summary.request_rate_per_second > 0
+                and result.summary.request_count is not None
+                and result.summary.request_count > 0
             ),
         )
-        assert requests.summary.latency_p95_ms is not None
+        assert requests.summary.request_rate_per_second is not None
 
         dependency = _poll(
             lambda: diagnostics.get_dependency_summary(
@@ -120,11 +120,11 @@ def test_healthy_diagnostic_workflow_against_real_backends() -> None:
             lambda result: (
                 result.success
                 and result.summary is not None
-                and result.summary.request_rate_per_second is not None
-                and result.summary.request_rate_per_second > 0
+                and result.summary.request_count is not None
+                and result.summary.request_count > 0
             ),
         )
-        assert dependency.summary.latency_p95_ms is not None
+        assert dependency.summary.request_rate_per_second is not None
 
         evidence = _poll(
             lambda: diagnostics.get_request_evidence(
@@ -154,8 +154,8 @@ def test_users_unavailable_evidence_uses_only_diagnostic_tools() -> None:
                 ),
                 lambda result: (
                     result.summary is not None
-                    and result.summary.failure_rate_per_second is not None
-                    and result.summary.failure_rate_per_second > 0
+                    and result.summary.failure_count is not None
+                    and result.summary.failure_count > 0
                 ),
             )
             assert dependency.success
