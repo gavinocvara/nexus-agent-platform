@@ -145,3 +145,46 @@ choices are convenient for local development and are not production defaults.
 See `docs/runbooks/observability.md` for queries, incident demonstrations, and
 cross-signal correlation steps. The detailed architecture decision is recorded in
 `docs/adr/0004-operational-observability.md`.
+
+## Read-Only Diagnostics
+
+Phase 4 exposes operational evidence through a typed Python service and developer
+CLI. It is intentionally not a generic HTTP, PromQL, LogQL, SQL, filesystem, shell,
+Docker, Grafana, or Tempo-search interface. Backend URLs are operator configuration;
+tool callers choose only registered services, dependency edges, structured filters,
+exact correlation/trace identifiers, and `1m`, `5m`, `15m`, or `30m` windows.
+
+The tool catalog is:
+
+| Tool | Evidence | Backend |
+| --- | --- | --- |
+| `list_services` | Registered topology and dependencies | Static topology |
+| `get_service_health` | One service/dependency health snapshot | `/health` |
+| `get_system_health` | Complete bounded health snapshot | `/health` |
+| `get_request_summary` | Counts, rates, percentiles, in-flight requests | Prometheus |
+| `get_dependency_summary` | Counts, failures, rates, percentiles | Prometheus |
+| `get_database_health` | Orders PostgreSQL health gauge | Prometheus |
+| `search_logs` | Approved structured fields and filters | Loki |
+| `get_request_evidence` | Chronological correlation-scoped events | Loki |
+| `find_traces` | Bounded trace IDs from correlation-scoped logs | Loki |
+| `get_trace` | Normalized spans and allowlisted attributes | Tempo |
+| `get_recent_errors` | Bounded structured 5xx events | Loki |
+
+Every call produces safe audit metadata and increments a diagnostic-session tool
+count. Log messages and trace content are returned as untrusted data, never executed
+or treated as policy. The investigator policy explicitly denies lab controls,
+scenario ground truth, arbitrary URLs and queries, environment secrets, direct SQL,
+write actions, and ambient platform access.
+
+Start with:
+
+```powershell
+py -m nexus.diagnostics services
+py -m nexus.diagnostics system-health
+py -m nexus.diagnostics requests gateway --window 5m
+py -m nexus.diagnostics dependency gateway users --window 5m
+py -m nexus.diagnostics logs orders --window 5m --limit 20
+```
+
+See `docs/runbooks/diagnostics.md` for every command and
+`docs/adr/0005-typed-diagnostic-boundary.md` for the security architecture.

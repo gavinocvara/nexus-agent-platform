@@ -30,9 +30,17 @@
 - Provisioned Grafana data sources and AegisOps overview dashboard
 - Cross-signal incident evidence with evaluator ground truth kept isolated
 
+## Phase 4 — Typed Diagnostic Tool Layer (Complete)
+
+- Typed high-level health, metrics, log, correlation, and trace operations
+- Fixed backend adapters with bounded timeouts, payloads, windows, and results
+- Deterministic read-only tool registry and investigator precursor policy
+- Per-session call accounting and evidence-free audit metadata
+- Hard evaluator, raw-query, ambient-access, and prompt-injection boundaries
+- Five-scenario evidence sufficiency evaluation against the real stack
+
 ## Later Phases
 
-The full sequence is governed by `NEXUS_MASTER_BUILD_PROMPT.md`:
-diagnostic tools, first investigator agent,
-evaluation, Brain v1, Atlas v1, AegisOps remediation, Kubernetes, PatchForge,
+The full sequence is governed by `NEXUS_MASTER_BUILD_PROMPT.md`: first investigator
+agent, evaluation, Brain v1, Atlas v1, AegisOps remediation, Kubernetes, PatchForge,
 SentinelQA, Engram evolution, and integrated NEXUS workflows.

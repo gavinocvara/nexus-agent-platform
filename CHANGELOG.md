@@ -6,6 +6,18 @@ All meaningful changes to NEXUS are recorded here.
 
 ### Added
 
+- A typed read-only diagnostics package with fixed health, Prometheus, Loki, and
+  Tempo adapters.
+- High-level service inventory, health, request/dependency summaries, database
+  health, structured log search, correlation evidence, trace lookup, and recent
+  error tools.
+- A deterministic tool registry, explicit investigator allow/deny policy,
+  diagnostic session call counting, and evidence-free audit records.
+- Strict service, dependency, time-window, result-limit, correlation-ID, and trace-ID
+  input contracts with no raw-query or arbitrary-URL fields.
+- Diagnostic CLI, adapter/security unit tests, real-stack integration tests, and a
+  five-scenario evidence sufficiency evaluation.
+- A typed diagnostic boundary ADR and operator runbook.
 - Prometheus request, dependency, latency, in-flight, and database-health metrics
   with bounded labels and normalized route templates.
 - OpenTelemetry request, HTTPX, and SQLAlchemy tracing through an OpenTelemetry
@@ -32,6 +44,9 @@ All meaningful changes to NEXUS are recorded here.
 
 ### Changed
 
+- Advanced the package to version 0.5.0 for Phase 4 read-only diagnostics.
+- Service error codes are recorded as ordinary `error.type` trace evidence; trace
+  normalization redacts SQL-shaped operation names and non-allowlisted attributes.
 - Advanced the package to version 0.4.0 for Phase 3 operational observability.
 - Structured request logs include request duration and real OpenTelemetry trace and
   span identifiers when an active span exists.

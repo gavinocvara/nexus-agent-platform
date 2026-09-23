@@ -2,8 +2,8 @@
 
 ## Current Milestone
 
-Phase 3 - Operational Observability complete.
-Phase 4 has not started.
+Phase 4 - Typed Read-Only Diagnostic Tool Layer and Investigator Access Boundary
+complete. Phase 5 has not started.
 
 ## Repository
 
@@ -32,6 +32,19 @@ Phase 4 has not started.
 - Telemetry tests for bounded cardinality, normalized routes, graceful exporter
   failure, cross-signal request correlation, and evaluator ground-truth isolation.
 - Operational observability architecture record and local runbook.
+- Typed diagnostic service with fixed health, Prometheus, Loki, and Tempo adapters.
+- Eleven high-level operations for topology, health, request/dependency metrics,
+  database health, structured logs, correlation evidence, and exact trace retrieval.
+- Closed Pydantic input/result contracts with registered services, dependency edges,
+  four bounded windows, validated identifiers, and bounded result limits.
+- Deterministic read-only tool registry and `aegisops.investigator` precursor policy.
+- In-memory diagnostic sessions with tool-call counts and evidence-free audit records.
+- Developer CLI exercising exactly the same service layer intended for a future agent.
+- Unit and real-stack tests for adapters, raw-query prohibition, ambient-access
+  isolation, prompt-injection data handling, incident evidence, and recovery.
+- Evaluator-side proof that permitted evidence yields five distinct fingerprints for
+  the five existing scenarios without scenario knowledge in production diagnostics.
+- Typed diagnostic boundary architecture record and operator runbook.
 
 ## Validation Commands
 
@@ -45,6 +58,8 @@ py -m ruff check .
 py -m mypy
 py -m pytest
 py -m nexus.lab.scenarios validate
+py -m nexus.diagnostics services
+py -m nexus.diagnostics system-health
 docker compose config
 docker compose up --build --detach --wait
 $env:RUN_INTEGRATION = "1"
@@ -57,20 +72,21 @@ docker compose down --volumes
 
 ## Latest Validation
 
-- Editable installation and `py -m pip check` passed for version 0.4.0.
-- `py -m ruff format --check .` and `py -m ruff check .` passed.
-- `py -m mypy` passed with no issues in 24 source files.
-- `py -m pytest` passed 30 tests; 11 Compose integration tests were deselected.
+- Editable installation and `py -m pip check` passed for version 0.5.0.
+- `py -m ruff format --check .` and `py -m ruff check .` passed for 70 files.
+- `py -m mypy` passed with no issues in 37 source files.
+- `py -m pytest` passed 50 tests; 16 Compose integration tests were deselected.
 - All 5 version 1 scenario files passed typed catalog validation.
-- Observability YAML/JSON parsing and `git diff --check` passed.
-- GitHub Actions run `35809978006` passed for commit `c101f07`:
-  - Python install, Ruff, mypy, 30 unit/service tests, and scenario validation passed.
-  - Compose validation, image builds, startup, and all service health checks passed.
-  - Prometheus, Loki, Tempo, and Grafana readiness checks passed.
-  - All 11 PostgreSQL, incident, telemetry, Grafana, and isolation integration tests
-    passed.
-  - Three representative incident lifecycles produced operational evidence, reset,
-    and recovered.
+- CLI inventory serialization, whitespace checks, secret scan, and governing-file
+  comparison passed.
+- GitHub Actions run `35830240997` passed for commit `6158657`:
+  - Python install, Ruff, mypy, 50 unit/service tests, and scenario validation passed.
+  - Compose validation, builds, startup, health, and observability readiness passed.
+  - All 16 PostgreSQL, incident, observability, diagnostic, sufficiency, and isolation
+    integration tests passed.
+  - Diagnostic CLI topology, health, metrics, dependency, and log commands passed.
+  - Five scenario evidence fingerprints were distinct using only permitted results.
+  - Three representative incidents exposed required evidence, reset, and recovered.
   - Compose teardown and volume cleanup passed.
 
 ## Safety Boundary
@@ -87,6 +103,16 @@ docker compose down --volumes
 - Ordinary responses, Prometheus samples, Loki logs, and Tempo traces are audited for
   scenario identifiers, expected causes, and evaluator-only fields.
 - Trace export is asynchronous and an unavailable collector cannot fail requests.
+- Diagnostic callers cannot supply URLs, paths, PromQL, LogQL, trace searches, SQL,
+  shell commands, filesystem paths, Docker operations, or Grafana credentials.
+- Production diagnostics have no imports or capability path to lab controls, scenario
+  files, evaluator schemas, or expected answers.
+- Adapter timeouts, response sizes, windows, identifiers, and result counts are
+  bounded; backend failures become typed unsuccessful results.
+- Trace attributes are allowlisted and SQL-shaped span names are normalized. Log and
+  trace text is explicitly untrusted data and is never executed or interpreted.
+- Audit events contain normalized arguments and execution metadata, not evidence or
+  backend payloads.
 
 ## Known Issues
 
@@ -102,9 +128,16 @@ docker compose down --volumes
   read-only Docker socket mount are local-lab choices, not production hardening.
 - Alerting, production retention, authentication, and observability high availability
   are deferred.
+- Prometheus rates and percentiles can be `null` for a newly created series until
+  enough scrapes exist; cumulative counts remain available for immediate evidence.
+- Diagnostic sessions and audit records are in-memory and single-process. Persistent
+  identity, policy enforcement, durable audit storage, and budgets belong to Atlas.
+- The diagnostic CLI is a developer interface, not an authenticated network service.
 
 ## Next Step
 
-Begin Phase 4 with narrow, typed, read-only diagnostic tools over operational signals.
-Do not introduce an autonomous investigator agent before the tool boundary, access
-policy, and evaluator-isolation controls are explicitly defined and validated.
+Begin Phase 5 with one AegisOps investigator agent behind the existing diagnostic
+service and policy. Give it no ambient tools, require structured hypotheses with
+supporting and conflicting evidence, retain diagnostic audit records, and evaluate it
+against the five scenarios with accuracy, tool-call count, latency, and unsafe-output
+measures. Do not add remediation, multiple agents, Atlas runtime, MCP, or memory yet.
