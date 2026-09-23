@@ -9,6 +9,7 @@ from nexus.observability.runtime import TelemetryMiddleware
 from nexus.observability.tracing import create_tracing_runtime
 from nexus.services.gateway.app import create_app as create_gateway_app
 from nexus.services.users.app import create_app as create_users_app
+from nexus.web import ServiceError, install_service_foundation
 
 
 def test_metrics_use_route_templates_and_bounded_labels() -> None:
@@ -75,6 +76,31 @@ def test_server_spans_use_normalized_routes_without_identifiers() -> None:
     assert spans[0].name == "GET /items/{item_id}"
     assert attributes["http.route"] == "/items/{item_id}"
     assert "high-cardinality-value" not in str(attributes)
+    runtime.shutdown()
+
+
+def test_service_error_code_is_recorded_as_operational_trace_evidence() -> None:
+    exporter = InMemorySpanExporter()
+    runtime = create_tracing_runtime("test-service", True, "unused", exporter)
+    app = FastAPI()
+    install_service_foundation(app, "test-service", "INFO")
+    app.add_middleware(
+        TelemetryMiddleware,
+        service="test-service",
+        metrics=None,
+        tracer=runtime.tracer,
+    )
+
+    @app.get("/failure")
+    def failure() -> None:
+        raise ServiceError(503, "database_unavailable", "Operation could not be completed")
+
+    with TestClient(app) as client:
+        assert client.get("/failure").status_code == 503
+
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert dict(spans[0].attributes or {})["error.type"] == "database_unavailable"
     runtime.shutdown()
 
 

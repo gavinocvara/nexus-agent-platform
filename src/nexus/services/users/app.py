@@ -40,7 +40,7 @@ def create_app(
         finally:
             runtime.shutdown()
 
-    app = FastAPI(title="NEXUS Users Service", version="0.4.0", lifespan=lifespan)
+    app = FastAPI(title="NEXUS Users Service", version="0.5.0", lifespan=lifespan)
     install_service_foundation(
         app,
         resolved_settings.service_name,

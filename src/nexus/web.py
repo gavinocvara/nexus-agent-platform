@@ -124,6 +124,9 @@ def install_service_foundation(app: FastAPI, service: str, log_level: str) -> No
 
     @app.exception_handler(ServiceError)
     async def service_error_handler(_request: Request, exc: ServiceError) -> JSONResponse:
+        current_span = trace.get_current_span()
+        if current_span.is_recording():
+            current_span.set_attribute("error.type", exc.code)
         return _error_response(exc.status_code, exc.code, exc.message)
 
     @app.exception_handler(HTTPException)

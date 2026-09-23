@@ -77,6 +77,14 @@ jobs:
           RUN_INTEGRATION: "1"
         run: python -m pytest -m integration tests/integration
 
+      - name: Exercise diagnostic CLI boundary
+        run: |
+          python -m nexus.diagnostics services
+          python -m nexus.diagnostics system-health
+          python -m nexus.diagnostics requests gateway --window 5m
+          python -m nexus.diagnostics dependency gateway users --window 5m
+          python -m nexus.diagnostics logs gateway --window 5m --limit 5
+
       - name: Demonstrate deterministic incident recovery
         run: |
           python -m nexus.lab.scenarios run users_unavailable

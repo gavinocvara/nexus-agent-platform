@@ -94,7 +94,7 @@ def create_app(
                 runtime.tracing.uninstrument_httpx(client)
                 runtime.shutdown()
 
-    app = FastAPI(title="NEXUS API Gateway", version="0.4.0", lifespan=lifespan)
+    app = FastAPI(title="NEXUS API Gateway", version="0.5.0", lifespan=lifespan)
     install_service_foundation(
         app,
         resolved_settings.service_name,
