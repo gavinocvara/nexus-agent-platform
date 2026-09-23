@@ -98,7 +98,15 @@ docker compose down --volumes
   no API key; these are wiring/safety results, not a live model benchmark.
 - Whitespace, tracked-file secret-pattern, package metadata, CLI-disabled-state, and
   governing-file integrity checks passed.
-- Phase 5 GitHub Actions validation is pending the first pushed Phase 5 commit.
+- GitHub Actions run `35833758753` passed for Phase 5 commit `d6132bd`:
+  - The `validate` job installed version 0.6.0, passed Ruff, strict mypy, all 65
+    unit/service tests, the focused deterministic investigator suite, and catalog
+    validation.
+  - The `compose-integration` job validated and built Compose, started the complete
+    service and observability stack, and passed all 16 PostgreSQL, incident,
+    observability, diagnostic, sufficiency, and isolation integration tests.
+  - Diagnostic CLI checks, three representative incident/recovery demonstrations,
+    service-state inspection, and unconditional Compose teardown passed.
 
 ## Safety Boundary
 
