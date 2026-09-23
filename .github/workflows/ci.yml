@@ -70,6 +70,12 @@ jobs:
           RUN_INTEGRATION: "1"
         run: python -m pytest -m integration tests/integration
 
+      - name: Demonstrate deterministic incident recovery
+        run: |
+          python -m nexus.lab.scenarios run users_unavailable
+          python -m nexus.lab.scenarios run users_latency
+          python -m nexus.lab.scenarios run orders_database_unavailable
+
       - name: Show service state
         if: always()
         run: docker compose ps

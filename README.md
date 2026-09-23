@@ -2,7 +2,8 @@
 
 NEXUS is a local-first engineering platform for auditable agent workflows. Phase 1
 provides the AegisOps distributed-systems lab that later diagnostic agents will
-observe, disrupt, repair, and evaluate.
+observe, disrupt, repair, and evaluate. Phase 2 turns it into a deterministic
+incident laboratory with isolated evaluator ground truth.
 
 The governing specifications are `NEXUS_PROJECT_INSTRUCTIONS.md`,
 `NEXUS_MASTER_BUILD_PROMPT.md`, and `BRAIN.md`.

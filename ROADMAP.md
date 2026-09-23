@@ -16,7 +16,7 @@
 - Docker Compose for local reproducibility
 - Tests around service behavior
 
-## Phase 2 — Deterministic Failure Injection (Validation in Progress)
+## Phase 2 — Deterministic Failure Injection (Complete)
 
 - Add explicit, reversible failure controls to the Phase 1 services
 - Define a small failure catalog with stable identifiers and expected symptoms
