@@ -1,0 +1,101 @@
+name: nexus-aegisops
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  users:
+    build: .
+    command:
+      - uvicorn
+      - nexus.services.users.app:create_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    environment:
+      NEXUS_ENV: development
+      NEXUS_LOG_LEVEL: INFO
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:8000/health')
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "8001:8000"
+
+  orders:
+    build: .
+    command:
+      - sh
+      - -c
+      - alembic upgrade head && uvicorn nexus.services.orders.app:create_app --factory --host 0.0.0.0 --port 8000
+    environment:
+      NEXUS_ENV: development
+      NEXUS_LOG_LEVEL: INFO
+      NEXUS_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:8000/health')
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "8002:8000"
+
+  gateway:
+    build: .
+    command:
+      - uvicorn
+      - nexus.services.gateway.app:create_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    environment:
+      NEXUS_ENV: development
+      NEXUS_LOG_LEVEL: INFO
+      NEXUS_USERS_SERVICE_URL: http://users:8000
+      NEXUS_ORDERS_SERVICE_URL: http://orders:8000
+    depends_on:
+      users:
+        condition: service_healthy
+      orders:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:8000/health')
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres-data:

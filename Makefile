@@ -1,4 +1,4 @@
-.PHONY: install-dev format lint typecheck test validate
+.PHONY: compose-clean compose-down compose-up format install-dev integration lint test typecheck validate
 
 install-dev:
 	py -m pip install -e ".[dev]"
@@ -16,3 +16,15 @@ test:
 	py -m pytest
 
 validate: lint typecheck test
+
+compose-up:
+	docker compose up --build --detach --wait
+
+integration:
+	py -m pytest -m integration tests/integration
+
+compose-down:
+	docker compose down
+
+compose-clean:
+	docker compose down --volumes
