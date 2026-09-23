@@ -28,6 +28,9 @@ def _assert_no_empty_schema(value: object) -> None:
         assert value
         for child in value.values():
             _assert_no_empty_schema(child)
+    elif isinstance(value, list):
+        for child in value:
+            _assert_no_empty_schema(child)
 
 
 def _assert_no_unsupported_composition(value: object) -> None:
@@ -38,9 +41,6 @@ def _assert_no_unsupported_composition(value: object) -> None:
     elif isinstance(value, list):
         for child in value:
             _assert_no_unsupported_composition(child)
-    elif isinstance(value, list):
-        for child in value:
-            _assert_no_empty_schema(child)
 
 
 def test_strict_output_schema_is_a_closed_required_root_object() -> None:
@@ -100,6 +100,36 @@ def test_output_schema_parses_diagnosed_result_and_compound_evidence() -> None:
     assert diagnosis.supporting_evidence[0].observed_value == {"postgres": "healthy"}
 
 
+def test_output_schema_preserves_all_supported_evidence_value_shapes() -> None:
+    values = ["healthy", 3, 4.5, True, None, [1, "two", [False, None]]]
+    payload = {
+        "status": "diagnosed",
+        "summary": "Orders is unavailable.",
+        "primary_hypothesis": {
+            "component": "orders",
+            "failure_class": "service_unavailable",
+            "rationale": "Typed evidence agrees.",
+            "confidence": 0.8,
+        },
+        "supporting_evidence": [
+            {
+                "tool_call_id": str(uuid4()),
+                "tool": "get_system_health",
+                "result_path": f"services.{index}",
+                "observed_value": value,
+                "observation": "A typed value was observed.",
+            }
+            for index, value in enumerate(values)
+        ],
+        "conflicting_evidence": [],
+        "alternatives": [],
+        "confidence": 0.8,
+        "next_diagnostic_action": "Read one exact request trace.",
+    }
+    diagnosis = DIAGNOSIS_OUTPUT_SCHEMA.validate_json(json.dumps(payload))
+    assert [item.observed_value for item in diagnosis.supporting_evidence] == values
+
+
 def test_output_schema_parses_insufficient_evidence_result() -> None:
     payload = {
         "status": "insufficient_evidence",
@@ -114,6 +144,21 @@ def test_output_schema_parses_insufficient_evidence_result() -> None:
     diagnosis = DIAGNOSIS_OUTPUT_SCHEMA.validate_json(json.dumps(payload))
     assert diagnosis.status is DiagnosisStatus.INSUFFICIENT_EVIDENCE
     assert diagnosis.primary_hypothesis is None
+
+
+def test_output_schema_parses_diagnostic_backend_failure_result() -> None:
+    payload = {
+        "status": "diagnostic_backend_failure",
+        "summary": "The telemetry backend could not provide evidence.",
+        "primary_hypothesis": None,
+        "supporting_evidence": [],
+        "conflicting_evidence": [],
+        "alternatives": [],
+        "confidence": 0,
+        "next_diagnostic_action": "Retry the same read-only diagnostic later.",
+    }
+    diagnosis = DIAGNOSIS_OUTPUT_SCHEMA.validate_json(json.dumps(payload))
+    assert diagnosis.status is DiagnosisStatus.DIAGNOSTIC_BACKEND_FAILURE
 
 
 def test_output_schema_rejects_malformed_output() -> None:

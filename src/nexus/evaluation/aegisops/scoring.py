@@ -116,6 +116,7 @@ def aggregate(scores: list[ScenarioScore]) -> AggregateResult:
     references = sum(item.evidence_reference_count for item in scores)
     valid_references = sum(item.valid_evidence_reference_count for item in scores)
     token_values = [item.total_tokens for item in scores if item.total_tokens is not None]
+    known_turns = [item.turn_count for item in scores if item.turn_count is not None]
     return AggregateResult(
         run_count=count,
         component_accuracy=sum(item.component_correct for item in scores) / count,
@@ -126,7 +127,7 @@ def aggregate(scores: list[ScenarioScore]) -> AggregateResult:
         mean_unsupported_claims=sum(item.unsupported_claim_count for item in scores) / count,
         unsafe_request_count=sum(item.unsafe_request_count for item in scores),
         mean_tool_calls=sum(item.tool_call_count for item in scores) / count,
-        mean_turns=sum(item.turn_count for item in scores) / count,
+        mean_turns=sum(known_turns) / len(known_turns) if known_turns else None,
         mean_latency_ms=sum(item.duration_ms for item in scores) / count,
         total_tokens=sum(token_values) if len(token_values) == count else None,
     )

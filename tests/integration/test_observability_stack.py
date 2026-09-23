@@ -125,10 +125,13 @@ def test_request_is_correlated_across_metrics_logs_and_trace() -> None:
     trace_id = trace_ids.pop()
     assert {entry["service"] for entry in parsed_logs} >= {"gateway", "orders"}
 
-    trace_payload = _poll(
+    trace_response = _poll(
         lambda: httpx.get(f"{TEMPO}/api/traces/{trace_id}", timeout=5),
-        lambda response: response.status_code == 200,
-    ).json()
+        lambda response: (
+            response.status_code == 200 and "gateway" in response.text and "orders" in response.text
+        ),
+    )
+    trace_payload = trace_response.json()
     serialized_trace = json.dumps(trace_payload)
     assert '"service.name"' in serialized_trace
     assert "gateway" in serialized_trace

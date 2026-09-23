@@ -51,6 +51,16 @@ class DiagnosticSource(StrEnum):
     TEMPO = "tempo"
 
 
+class DiagnosticBackendErrorCode(StrEnum):
+    """Sanitized reason a diagnostic backend could not provide evidence."""
+
+    TRANSPORT = "transport"
+    HTTP_STATUS = "http_status"
+    RESPONSE_TOO_LARGE = "response_too_large"
+    MALFORMED_RESPONSE = "malformed_response"
+    QUERY_REJECTED = "query_rejected"
+
+
 class HealthState(StrEnum):
     """Normalized health states, including unreachable backends."""
 
@@ -80,7 +90,19 @@ class DiagnosticResult(BaseModel):
     observed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     source: DiagnosticSource
     success: bool = True
+    backend_error_code: DiagnosticBackendErrorCode | None = None
+    backend_status_code: int | None = Field(default=None, ge=100, le=599)
     warnings: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_backend_error_code(self) -> "DiagnosticResult":
+        if self.success and self.backend_error_code is not None:
+            raise ValueError("Successful diagnostic results cannot have a failure code")
+        if self.success and self.backend_status_code is not None:
+            raise ValueError("Successful diagnostic results cannot have a backend status code")
+        if not self.success and self.backend_error_code is None:
+            raise ValueError("Failed diagnostic results require a failure code")
+        return self
 
 
 class NoArguments(BaseModel):

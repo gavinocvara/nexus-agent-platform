@@ -3,7 +3,7 @@
 ## Current Milestone
 
 Phase 6 - Reproducible AegisOps Baseline Benchmarking and Regression History:
-structured-output framework repair complete, live micro-test and baseline pending.
+live-runtime correctness repair validated deterministically; targeted live verification pending.
 
 The memoryless Phase 5 investigator is frozen as `aegisops-memoryless-v1`. No prompt,
 tool, model guidance, scoring, scenario, memory, multi-agent, remediation, Atlas, or
@@ -15,7 +15,10 @@ MCP capability was added or tuned.
 - Remote: `https://github.com/gavinocvara/nexus-agent-platform.git`
 - Branch: `main`
 - Approved Phase 5 starting point: `67081f3f877311c2f199686b5d1e1d6287f19e53`
-- Package version: `0.7.1`
+- Invalid live smoke under investigation: `16e2dfa5-000f-45e7-b87a-5d275ae882a6`
+  at `309caa7cb0f900b9c20948c07df79fa88c5597f9`; it is quarantined and cannot be
+  accepted as baseline evidence.
+- Package version: `0.7.2`
 
 ## Phase 6 Baseline Identity
 
@@ -29,7 +32,7 @@ MCP capability was added or tuned.
 - Scenario-catalog hash:
   `6b47e28ee3d5c13619903d9885212022c49940224e333188d177a40e46214e2c`
 - Agents SDK: pinned and installed at `0.22.3`
-- Benchmark, evaluation, and scenario schema versions: `1`
+- Benchmark schema version: `2`; evaluation and scenario schema versions: `1`
 - Evaluator: `aegisops-evaluator-v1`
 - Runtime identity also records Git SHA/dirty state, NEXUS/model/Python/platform
   versions, max turns, max tool calls, and timeout.
@@ -68,6 +71,14 @@ MCP capability was added or tuned.
 - A strict Agents SDK output adapter that replaces Pydantic's provider-incompatible
   empty `JsonValue` schema, preserves all diagnosis fields, supports compound JSON
   evidence values, and validates final JSON back into `Diagnosis`.
+- Atomic diagnostic permits enforce completed plus reserved calls without serializing
+  backend work; runtime waits for admitted sibling calls before diagnostic clients close.
+- Sanitized failures retain stable category, origin, outer/cause types, and allowlisted
+  provider status/code without exception messages, prompts, payloads, or evidence bodies.
+- Failed-run turns are nullable when unknown, accounting completeness is explicit, and
+  SDK lifecycle/run data preserves exact partial turns and usage when available.
+- Diagnostic backend failures expose typed safe codes and HTTP status while legitimate
+  empty Prometheus/Loki results remain successful evidence.
 - Sequential contamination integration coverage and deterministic clean-stack-per-run
   orchestration coverage.
 - ADR 0007 and the AegisOps benchmarking runbook.
@@ -104,13 +115,20 @@ py -m pytest -m integration tests/integration
 
 ## Latest Local Validation
 
-- Editable installation and `py -m pip check` passed for version `0.7.1`.
-- Ruff formatting and lint passed for 105 files.
+- Editable installation and `py -m pip check` passed for version `0.7.2`.
+- Ruff formatting and lint passed for 85 Python files.
 - Strict mypy passed with no issues in 61 source files.
-- `py -m pytest` passed 91 tests; 17 Compose integration tests were deselected.
+- All 101 non-integration tests passed, including concurrent budget, output transport,
+  failure classification, partial accounting, and in-flight drain regressions.
+- All 17 Docker Compose integration tests passed.
 - The structured-output regression suite passed with the exact no-tools Agents SDK
   response format and no API request.
 - All 5 version 1 scenario files passed typed catalog validation.
+- Direct diagnostic replay under `orders_unavailable` and `users_latency` returned
+  successful Prometheus/Loki results; empty recent-error sets remained successful.
+- Historical run timestamps show the failed Prometheus/Loki calls completed after the
+  failed run timestamp while the next clean-stack teardown began. The repaired runtime
+  drains sibling SDK tool work before the shared clients can close.
 - Governing files are unchanged from approved Phase 5 commit `67081f3`.
 - Whitespace and tracked-file secret-pattern scans passed.
 - CLI command discovery and origin/`main` Git configuration passed.
@@ -139,7 +157,11 @@ py -m pytest -m integration tests/integration
 - The intended live baseline model is `gpt-5.6-sol`.
 - The current Codex process does not contain `OPENAI_API_KEY`; live verification
   remains gated until it is supplied locally without entering source control.
-- No valid live smoke has completed.
+- Smoke `16e2dfa5-000f-45e7-b87a-5d275ae882a6` is invalid framework evidence: four
+  generic model errors, hard-budget overshoot to 15/16 calls, and incomplete accounting.
+- The current process still has no `OPENAI_API_KEY`, so the required targeted replay of
+  `orders_database_unavailable` cannot yet make a paid model request.
+- No repaired targeted live run or valid live smoke has completed.
 - Official repeated baseline was not executed.
 - No baseline lock manifest or fabricated live result was created.
 - Therefore there are no honest Phase 6 model, tool-use, evidence-quality, accuracy,
@@ -155,8 +177,8 @@ py -m pytest -m integration tests/integration
 - A genuine clean-tree smoke and repeated baseline still require an explicitly
   supplied API key.
 - Clean-stack-per-run isolation favors validity over speed and is intentionally costly.
-- Version 1 schemas reject incompatible future data; an explicit migration layer is
-  required when schema version 2 is introduced.
+- Version 1 benchmark artifacts remain raw historical evidence and are intentionally
+  incompatible with version 2 comparison/locking without an explicit migration.
 - Baseline lock acceptance is an operator decision. The software verifies baseline
   mode, completion, recovery, reproducibility, completeness, and summary integrity,
   but cannot independently attest that an external credential belonged to a specific
@@ -167,8 +189,7 @@ py -m pytest -m integration tests/integration
 
 ## Next Step
 
-Supply `OPENAI_API_KEY` locally without committing it, rerun clean-tree preflight, and
-run exactly one no-tools `gpt-5.6-sol` structured-output micro-test through the repaired
-adapter. Stop and review that result before authorizing the five-scenario smoke. Do
-not begin Brain v1 without a genuine accepted baseline unless the project owner
-explicitly chooses to.
+Commit and push the runtime repair, obtain green CI, clean the Compose stack, and run
+preflight. Once `OPENAI_API_KEY` is present locally, run only the targeted
+`orders_database_unavailable` investigation and review its typed outcome, hard budget,
+accounting, and evidence. Stop before the five-scenario smoke and do not begin Phase 7.

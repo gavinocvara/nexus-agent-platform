@@ -16,6 +16,7 @@ from nexus.diagnostics.metrics import (
 from nexus.diagnostics.models import (
     CorrelationInput,
     DependencySummaryInput,
+    DiagnosticBackendErrorCode,
     DiagnosticService,
     LogSearchInput,
     RequestSummaryInput,
@@ -43,8 +44,9 @@ def test_bounded_transport_handles_timeout_and_oversized_response() -> None:
         raise httpx.ReadTimeout("timed out", request=request)
 
     timed_out = BoundedJsonClient("http://backend.test", 0.1, 1024, httpx.MockTransport(timeout))
-    with pytest.raises(DiagnosticBackendError, match="unavailable"):
+    with pytest.raises(DiagnosticBackendError, match="unavailable") as timeout_error:
         timed_out.get_json("/fixed")
+    assert timeout_error.value.code is DiagnosticBackendErrorCode.TRANSPORT
     timed_out.close()
 
     oversized = BoundedJsonClient(
@@ -53,8 +55,9 @@ def test_bounded_transport_handles_timeout_and_oversized_response() -> None:
         10,
         httpx.MockTransport(lambda _request: httpx.Response(200, json={"value": "large"})),
     )
-    with pytest.raises(DiagnosticBackendError, match="size limit"):
+    with pytest.raises(DiagnosticBackendError, match="size limit") as size_error:
         oversized.get_json("/fixed")
+    assert size_error.value.code is DiagnosticBackendErrorCode.RESPONSE_TOO_LARGE
     oversized.close()
 
 

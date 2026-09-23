@@ -6,6 +6,13 @@ All meaningful changes to NEXUS are recorded here.
 
 ### Added
 
+- Concurrency-safe diagnostic call permits, in-flight drain tracking, sanitized runtime
+  failure classification, partial failed-run accounting, and safe diagnostic backend
+  error codes/statuses.
+- Regression coverage for parallel hard-budget enforcement, wrapped budget errors,
+  final-output validation classification, failed-run accounting, SDK teardown races,
+  and every supported structured evidence value/status shape.
+
 - A strict `DiagnosisOutputSchema` adapter for the Responses API that preserves the
   existing Pydantic diagnosis model while replacing its unconstrained `JsonValue`
   transport node with a supported recursive schema.
@@ -72,6 +79,10 @@ All meaningful changes to NEXUS are recorded here.
   and integration tests.
 
 ### Changed
+
+- Advanced the package to version 0.7.2 for the Phase 6 live-runtime correctness repair.
+- Advanced the durable benchmark schema to version 2 so failed-run turns distinguish
+  unknown from zero and persisted runs carry accounting completeness and typed failures.
 
 - Advanced the package to version 0.7.1 for the pre-baseline structured-output repair.
 - Baseline diagnosis identity now hashes both the unchanged domain schema and the

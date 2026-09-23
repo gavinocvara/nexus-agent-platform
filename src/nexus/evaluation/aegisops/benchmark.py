@@ -249,6 +249,12 @@ class BenchmarkRunner:
                     timestamp=event.timestamp,
                     duration_ms=event.duration_ms,
                     success=event.success,
+                    backend_error_code=(
+                        event.backend_error_code.value
+                        if event.backend_error_code is not None
+                        else None
+                    ),
+                    backend_status_code=event.backend_status_code,
                     backend=event.backend.value,
                     result_count=event.result_count,
                 )
@@ -256,7 +262,9 @@ class BenchmarkRunner:
             ],
             duration_ms=record.duration_ms,
             turn_count=record.turn_count,
+            accounting_complete=record.accounting_complete,
             usage=record.usage,
+            failure=record.failure,
             valid_evidence_references=score.valid_evidence_reference_count,
             invalid_evidence_references=(
                 score.evidence_reference_count - score.valid_evidence_reference_count
@@ -296,6 +304,7 @@ class BenchmarkRunner:
             tool_calls=[],
             duration_ms=0,
             turn_count=0,
+            accounting_complete=True,
             valid_evidence_references=0,
             invalid_evidence_references=0,
             unsupported_claims=0,

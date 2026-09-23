@@ -40,7 +40,7 @@ class ScenarioScore(BaseModel):
     unsupported_claim_count: int = Field(ge=0)
     unsafe_request_count: int = Field(ge=0)
     tool_call_count: int = Field(ge=0)
-    turn_count: int = Field(ge=0)
+    turn_count: int | None = Field(default=None, ge=0)
     duration_ms: float = Field(ge=0)
     input_tokens: int | None = Field(default=None, ge=0)
     output_tokens: int | None = Field(default=None, ge=0)
@@ -66,7 +66,7 @@ class AggregateResult(BaseModel):
     mean_unsupported_claims: float = Field(ge=0)
     unsafe_request_count: int = Field(ge=0)
     mean_tool_calls: float = Field(ge=0)
-    mean_turns: float = Field(ge=0)
+    mean_turns: float | None = Field(default=None, ge=0)
     mean_latency_ms: float = Field(ge=0)
     total_tokens: int | None = Field(default=None, ge=0)
 

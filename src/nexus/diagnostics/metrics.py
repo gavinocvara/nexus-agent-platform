@@ -9,6 +9,7 @@ from nexus.diagnostics.config import DiagnosticsSettings
 from nexus.diagnostics.models import (
     DependencySummary,
     DependencySummaryInput,
+    DiagnosticBackendErrorCode,
     DiagnosticWindow,
     RequestSummary,
     RequestSummaryInput,
@@ -78,23 +79,23 @@ class PrometheusAdapter:
     def _query(self, expression: str) -> float | None:
         payload = self._client.get_json("/api/v1/query", {"query": expression})
         if payload.get("status") != "success":
-            raise DiagnosticBackendError("Prometheus query failed")
+            raise DiagnosticBackendError(DiagnosticBackendErrorCode.QUERY_REJECTED)
         data = payload.get("data")
         if not isinstance(data, dict) or not isinstance(data.get("result"), list):
-            raise DiagnosticBackendError("Prometheus returned malformed query data")
+            raise DiagnosticBackendError(DiagnosticBackendErrorCode.MALFORMED_RESPONSE)
         results = data["result"]
         if not results:
             return None
         first = results[0]
         if not isinstance(first, dict):
-            raise DiagnosticBackendError("Prometheus returned malformed series data")
+            raise DiagnosticBackendError(DiagnosticBackendErrorCode.MALFORMED_RESPONSE)
         value = first.get("value")
         if not isinstance(value, list) or len(value) != 2:
-            raise DiagnosticBackendError("Prometheus returned malformed sample data")
+            raise DiagnosticBackendError(DiagnosticBackendErrorCode.MALFORMED_RESPONSE)
         try:
             normalized = float(value[1])
         except (TypeError, ValueError) as exc:
-            raise DiagnosticBackendError("Prometheus returned a non-numeric sample") from exc
+            raise DiagnosticBackendError(DiagnosticBackendErrorCode.MALFORMED_RESPONSE) from exc
         return normalized if math.isfinite(normalized) else None
 
     def request_summary(self, request: RequestSummaryInput) -> RequestSummary:

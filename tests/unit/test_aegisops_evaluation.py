@@ -36,6 +36,7 @@ def _record(diagnosis: Diagnosis, session: DiagnosticSession) -> InvestigationRu
         duration_ms=12,
         tool_call_count=session.tool_call_count,
         turn_count=2,
+        accounting_complete=True,
         diagnostic_session_id=session.session_id,
         diagnosis=diagnosis,
     )

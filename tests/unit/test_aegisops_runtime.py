@@ -1,14 +1,23 @@
 import asyncio
 import json
+from threading import Event, Thread
+from time import sleep
 
 import httpx
 from agents.exceptions import MaxTurnsExceeded
 
 from nexus.aegisops.config import AgentSettings
-from nexus.aegisops.models import Diagnosis, DiagnosisStatus, RunStatus
-from nexus.aegisops.runtime import EngineOutcome, InvestigatorRuntime
+from nexus.aegisops.models import (
+    Diagnosis,
+    DiagnosisStatus,
+    FailureOrigin,
+    ModelUsage,
+    RunStatus,
+)
+from nexus.aegisops.output_schema import DiagnosisOutputValidationError
+from nexus.aegisops.runtime import EngineExecutionError, EngineOutcome, InvestigatorRuntime
 from nexus.aegisops.tools import execute_tool
-from nexus.diagnostics.audit import DiagnosticSession
+from nexus.diagnostics.audit import DiagnosticSession, ToolCallBudgetExceeded
 from nexus.diagnostics.config import DiagnosticsSettings
 from nexus.diagnostics.logs import LokiAdapter
 from nexus.diagnostics.models import RecentErrorsInput
@@ -82,7 +91,9 @@ def test_live_engine_without_key_fails_clearly(monkeypatch) -> None:  # type: ig
         InvestigatorRuntime(settings).investigate(diagnostics=_diagnostics(session))
     )
     assert record.status is RunStatus.MISSING_CREDENTIALS
-    assert record.error is not None and "OPENAI_API_KEY" in record.error
+    assert record.error == "Live model credentials are unavailable"
+    assert record.accounting_complete is True
+    assert record.turn_count == 0
 
 
 def test_max_turns_failure_is_typed() -> None:
@@ -99,6 +110,95 @@ def test_max_turns_failure_is_typed() -> None:
     )
     assert record.status is RunStatus.MAX_TURNS_EXCEEDED
     assert record.error is not None and "2-turn" in record.error
+
+
+def test_wrapped_budget_failure_remains_typed() -> None:
+    class WrappedBudgetEngine:
+        async def run(self, prompt, context, settings):  # type: ignore[no-untyped-def]
+            try:
+                raise ToolCallBudgetExceeded("private detail")
+            except ToolCallBudgetExceeded as exc:
+                raise RuntimeError("sdk wrapper") from exc
+
+    settings = AgentSettings(_env_file=None, enabled=True, max_tool_calls=12)
+    record = asyncio.run(InvestigatorRuntime(settings, WrappedBudgetEngine()).investigate())
+    assert record.status is RunStatus.TOOL_BUDGET_EXCEEDED
+    assert record.failure is not None
+    assert record.failure.origin is FailureOrigin.BUDGET_ENFORCEMENT
+    assert "private detail" not in record.model_dump_json()
+
+
+def test_final_output_validation_is_not_provider_failure() -> None:
+    class InvalidOutputEngine:
+        async def run(self, prompt, context, settings):  # type: ignore[no-untyped-def]
+            raise DiagnosisOutputValidationError("model payload omitted")
+
+    settings = AgentSettings(_env_file=None, enabled=True)
+    record = asyncio.run(InvestigatorRuntime(settings, InvalidOutputEngine()).investigate())
+    assert record.status is RunStatus.INVALID_OUTPUT
+    assert record.failure is not None
+    assert record.failure.origin is FailureOrigin.FINAL_OUTPUT_VALIDATION
+    assert "model payload omitted" not in record.model_dump_json()
+
+
+def test_failed_run_with_tool_activity_does_not_report_zero_turns() -> None:
+    class ActiveFailureEngine:
+        async def run(self, prompt, context, settings):  # type: ignore[no-untyped-def]
+            execute_tool(context, "list_services")
+            raise RuntimeError("untrusted detail")
+
+    settings = AgentSettings(_env_file=None, enabled=True)
+    record = asyncio.run(InvestigatorRuntime(settings, ActiveFailureEngine()).investigate())
+    assert record.tool_call_count == 1
+    assert record.turn_count is None
+    assert record.accounting_complete is False
+
+
+def test_failed_engine_preserves_exact_partial_accounting_when_available() -> None:
+    usage = ModelUsage(request_count=2, input_tokens=40, output_tokens=5, total_tokens=45)
+
+    class AccountedFailureEngine:
+        async def run(self, prompt, context, settings):  # type: ignore[no-untyped-def]
+            try:
+                raise RuntimeError("provider payload")
+            except RuntimeError as exc:
+                raise EngineExecutionError(2, usage) from exc
+
+    settings = AgentSettings(_env_file=None, enabled=True)
+    record = asyncio.run(InvestigatorRuntime(settings, AccountedFailureEngine()).investigate())
+    assert record.turn_count == 2
+    assert record.usage == usage
+    assert record.accounting_complete is False
+    assert "provider payload" not in record.model_dump_json()
+
+
+def test_runtime_drains_parallel_tool_work_before_returning() -> None:
+    entered = Event()
+
+    class SlowDiagnostics(DiagnosticServiceLayer):
+        def list_services(self):  # type: ignore[no-untyped-def]
+            entered.set()
+            sleep(0.05)
+            return super().list_services()
+
+    session = DiagnosticSession()
+    diagnostics = object.__new__(SlowDiagnostics)
+    diagnostics.session = session
+
+    class ParallelFailureEngine:
+        async def run(self, prompt, context, settings):  # type: ignore[no-untyped-def]
+            worker = Thread(target=execute_tool, args=(context, "list_services"))
+            worker.start()
+            assert entered.wait(1)
+            raise RuntimeError("runner failed while sibling tool was active")
+
+    settings = AgentSettings(_env_file=None, enabled=True)
+    record = asyncio.run(
+        InvestigatorRuntime(settings, ParallelFailureEngine()).investigate(diagnostics=diagnostics)
+    )
+    assert record.tool_call_count == 1
+    assert session.active_call_count == 0
+    assert session.reserved_call_count == 0
 
 
 def test_scripted_engine_treats_prompt_injection_log_as_data() -> None:

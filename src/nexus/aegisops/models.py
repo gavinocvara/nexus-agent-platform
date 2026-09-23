@@ -46,6 +46,29 @@ class RunStatus(StrEnum):
     MODEL_ERROR = "model_error"
 
 
+class FailureCategory(StrEnum):
+    CREDENTIALS = "credentials"
+    TOOL_BUDGET = "tool_budget"
+    TURN_LIMIT = "turn_limit"
+    TIMEOUT = "timeout"
+    OUTPUT_VALIDATION = "output_validation"
+    MODEL_BEHAVIOR = "model_behavior"
+    TOOL_EXECUTION = "tool_execution"
+    PROVIDER = "provider"
+    SDK = "sdk"
+    INTERNAL = "internal"
+
+
+class FailureOrigin(StrEnum):
+    CONFIGURATION = "configuration"
+    BUDGET_ENFORCEMENT = "budget_enforcement"
+    FINAL_OUTPUT_VALIDATION = "final_output_validation"
+    TOOL_EXECUTION = "tool_execution"
+    PROVIDER_TRANSPORT = "provider_transport"
+    SDK_RUNTIME = "sdk_runtime"
+    INTERNAL_RUNTIME = "internal_runtime"
+
+
 class RootCauseHypothesis(BaseModel):
     model_config = StrictConfig
 
@@ -100,6 +123,19 @@ class ModelUsage(BaseModel):
     reasoning_output_tokens: int | None = Field(default=None, ge=0)
 
 
+class RunFailure(BaseModel):
+    """Sanitized failure metadata that never stores exception messages or payloads."""
+
+    model_config = StrictConfig
+
+    category: FailureCategory
+    origin: FailureOrigin
+    outer_exception_type: str = Field(min_length=1, max_length=200)
+    cause_chain_types: list[str] = Field(default_factory=list, max_length=12)
+    provider_status_code: int | None = Field(default=None, ge=100, le=599)
+    provider_error_code: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_.-]{1,64}$")
+
+
 class InvestigationRunRecord(BaseModel):
     """Auditable metadata without prompts, transcripts, or duplicated evidence."""
 
@@ -113,10 +149,12 @@ class InvestigationRunRecord(BaseModel):
     finished_at: datetime
     duration_ms: float = Field(ge=0)
     tool_call_count: int = Field(ge=0)
-    turn_count: int = Field(ge=0)
+    turn_count: int | None = Field(default=None, ge=0)
+    accounting_complete: bool
     diagnostic_session_id: UUID
     diagnosis: Diagnosis | None = None
     usage: ModelUsage | None = None
+    failure: RunFailure | None = None
     error: str | None = Field(default=None, max_length=500)
 
     @classmethod

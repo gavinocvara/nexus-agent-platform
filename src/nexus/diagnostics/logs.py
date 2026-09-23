@@ -11,6 +11,7 @@ from nexus.diagnostics.config import DiagnosticsSettings
 from nexus.diagnostics.models import (
     ApplicationService,
     CorrelationId,
+    DiagnosticBackendErrorCode,
     DiagnosticWindow,
     LogEvent,
     LogSearchInput,
@@ -46,7 +47,7 @@ def _timestamp(nanoseconds: str) -> datetime:
     try:
         return datetime.fromtimestamp(int(nanoseconds) / 1_000_000_000, tz=UTC)
     except (ValueError, OSError, OverflowError) as exc:
-        raise DiagnosticBackendError("Loki returned an invalid timestamp") from exc
+        raise DiagnosticBackendError(DiagnosticBackendErrorCode.MALFORMED_RESPONSE) from exc
 
 
 def _optional_string(payload: dict[str, Any], key: str, maximum: int) -> str | None:
@@ -117,17 +118,17 @@ class LokiAdapter:
             {"query": query, "since": window.value, "limit": str(limit), "direction": "backward"},
         )
         if payload.get("status") != "success":
-            raise DiagnosticBackendError("Loki query failed")
+            raise DiagnosticBackendError(DiagnosticBackendErrorCode.QUERY_REJECTED)
         data = payload.get("data")
         if not isinstance(data, dict) or not isinstance(data.get("result"), list):
-            raise DiagnosticBackendError("Loki returned malformed query data")
+            raise DiagnosticBackendError(DiagnosticBackendErrorCode.MALFORMED_RESPONSE)
         events: list[LogEvent] = []
         for stream in data["result"]:
             if not isinstance(stream, dict) or not isinstance(stream.get("values"), list):
-                raise DiagnosticBackendError("Loki returned malformed stream data")
+                raise DiagnosticBackendError(DiagnosticBackendErrorCode.MALFORMED_RESPONSE)
             for value in stream["values"]:
                 if not isinstance(value, list) or len(value) != 2:
-                    raise DiagnosticBackendError("Loki returned malformed log data")
+                    raise DiagnosticBackendError(DiagnosticBackendErrorCode.MALFORMED_RESPONSE)
                 event = _event(str(value[0]), str(value[1]))
                 if event is not None:
                     events.append(event)

@@ -19,6 +19,7 @@ from nexus.diagnostics.models import (
     DatabaseHealthResult,
     DependencySummaryInput,
     DependencySummaryResult,
+    DiagnosticBackendErrorCode,
     DiagnosticResult,
     DiagnosticService,
     DiagnosticSource,
@@ -94,6 +95,8 @@ class DiagnosticServiceLayer:
             tool=result.tool,
             normalized_arguments=json_safe_arguments(arguments),
             success=result.success,
+            backend_error_code=result.backend_error_code,
+            backend_status_code=result.backend_status_code,
             duration_ms=(perf_counter() - started) * 1000,
             backend=result.source,
             result_count=result_count,
@@ -123,6 +126,7 @@ class DiagnosticServiceLayer:
             tool="get_service_health",
             source=DiagnosticSource.SERVICE_HEALTH,
             success=success,
+            backend_error_code=None if success else DiagnosticBackendErrorCode.TRANSPORT,
             warnings=[] if success else ["Service health backend unavailable"],
             health=health,
         )
@@ -139,6 +143,7 @@ class DiagnosticServiceLayer:
             tool="get_system_health",
             source=DiagnosticSource.SERVICE_HEALTH,
             success=success,
+            backend_error_code=None if success else DiagnosticBackendErrorCode.TRANSPORT,
             warnings=[] if success else ["One or more service health backends unavailable"],
             services=health,
         )
@@ -156,11 +161,13 @@ class DiagnosticServiceLayer:
                 summary=summary,
             )
             count = 1
-        except DiagnosticBackendError:
+        except DiagnosticBackendError as exc:
             result = RequestSummaryResult(
                 tool="get_request_summary",
                 source=DiagnosticSource.PROMETHEUS,
                 success=False,
+                backend_error_code=exc.code,
+                backend_status_code=exc.status_code,
                 warnings=["Prometheus unavailable or returned invalid data"],
             )
             count = 0
@@ -178,11 +185,13 @@ class DiagnosticServiceLayer:
                 summary=summary,
             )
             count = 1
-        except DiagnosticBackendError:
+        except DiagnosticBackendError as exc:
             result = DependencySummaryResult(
                 tool="get_dependency_summary",
                 source=DiagnosticSource.PROMETHEUS,
                 success=False,
+                backend_error_code=exc.code,
+                backend_status_code=exc.status_code,
                 warnings=["Prometheus unavailable or returned invalid data"],
             )
             count = 0
@@ -204,11 +213,13 @@ class DiagnosticServiceLayer:
                 warnings=[] if healthy is not None else ["Database health metric has no sample"],
             )
             count = int(healthy is not None)
-        except DiagnosticBackendError:
+        except DiagnosticBackendError as exc:
             result = DatabaseHealthResult(
                 tool="get_database_health",
                 source=DiagnosticSource.PROMETHEUS,
                 success=False,
+                backend_error_code=exc.code,
+                backend_status_code=exc.status_code,
                 warnings=["Prometheus unavailable or returned invalid data"],
             )
             count = 0
@@ -225,11 +236,13 @@ class DiagnosticServiceLayer:
                 source=DiagnosticSource.LOKI,
                 events=events,
             )
-        except DiagnosticBackendError:
+        except DiagnosticBackendError as exc:
             result = LogSearchResult(
                 tool="search_logs",
                 source=DiagnosticSource.LOKI,
                 success=False,
+                backend_error_code=exc.code,
+                backend_status_code=exc.status_code,
                 warnings=["Loki unavailable or returned invalid data"],
                 events=[],
             )
@@ -246,11 +259,13 @@ class DiagnosticServiceLayer:
                 source=DiagnosticSource.LOKI,
                 events=events,
             )
-        except DiagnosticBackendError:
+        except DiagnosticBackendError as exc:
             result = LogSearchResult(
                 tool="get_request_evidence",
                 source=DiagnosticSource.LOKI,
                 success=False,
+                backend_error_code=exc.code,
+                backend_status_code=exc.status_code,
                 warnings=["Loki unavailable or returned invalid data"],
                 events=[],
             )
@@ -268,11 +283,13 @@ class DiagnosticServiceLayer:
                 trace=trace,
             )
             count = len(trace.spans)
-        except DiagnosticBackendError:
+        except DiagnosticBackendError as exc:
             result = TraceResult(
                 tool="get_trace",
                 source=DiagnosticSource.TEMPO,
                 success=False,
+                backend_error_code=exc.code,
+                backend_status_code=exc.status_code,
                 warnings=["Tempo unavailable or returned invalid data"],
             )
             count = 0
@@ -296,11 +313,13 @@ class DiagnosticServiceLayer:
                 source=DiagnosticSource.LOKI,
                 trace_ids=trace_ids,
             )
-        except DiagnosticBackendError:
+        except DiagnosticBackendError as exc:
             result = TraceSearchResult(
                 tool="find_traces",
                 source=DiagnosticSource.LOKI,
                 success=False,
+                backend_error_code=exc.code,
+                backend_status_code=exc.status_code,
                 warnings=["Loki unavailable or returned invalid data"],
                 trace_ids=[],
             )
@@ -321,11 +340,13 @@ class DiagnosticServiceLayer:
                 source=DiagnosticSource.LOKI,
                 events=events,
             )
-        except DiagnosticBackendError:
+        except DiagnosticBackendError as exc:
             result = LogSearchResult(
                 tool="get_recent_errors",
                 source=DiagnosticSource.LOKI,
                 success=False,
+                backend_error_code=exc.code,
+                backend_status_code=exc.status_code,
                 warnings=["Loki unavailable or returned invalid data"],
                 events=[],
             )

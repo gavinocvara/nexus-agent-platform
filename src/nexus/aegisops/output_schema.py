@@ -40,6 +40,10 @@ _JSON_VALUE_SCHEMA: dict[str, Any] = {
 }
 
 
+class DiagnosisOutputValidationError(ModelBehaviorError):
+    """A final model output that cannot become the unchanged domain Diagnosis."""
+
+
 class DiagnosisOutputSchema(AgentOutputSchemaBase):
     """Expose a strict API schema and validate output into the domain Diagnosis model."""
 
@@ -73,7 +77,9 @@ class DiagnosisOutputSchema(AgentOutputSchemaBase):
                 json.dumps(converted, separators=(",", ":")), strict=True
             )
         except (json.JSONDecodeError, TypeError, ValueError, ValidationError) as exc:
-            raise ModelBehaviorError("Model returned an invalid structured Diagnosis") from exc
+            raise DiagnosisOutputValidationError(
+                "Model returned an invalid structured Diagnosis"
+            ) from exc
 
 
 def _decode_json_values(value: Any) -> Any:

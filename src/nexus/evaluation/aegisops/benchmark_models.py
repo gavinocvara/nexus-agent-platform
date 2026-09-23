@@ -7,10 +7,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
-from nexus.aegisops.models import Diagnosis, ModelUsage
+from nexus.aegisops.models import Diagnosis, ModelUsage, RunFailure
 from nexus.evaluation.aegisops.models import ScenarioScore
 
-BENCHMARK_SCHEMA_VERSION = 1
+BENCHMARK_SCHEMA_VERSION = 2
 EVALUATION_SCHEMA_VERSION = 1
 EVALUATOR_VERSION = "aegisops-evaluator-v1"
 BASELINE_NAME = "aegisops-memoryless-v1"
@@ -62,7 +62,7 @@ class BaselineIdentity(StrictModel):
     diagnosis_schema_hash: str
     evaluator_version: str = EVALUATOR_VERSION
     evaluation_schema_version: Literal[1] = 1
-    benchmark_schema_version: Literal[1] = 1
+    benchmark_schema_version: Literal[2] = 2
     scenario_schema_version: Literal[1] = 1
     scenario_catalog_hash: str
     max_turns: int
@@ -80,7 +80,7 @@ class PlannedRun(StrictModel):
 
 
 class BenchmarkManifest(StrictModel):
-    benchmark_schema_version: Literal[1] = 1
+    benchmark_schema_version: Literal[2] = 2
     evaluation_schema_version: Literal[1] = 1
     benchmark_session_id: UUID
     mode: BenchmarkMode
@@ -110,12 +110,14 @@ class ObservableToolCall(StrictModel):
     timestamp: datetime
     duration_ms: float = Field(ge=0)
     success: bool
+    backend_error_code: str | None = None
+    backend_status_code: int | None = Field(default=None, ge=100, le=599)
     backend: str
     result_count: int = Field(ge=0)
 
 
 class BenchmarkRunRecord(StrictModel):
-    benchmark_schema_version: Literal[1] = 1
+    benchmark_schema_version: Literal[2] = 2
     evaluation_schema_version: Literal[1] = 1
     benchmark_session_id: UUID
     evaluation_run_id: UUID
@@ -136,8 +138,10 @@ class BenchmarkRunRecord(StrictModel):
     abstained: bool
     tool_calls: list[ObservableToolCall]
     duration_ms: float = Field(ge=0)
-    turn_count: int = Field(ge=0)
+    turn_count: int | None = Field(default=None, ge=0)
+    accounting_complete: bool
     usage: ModelUsage | None = None
+    failure: RunFailure | None = None
     valid_evidence_references: int = Field(ge=0)
     invalid_evidence_references: int = Field(ge=0)
     unsupported_claims: int = Field(ge=0)
@@ -214,7 +218,7 @@ class AggregateAnalysis(StrictModel):
 
 
 class BenchmarkSummary(StrictModel):
-    benchmark_schema_version: Literal[1] = 1
+    benchmark_schema_version: Literal[2] = 2
     evaluation_schema_version: Literal[1] = 1
     benchmark_session_id: UUID
     generated_at: datetime
@@ -242,7 +246,7 @@ class MetricDelta(StrictModel):
 
 
 class BenchmarkComparison(StrictModel):
-    benchmark_schema_version: Literal[1] = 1
+    benchmark_schema_version: Literal[2] = 2
     evaluation_schema_version: Literal[1] = 1
     created_at: datetime
     comparison_type: Literal["same_baseline", "cross_model", "incompatible"]
@@ -255,7 +259,7 @@ class BenchmarkComparison(StrictModel):
 
 
 class LockedBaselineManifest(StrictModel):
-    benchmark_schema_version: Literal[1] = 1
+    benchmark_schema_version: Literal[2] = 2
     baseline_name: str
     benchmark_session_id: UUID
     git_sha: str

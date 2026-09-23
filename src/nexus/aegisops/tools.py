@@ -34,6 +34,10 @@ class ToolBoundaryError(RuntimeError):
     """The registry, policy, or implementation no longer forms the approved boundary."""
 
 
+class DiagnosticToolExecutionError(RuntimeError):
+    """A sanitized wrapper for an unexpected diagnostic implementation failure."""
+
+
 def validate_tool_boundary(implementation_names: set[str]) -> None:
     """Reject drift, writable tools, elevated risk, duplicates, and policy conflicts."""
 
@@ -61,7 +65,6 @@ def execute_tool(
 ) -> DiagnosticResult:
     """Dispatch only allowlisted methods on the existing diagnostic service layer."""
 
-    context.session.assert_call_available()
     if context.diagnostics.session is not context.session:
         raise ToolBoundaryError("Runtime context session does not own the diagnostic service")
     if name not in EXPECTED_TOOLS:
@@ -69,7 +72,11 @@ def execute_tool(
     method = getattr(context.diagnostics, name, None)
     if not callable(method):
         raise ToolBoundaryError(f"Diagnostic service does not implement {name}")
-    result: Any = method() if arguments is None else method(arguments)
+    with context.session.reserve_call():
+        try:
+            result: Any = method() if arguments is None else method(arguments)
+        except Exception as exc:
+            raise DiagnosticToolExecutionError("Diagnostic tool execution failed") from exc
     if not isinstance(result, DiagnosticResult):
         raise ToolBoundaryError(f"Diagnostic tool {name} returned an invalid result")
     return result

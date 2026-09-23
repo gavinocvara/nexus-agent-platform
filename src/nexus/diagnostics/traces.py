@@ -6,7 +6,13 @@ import httpx
 
 from nexus.diagnostics._http import BoundedJsonClient, DiagnosticBackendError
 from nexus.diagnostics.config import DiagnosticsSettings
-from nexus.diagnostics.models import SafeAttribute, TraceEvidence, TraceId, TraceSpan
+from nexus.diagnostics.models import (
+    DiagnosticBackendErrorCode,
+    SafeAttribute,
+    TraceEvidence,
+    TraceId,
+    TraceSpan,
+)
 
 SAFE_SPAN_ATTRIBUTES = frozenset(
     {
@@ -61,7 +67,7 @@ def _nanoseconds(value: Any, field: str) -> int:
     try:
         return int(value)
     except (TypeError, ValueError) as exc:
-        raise DiagnosticBackendError(f"Tempo returned an invalid {field}") from exc
+        raise DiagnosticBackendError(DiagnosticBackendErrorCode.MALFORMED_RESPONSE) from exc
 
 
 def _operation(value: Any, attributes: dict[str, SafeAttribute]) -> str:
@@ -82,24 +88,24 @@ def normalize_trace(trace_id: TraceId, payload: dict[str, Any]) -> TraceEvidence
 
     batches = payload.get("batches")
     if not isinstance(batches, list):
-        raise DiagnosticBackendError("Tempo returned malformed trace data")
+        raise DiagnosticBackendError(DiagnosticBackendErrorCode.MALFORMED_RESPONSE)
     spans: list[TraceSpan] = []
     trace_start: int | None = None
     trace_end: int | None = None
     for batch in batches:
         if not isinstance(batch, dict):
-            raise DiagnosticBackendError("Tempo returned malformed batch data")
+            raise DiagnosticBackendError(DiagnosticBackendErrorCode.MALFORMED_RESPONSE)
         service = _service_name(batch.get("resource"))
         scope_spans = batch.get("scopeSpans", [])
         if not isinstance(scope_spans, list):
-            raise DiagnosticBackendError("Tempo returned malformed scope data")
+            raise DiagnosticBackendError(DiagnosticBackendErrorCode.MALFORMED_RESPONSE)
         for scope in scope_spans:
             raw_spans = scope.get("spans", []) if isinstance(scope, dict) else []
             if not isinstance(raw_spans, list):
-                raise DiagnosticBackendError("Tempo returned malformed span data")
+                raise DiagnosticBackendError(DiagnosticBackendErrorCode.MALFORMED_RESPONSE)
             for raw in raw_spans:
                 if not isinstance(raw, dict):
-                    raise DiagnosticBackendError("Tempo returned malformed span data")
+                    raise DiagnosticBackendError(DiagnosticBackendErrorCode.MALFORMED_RESPONSE)
                 start = _nanoseconds(raw.get("startTimeUnixNano"), "span start")
                 end = _nanoseconds(raw.get("endTimeUnixNano"), "span end")
                 trace_start = start if trace_start is None else min(trace_start, start)
@@ -125,7 +131,7 @@ def normalize_trace(trace_id: TraceId, payload: dict[str, Any]) -> TraceEvidence
                     )
                 )
     if trace_start is None or trace_end is None:
-        raise DiagnosticBackendError("Tempo trace contained no spans")
+        raise DiagnosticBackendError(DiagnosticBackendErrorCode.MALFORMED_RESPONSE)
     return TraceEvidence(
         trace_id=str(trace_id).lower(),
         duration_ms=max(0.0, (trace_end - trace_start) / 1_000_000),
