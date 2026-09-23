@@ -2,8 +2,8 @@
 
 ## Current Milestone
 
-Phase 2 - Deterministic Failure Injection and Scenario Ground Truth complete.
-Phase 3 has not started.
+Phase 3 - Operational Observability complete.
+Phase 4 has not started.
 
 ## Repository
 
@@ -21,7 +21,17 @@ Phase 3 has not started.
 - Evaluator CLI and runner with baseline, activation, symptom, reset, and recovery states.
 - Strict separation between evaluator ground truth and ordinary operational responses.
 - Structured request logs with timestamp, level, service, message, correlation ID,
-  method, path, and status code.
+  method, request path, status code, duration, and active trace/span identifiers.
+- Per-service Prometheus registries with bounded HTTP, dependency, latency,
+  in-flight request, and PostgreSQL health metrics.
+- W3C distributed tracing across service requests, HTTPX dependencies, and
+  SQLAlchemy through an OpenTelemetry Collector into Tempo.
+- Grafana Alloy stdout collection into Loki.
+- Provisioned Prometheus, Loki, and Tempo Grafana data sources with an AegisOps
+  overview dashboard.
+- Telemetry tests for bounded cardinality, normalized routes, graceful exporter
+  failure, cross-signal request correlation, and evaluator ground-truth isolation.
+- Operational observability architecture record and local runbook.
 
 ## Validation Commands
 
@@ -30,6 +40,7 @@ Run from the repository root:
 ```powershell
 py -m pip install -e ".[dev]"
 py -m pip check
+py -m ruff format --check .
 py -m ruff check .
 py -m mypy
 py -m pytest
@@ -46,18 +57,20 @@ docker compose down --volumes
 
 ## Latest Validation
 
-- Editable installation and `py -m pip check` passed for version 0.3.0.
-- `py -m ruff check .` passed.
-- `py -m mypy` passed with no issues in 20 source files.
-- `py -m pytest` passed 22 tests; 5 Compose integration tests were deselected.
+- Editable installation and `py -m pip check` passed for version 0.4.0.
+- `py -m ruff format --check .` and `py -m ruff check .` passed.
+- `py -m mypy` passed with no issues in 24 source files.
+- `py -m pytest` passed 30 tests; 11 Compose integration tests were deselected.
 - All 5 version 1 scenario files passed typed catalog validation.
-- YAML parsing and `git diff --check` passed.
-- GitHub Actions run `35807406416` passed for implementation commit `1e23b3a`:
-  - Python install, Ruff, mypy, unit/service tests, and scenario validation passed.
-  - Compose configuration, all image builds, startup, and health checks passed.
-  - Two normal PostgreSQL paths and three complete incident lifecycles passed.
-  - Unavailable, latency, and database symptoms were observed and reset.
-  - Correlation preservation and post-reset recovery passed.
+- Observability YAML/JSON parsing and `git diff --check` passed.
+- GitHub Actions run `35809978006` passed for commit `c101f07`:
+  - Python install, Ruff, mypy, 30 unit/service tests, and scenario validation passed.
+  - Compose validation, image builds, startup, and all service health checks passed.
+  - Prometheus, Loki, Tempo, and Grafana readiness checks passed.
+  - All 11 PostgreSQL, incident, telemetry, Grafana, and isolation integration tests
+    passed.
+  - Three representative incident lifecycles produced operational evidence, reset,
+    and recovered.
   - Compose teardown and volume cleanup passed.
 
 ## Safety Boundary
@@ -68,6 +81,12 @@ docker compose down --volumes
 - Operational errors contain no scenario IDs, fault configuration, or expected cause.
 - Faults cannot execute commands, evaluate expressions, mutate schema, delete files,
   corrupt PostgreSQL, or choose arbitrary delays.
+- Metrics and tracing default to disabled and are enabled explicitly by Compose.
+- Metrics use normalized route templates and bounded labels; request/resource IDs and
+  evaluator fields are excluded.
+- Ordinary responses, Prometheus samples, Loki logs, and Tempo traces are audited for
+  scenario identifiers, expected causes, and evaluator-only fields.
+- Trace export is asynchronous and an unavailable collector cannot fail requests.
 
 ## Known Issues
 
@@ -75,12 +94,17 @@ docker compose down --volumes
   on GitHub's Linux runner.
 - FastAPI's current `TestClient` emits an upstream Starlette deprecation warning;
   behavior is unaffected and tests pass.
-- Ground-truth isolation currently depends on future diagnostic tools not receiving
+- Ground-truth isolation still depends on future diagnostic tools not receiving
   repository filesystem or lab-control access; Atlas policy enforcement comes later.
 - One active fault per service is intentional for Phase 2; general chaos composition
   is deferred.
+- Grafana anonymous access, exposed observability ports, short retention, and Alloy's
+  read-only Docker socket mount are local-lab choices, not production hardening.
+- Alerting, production retention, authentication, and observability high availability
+  are deferred.
 
 ## Next Step
 
-Begin Phase 3 with operational observability: retain the current JSON logs, then add
-bounded service metrics and distributed traces while preserving evaluator isolation.
+Begin Phase 4 with narrow, typed, read-only diagnostic tools over operational signals.
+Do not introduce an autonomous investigator agent before the tool boundary, access
+policy, and evaluator-isolation controls are explicitly defined and validated.

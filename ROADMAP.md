@@ -22,7 +22,7 @@
 - Define a small failure catalog with stable identifiers and expected symptoms
 - Keep failure activation disabled by default and observable through service signals
 
-## Phase 3 — Operational Observability (Validation in Progress)
+## Phase 3 — Operational Observability (Complete)
 
 - Bounded Prometheus service and dependency metrics
 - Structured JSON logs collected by Grafana Alloy into Loki
