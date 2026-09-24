@@ -6,6 +6,9 @@ All meaningful changes to NEXUS are recorded here.
 
 ### Added
 
+- Locale-independent Docker Compose subprocess regression coverage for arbitrary byte
+  output, UTF-8 output, nonzero exits, timeouts, and executable failures.
+
 - Payload-free SDK validation diagnostics recording phase, Pydantic error type/location,
   tool identity, function-call position, and invocation/output lifecycle state.
 - Direct SDK-wrapper regression coverage for all eleven tools, legitimate empty and
@@ -84,6 +87,11 @@ All meaningful changes to NEXUS are recorded here.
   and integration tests.
 
 ### Changed
+
+- Advanced the package to version 0.7.4 for the Phase 6 Windows evaluator portability
+  repair. Clean-stack commands now capture bytes so output decoding cannot change command
+  success, and failures distinguish timeout, launch failure, and nonzero exit without
+  persisting subprocess output.
 
 - Advanced the package to version 0.7.3 and durable benchmark schema to version 3 for
   Phase 6 SDK validation repair metadata.

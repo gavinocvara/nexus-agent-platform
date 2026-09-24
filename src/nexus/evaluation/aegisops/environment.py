@@ -33,13 +33,22 @@ class DockerComposeStackController:
                 command,
                 check=False,
                 capture_output=True,
-                text=True,
+                text=False,
                 timeout=self.timeout_seconds,
             )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise EnvironmentIntegrityError(f"Stack command failed: {' '.join(command)}") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise EnvironmentIntegrityError(
+                f"Stack command timed out after {self.timeout_seconds:g} seconds: "
+                f"{' '.join(command)}"
+            ) from exc
+        except OSError as exc:
+            raise EnvironmentIntegrityError(
+                f"Stack command could not start ({type(exc).__name__}): {' '.join(command)}"
+            ) from exc
         if completed.returncode != 0:
-            raise EnvironmentIntegrityError(f"Stack command failed: {' '.join(command)}")
+            raise EnvironmentIntegrityError(
+                f"Stack command exited with code {completed.returncode}: {' '.join(command)}"
+            )
 
 
 class BenchmarkWarmup:

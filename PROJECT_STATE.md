@@ -3,7 +3,8 @@
 ## Current Milestone
 
 Phase 6 - Reproducible AegisOps Baseline Benchmarking and Regression History:
-SDK validation-contract repair validated deterministically; one targeted live replay pending.
+Windows clean-stack subprocess portability repaired and validated; one targeted live replay
+pending.
 
 The memoryless Phase 5 investigator is frozen as `aegisops-memoryless-v1`. No prompt,
 tool, model guidance, scoring, scenario, memory, multi-agent, remediation, Atlas, or
@@ -18,7 +19,7 @@ MCP capability was added or tuned.
 - Invalid live smoke under investigation: `16e2dfa5-000f-45e7-b87a-5d275ae882a6`
   at `309caa7cb0f900b9c20948c07df79fa88c5597f9`; it is quarantined and cannot be
   accepted as baseline evidence.
-- Package version: `0.7.3`
+- Package version: `0.7.4`
 
 ## Phase 6 Baseline Identity
 
@@ -85,6 +86,9 @@ MCP capability was added or tuned.
   are direct-call-only string tools with no structured output adapter.
 - Tool identity covers the actual SDK schemas, strictness, caller policy, and output
   metadata in addition to the diagnostic registry.
+- Evaluator-owned Docker Compose commands capture bytes instead of locale-decoded text.
+  Command success is independent of output encoding, while timeout, OS launch failure,
+  and nonzero exit remain distinct payload-free environment failures.
 - Diagnostic backend failures expose typed safe codes and HTTP status while legitimate
   empty Prometheus/Loki results remain successful evidence.
 - Sequential contamination integration coverage and deterministic clean-stack-per-run
@@ -113,6 +117,7 @@ py -m ruff format --check .
 py -m ruff check .
 py -m mypy
 py -m pytest
+py -m pytest tests/unit/test_aegisops_environment.py
 py -m pytest tests/unit/test_aegisops_benchmark.py tests/unit/test_aegisops_comparison.py tests/unit/test_aegisops_preflight.py
 py -m nexus.lab.scenarios validate
 py -m nexus.evaluation.aegisops preflight
@@ -123,16 +128,21 @@ py -m pytest -m integration tests/integration
 
 ## Latest Local Validation
 
-- Editable installation and `pip check` passed for version `0.7.3` with Agents SDK
+- Editable installation and `pip check` passed for version `0.7.4` with Agents SDK
   exactly `0.22.3`.
-- Ruff formatting and lint passed for 106 Python files.
+- Ruff formatting and lint passed for 107 Python files.
 - Strict mypy passed with no issues in 61 source files.
-- All 112 non-integration tests passed; the focused 41-test suite covered all eleven
-  SDK wrappers, valid/invalid arguments, empty/non-empty results, validation phase and
-  lifecycle classification, concurrent budgets, and final Diagnosis output validation.
-- A fresh version `0.7.3` Docker build started all ten application, database,
-  observability, and dashboard containers healthy. All 17 Compose integration tests
-  passed, including sequential contamination and recovery coverage.
+- All 118 non-integration tests passed. The six new subprocess tests cover invalid
+  CP1252 bytes, UTF-8 multibyte output, arbitrary successful output, nonzero exits,
+  timeouts, and executable failures without depending on the host locale. The focused
+  evaluator and tool-policy suite passed all 58 tests.
+- The repaired `DockerComposeStackController` completed a real volume-removing shutdown,
+  fresh version `0.7.4` rebuild/start/wait, and Compose status command. All ten services
+  reached their expected healthy or running state; the same Compose start command exited
+  successfully once output decoding was removed from the command-success path.
+- The first integration pass had one transient Loki ingestion timeout immediately after
+  startup while the other 16 tests passed. The isolated test then passed, followed by a
+  clean full run of all 17 Compose integration tests.
 - All 5 version 1 scenario files passed typed catalog validation.
 - Governing files are unchanged from approved Phase 5 commit `67081f3`.
 - Whitespace, tracked credential-value, ignored `.env`/`.nexus`, CLI discovery, Compose
@@ -165,6 +175,9 @@ py -m pytest -m integration tests/integration
   distinction safely on the next failure.
 - The current process still has no `OPENAI_API_KEY`; the one permitted repaired targeted
   replay has not yet run.
+- Targeted session `62ffb7dd-72db-4785-a797-5c2df2cb6ea6` at `5a2939e` is quarantined:
+  Windows `cp1252` decoding crashed the subprocess reader during clean-stack preparation.
+  It never reached the model and is environment-framework evidence only.
 - Official repeated baseline was not executed.
 - No baseline lock manifest or fabricated live result was created.
 - Therefore there are no honest Phase 6 model, tool-use, evidence-quality, accuracy,
@@ -179,6 +192,8 @@ py -m pytest -m integration tests/integration
 
 - A genuine clean-tree smoke and repeated baseline still require an explicitly
   supplied API key.
+- The single targeted `orders_database_unavailable` replay must pass the repaired
+  clean-stack path before a five-scenario smoke can be considered technically safe.
 - Clean-stack-per-run isolation favors validity over speed and is intentionally costly.
 - Version 1 and 2 benchmark artifacts remain raw historical evidence and are intentionally
   incompatible with version 3 comparison/locking without an explicit migration.
@@ -192,8 +207,7 @@ py -m pytest -m integration tests/integration
 
 ## Next Step
 
-Complete deterministic and Docker validation, commit and push the SDK contract repair,
-and obtain green CI. Once `OPENAI_API_KEY` is present locally, run exactly one targeted
-`orders_database_unavailable` investigation and review its typed outcome, hard budget,
-accounting, lifecycle metadata, and evidence. Stop before the five-scenario smoke and
-do not begin Phase 7.
+After the portability repair has a clean committed identity and green CI, run exactly one
+targeted `orders_database_unavailable` investigation when `OPENAI_API_KEY` is present
+locally. Review its typed outcome, hard budget, accounting, lifecycle metadata, and
+evidence. Stop before the five-scenario smoke and do not begin Phase 7.
