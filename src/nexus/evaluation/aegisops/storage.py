@@ -1,9 +1,10 @@
 """Atomic, resume-safe local persistence for benchmark sessions."""
 
+import json
 import os
 from datetime import UTC, datetime
 from hashlib import sha256
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from uuid import UUID
 
 from nexus.evaluation.aegisops.benchmark_models import (
@@ -12,6 +13,8 @@ from nexus.evaluation.aegisops.benchmark_models import (
     BenchmarkRunRecord,
     BenchmarkSessionStatus,
     BenchmarkSummary,
+    LegacyLockedBaselineManifest,
+    LockedArtifactDigest,
     LockedBaselineManifest,
 )
 
@@ -93,6 +96,10 @@ class BenchmarkStorage:
             raise BenchmarkStorageError("Only a repeated baseline session can be locked")
         if not manifest.identity.reproducible:
             raise BenchmarkStorageError("A dirty-tree benchmark cannot be locked as a baseline")
+        if manifest.identity.brain_enabled:
+            raise BenchmarkStorageError(
+                "Brain calibration sessions cannot be locked as an official baseline"
+            )
         if len(manifest.completed_run_indexes) != manifest.total_planned_runs:
             raise BenchmarkStorageError("Benchmark session does not contain every planned run")
         summary = self.load_summary(session)
@@ -112,8 +119,19 @@ class BenchmarkStorage:
             for record in runs
         ):
             raise BenchmarkStorageError("Benchmark runs failed identity or recovery validation")
-        summary_path = self._resolve_session(session) / "summary.json"
-        digest = sha256(summary_path.read_bytes()).hexdigest()
+        session_directory = self._resolve_session(session)
+        artifact_paths = [
+            session_directory / "manifest.json",
+            session_directory / "summary.json",
+            *sorted((session_directory / "runs").glob("run-*.json")),
+        ]
+        artifacts = [
+            LockedArtifactDigest(
+                path=path.relative_to(self.root).as_posix(),
+                sha256=sha256(path.read_bytes()).hexdigest(),
+            )
+            for path in artifact_paths
+        ]
         locked = LockedBaselineManifest(
             baseline_name=name,
             benchmark_session_id=manifest.benchmark_session_id,
@@ -121,14 +139,60 @@ class BenchmarkStorage:
             model=manifest.identity.model,
             accepted_at=datetime.now(UTC),
             run_count=summary.aggregate.total_runs,
-            aggregate_result_path=str(summary_path.resolve()),
-            aggregate_result_sha256=digest,
+            session_relative_path=session_directory.relative_to(self.root).as_posix(),
+            artifacts=artifacts,
+            preregistration_sha256=manifest.identity.brain_identity.preregistration_sha256,
         )
         path = self.root / "baselines" / f"{name}.json"
         if path.exists():
             raise BenchmarkStorageError(f"Baseline manifest already exists: {path}")
         _atomic_write(path, locked.model_dump_json(indent=2))
         return path
+
+    def resolve_baseline(self, name: str) -> Path:
+        """Resolve and verify either a legacy v1 or portable v2 baseline lock."""
+
+        lock_path = self.root / "baselines" / f"{name}.json"
+        try:
+            raw = json.loads(lock_path.read_text(encoding="utf-8"))
+            if raw.get("lock_schema_version") == 2:
+                lock = LockedBaselineManifest.model_validate(raw)
+                session_directory = self._portable_path(lock.session_relative_path)
+                expected_session = self.session_directory(lock.benchmark_session_id).resolve()
+                if session_directory.resolve() != expected_session:
+                    raise BenchmarkStorageError("Baseline session path and identity differ")
+                for artifact in lock.artifacts:
+                    artifact_path = self._portable_path(artifact.path)
+                    if (
+                        not artifact_path.is_file()
+                        or sha256(artifact_path.read_bytes()).hexdigest() != artifact.sha256
+                    ):
+                        raise BenchmarkStorageError(
+                            f"Baseline artifact failed verification: {artifact.path}"
+                        )
+                return session_directory / "summary.json"
+            legacy = LegacyLockedBaselineManifest.model_validate(raw)
+            summary_path = self.session_directory(legacy.benchmark_session_id) / "summary.json"
+            if (
+                not summary_path.is_file()
+                or sha256(summary_path.read_bytes()).hexdigest() != legacy.aggregate_result_sha256
+            ):
+                raise BenchmarkStorageError("Legacy baseline summary failed verification")
+            return summary_path
+        except BenchmarkStorageError:
+            raise
+        except (OSError, ValueError) as exc:
+            raise BenchmarkStorageError(f"Invalid baseline lock: {lock_path}") from exc
+
+    def _portable_path(self, value: str) -> Path:
+        portable = PurePosixPath(value)
+        if portable.is_absolute() or ".." in portable.parts or portable.as_posix() != value:
+            raise BenchmarkStorageError("Baseline lock contains an unsafe relative path")
+        candidate = self.root.joinpath(*portable.parts).resolve()
+        root = self.root.resolve()
+        if candidate != root and root not in candidate.parents:
+            raise BenchmarkStorageError("Baseline lock path escapes benchmark storage")
+        return candidate
 
     def _resolve_session(self, session: str | Path | UUID) -> Path:
         value = Path(str(session))

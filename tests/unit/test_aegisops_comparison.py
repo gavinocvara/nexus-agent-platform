@@ -70,3 +70,38 @@ def test_incompatible_schema_is_not_compared() -> None:
     assert comparison.comparison_type == "incompatible"
     assert comparison.comparable is False
     assert all(delta.absolute_delta is None for delta in comparison.deltas.values())
+
+
+def test_brain_candidate_remains_schema_compatible_and_explicit() -> None:
+    baseline = _load("baseline-summary.json")
+    candidate = _load("candidate-summary.json")
+    candidate = candidate.model_copy(
+        update={
+            "identity": candidate.identity.model_copy(
+                update={
+                    "baseline_name": "aegisops-brain-v1",
+                    "brain_enabled": True,
+                    "brain_namespace": "aegisops.investigator",
+                    "brain_schema_version": 1,
+                    "brain_memory_sha256": "b" * 64,
+                    "brain_read_only": True,
+                    "brain_max_retrieved_memories": 3,
+                    "brain_max_context_tokens": 800,
+                }
+            ),
+            "aggregate": candidate.aggregate.model_copy(
+                update={
+                    "brain_retrieval_count": 4,
+                    "brain_memory_hit_rate": 0.8,
+                    "investigations_using_retrieved_memory": 4,
+                }
+            ),
+        }
+    )
+    comparison = compare_summaries(baseline, candidate)
+    assert comparison.comparable is True
+    assert "Brain enablement differs" in comparison.warnings
+    assert "Brain memory identities differ" in comparison.warnings
+    assert comparison.deltas["brain_retrieval_count"].candidate == 4
+    assert "completed_run_rate" in comparison.deltas
+    assert "tool_budget_failure_rate" in comparison.deltas

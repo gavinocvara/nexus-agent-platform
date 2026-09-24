@@ -5,6 +5,8 @@ import httpx
 import pytest
 
 from nexus.aegisops.config import AgentSettings
+from nexus.brain.config import BrainSettings
+from nexus.brain.storage import SQLiteMemoryStore
 from nexus.evaluation.aegisops import identity as identity_module
 from nexus.evaluation.aegisops.benchmark_models import BaselineIdentity
 from nexus.evaluation.aegisops.identity import (
@@ -81,11 +83,11 @@ def test_preflight_checks_every_boundary_without_serializing_key(monkeypatch) ->
     )
     monkeypatch.setattr(
         "nexus.evaluation.aegisops.preflight.build_baseline_identity",
-        lambda settings, catalog, allow_dirty=False: _identity(),
+        lambda settings, catalog, allow_dirty=False, brain_settings=None: _identity(),
     )
     transport = httpx.MockTransport(lambda _request: httpx.Response(200, json={"ok": True}))
     report = BenchmarkPreflight(
-        AgentSettings(_env_file=None, enabled=True, model="fixture-model"),
+        AgentSettings(_env_file=None, enabled=True, model="gpt-5.6-sol"),
         transport=transport,
     ).run()
     assert report.ready is True
@@ -128,3 +130,35 @@ def test_identity_json_contains_no_environment_or_secrets() -> None:
     serialized = json.dumps(_identity().model_dump(mode="json"))
     for forbidden in ("OPENAI_API_KEY", "Authorization", "POSTGRES_PASSWORD", "secret"):
         assert forbidden not in serialized
+
+
+def test_brain_identity_is_explicit_without_changing_frozen_behavior_hashes(
+    tmp_path, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    path = tmp_path / "brain.sqlite3"
+    store = SQLiteMemoryStore(path)
+    store.initialize()
+    digest = store.logical_sha256("aegisops.investigator")
+    monkeypatch.setattr(identity_module, "repository_state", lambda: ("a" * 40, False))
+    identity = build_baseline_identity(
+        AgentSettings(_env_file=None, enabled=True, model="fixture-model"),
+        ScenarioCatalog.load(),
+        brain_settings=BrainSettings(
+            _env_file=None,
+            mode="frozen_eval",
+            path=path,
+            expected_snapshot_sha256=digest,
+        ),
+    )
+    assert identity.baseline_name == "aegisops-brain-v1"
+    assert identity.brain_enabled is True
+    assert identity.brain_read_only is True
+    assert identity.brain_identity.mode == "frozen_eval"
+    assert identity.brain_identity.writer_allowlist_sha256 is not None
+    assert identity.brain_identity.preregistration_sha256 is not None
+    assert identity.brain_memory_sha256 is not None
+    assert len(identity.brain_memory_sha256) == 64
+    assert identity.instruction_hash == PHASE_5_INSTRUCTION_HASH
+    assert identity.tool_registry_hash == REPAIRED_TOOL_REGISTRY_HASH
+    assert identity.diagnosis_schema_hash == REPAIRED_DIAGNOSIS_OUTPUT_SCHEMA_HASH
+    assert identity.scenario_catalog_hash == PHASE_5_SCENARIO_CATALOG_HASH

@@ -1,0 +1,82 @@
+{
+  "protocol_version": 1,
+  "name": "aegisops-brain-v1",
+  "status": "preregistered_before_live_brain_use",
+  "brain_identity": {
+    "schema_version": 1,
+    "writer_policy_version": "agent-observable-run-v1",
+    "retrieval_algorithm_version": "bounded-lexical-v1",
+    "retrieval_as_of_policy": "agent_run_started_at",
+    "max_records": 3,
+    "max_rendered_tokens": 800,
+    "max_rendered_characters": 3200,
+    "tokenizer": "utf8-character-estimate-div4-v1",
+    "renderer": "untrusted-escaped-json-v1",
+    "retrieval_timeout_seconds": 2.0,
+    "embeddings": null
+  },
+  "frozen_behavior": {
+    "model": "gpt-5.6-sol",
+    "max_tool_calls": 12,
+    "max_turns": 10,
+    "agent_timeout_seconds": 120.0,
+    "instruction_sha256": "d858a63116e8579a4e19a19f01cea5441aa840213380455449528ca385dad456",
+    "tool_registry_sha256": "b75d71fff306ab51f445eba5d9a438dc394d02c810ec7fceb4110975a15cbfbf",
+    "diagnosis_schema_sha256": "aea17a6803fe3c49f1d1e3268b5f58072e05b5edd5dce9fb72514b96a5b720ab",
+    "scenario_catalog_sha256": "6b47e28ee3d5c13619903d9885212022c49940224e333188d177a40e46214e2c"
+  },
+  "authorized_calibration_sequence": [
+    "deterministic_tests_and_ci",
+    "preflight",
+    "one_targeted_learn_investigation",
+    "inspect_write_and_retrieval_audit",
+    "export_and_hash_frozen_snapshot",
+    "five_scenario_frozen_smoke",
+    "stop_and_report"
+  ],
+  "calibration_claim_limit": "Mechanism and security validation only. The generic prompt makes pre-run retrieval a reusable procedural context prefix. Overlapping scenarios and the small catalog prohibit a causal learning claim.",
+  "official_evaluation": {
+    "authorized": false,
+    "design": "leave_one_scenario_out",
+    "fold_count": 5,
+    "learning_runs_per_non_held_out_scenario": 2,
+    "evaluation_runs_per_held_out_scenario_per_arm": 7,
+    "arms": [
+      "contemporaneous_memoryless",
+      "held_out_frozen_brain",
+      "length_matched_placebo"
+    ],
+    "ordering": "seeded_shuffle_and_interleaved_arms",
+    "fold_guard": "No active snapshot record may map to the held-out scenario in the evaluator-only contamination ledger.",
+    "primary_metric": "scenario_balanced_held_out_exact_diagnosis_accuracy",
+    "must_not_regress": [
+      "confident_wrong_rate",
+      "unsupported_claim_rate",
+      "unsafe_attempt_rate",
+      "invalid_output_rate",
+      "valid_evidence_reference_rate"
+    ],
+    "secondary_metrics": [
+      "completed_run_rate",
+      "tool_budget_failure_rate",
+      "genuine_abstention_rate",
+      "average_tool_calls",
+      "median_tool_calls",
+      "calibration",
+      "latency",
+      "inclusive_tokens",
+      "brain_attributable_input_tokens",
+      "harmful_memory_rate"
+    ],
+    "claim_rule": "A held-out improvement claim requires frozen Brain to exceed both contemporaneous memoryless and placebo arms by a predeclared margin with all guards intact.",
+    "sample_size_note": "The proposed design is approximately 35 evaluation runs per arm. It is deliberately not authorized in Phase 7 calibration."
+  },
+  "exclusions": [
+    "brain_failure_runs_are_counted_and_never_reclassified_as_memoryless",
+    "no_within_evaluation_writes",
+    "no_same_scenario_training_in_held_out_snapshot",
+    "no_evaluator_or_harness_fields_in_brain",
+    "no_unreported_session_exclusion",
+    "no_official_brain_baseline_lock_during_calibration"
+  ]
+}

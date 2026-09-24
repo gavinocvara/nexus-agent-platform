@@ -2,6 +2,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from sqlalchemy import create_engine, text
 
 from nexus.config import GatewaySettings, UsersSettings
 from nexus.observability.metrics import ServiceMetrics
@@ -149,3 +150,23 @@ def test_database_health_is_a_single_low_cardinality_signal() -> None:
     rendered = metrics.render().decode()
 
     assert 'nexus_database_health{dependency="postgres",service="orders"} 0.0' in rendered
+
+
+def test_sqlalchemy_instrumentation_emits_database_spans() -> None:
+    exporter = InMemorySpanExporter()
+    runtime = create_tracing_runtime("orders", True, "unused", exporter)
+    engine = create_engine("sqlite:///:memory:")
+    runtime.instrument_sqlalchemy(engine)
+
+    tracer = runtime.tracer
+    assert tracer is not None
+    with tracer.start_as_current_span("request"):
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+
+    spans = exporter.get_finished_spans()
+    database_spans = [span for span in spans if "db.system" in dict(span.attributes or {})]
+    assert database_spans
+    assert all(dict(span.attributes or {})["db.system"] == "sqlite" for span in database_spans)
+    runtime.shutdown()
+    engine.dispose()

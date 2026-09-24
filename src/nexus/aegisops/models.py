@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints, model_validator
 
+from nexus.brain.models import BrainRunMetadata
+
 StrictConfig = ConfigDict(extra="forbid")
 EvidencePath = Annotated[
     str,
@@ -43,6 +45,7 @@ class RunStatus(StrEnum):
     MAX_TURNS_EXCEEDED = "max_turns_exceeded"
     TIMED_OUT = "timed_out"
     INVALID_OUTPUT = "invalid_output"
+    BRAIN_FAILURE = "brain_failure"
     MODEL_ERROR = "model_error"
 
 
@@ -58,6 +61,7 @@ class FailureCategory(StrEnum):
     SDK_RUN_ITEM_VALIDATION = "sdk_run_item_validation"
     TOOL_EXECUTION = "tool_execution"
     PROVIDER = "provider"
+    BRAIN = "brain"
     SDK = "sdk"
     INTERNAL = "internal"
 
@@ -71,6 +75,7 @@ class FailureOrigin(StrEnum):
     SDK_RUN_ITEM_VALIDATION = "sdk_run_item_validation"
     TOOL_EXECUTION = "tool_execution"
     PROVIDER_TRANSPORT = "provider_transport"
+    PRIVATE_MEMORY = "private_memory"
     SDK_RUNTIME = "sdk_runtime"
     INTERNAL_RUNTIME = "internal_runtime"
 
@@ -177,6 +182,8 @@ class InvestigationRunRecord(BaseModel):
     started_at: datetime
     finished_at: datetime
     duration_ms: float = Field(ge=0)
+    agent_loop_duration_ms: float | None = Field(default=None, ge=0)
+    end_to_end_duration_ms: float | None = Field(default=None, ge=0)
     tool_call_count: int = Field(ge=0)
     turn_count: int | None = Field(default=None, ge=0)
     accounting_complete: bool
@@ -184,6 +191,7 @@ class InvestigationRunRecord(BaseModel):
     diagnosis: Diagnosis | None = None
     usage: ModelUsage | None = None
     failure: RunFailure | None = None
+    brain: BrainRunMetadata = Field(default_factory=BrainRunMetadata)
     error: str | None = Field(default=None, max_length=500)
 
     @classmethod

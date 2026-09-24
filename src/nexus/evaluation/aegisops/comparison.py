@@ -37,6 +37,12 @@ def compare_summaries(
         warnings.append("Diagnosis-schema hashes differ")
     if left.scenario_catalog_hash != right.scenario_catalog_hash:
         warnings.append("Scenario-catalog hashes differ")
+    if left.brain_enabled != right.brain_enabled:
+        warnings.append("Brain enablement differs")
+    if left.brain_memory_sha256 != right.brain_memory_sha256:
+        warnings.append("Brain memory identities differ")
+    if left.brain_identity != right.brain_identity:
+        warnings.append("Brain configuration or protocol identities differ")
     comparison_type: Literal["same_baseline", "cross_model", "incompatible"]
     if incompatible:
         warnings.append("Benchmark or evaluation schema versions are incompatible")
@@ -49,10 +55,12 @@ def compare_summaries(
     a = baseline.aggregate
     b = candidate.aggregate
     metrics: dict[str, tuple[float | int | None, float | int | None]] = {
+        "completed_run_rate": (a.completed_run_rate, b.completed_run_rate),
         "exact_diagnosis_accuracy": (a.exact_diagnosis_accuracy, b.exact_diagnosis_accuracy),
         "component_accuracy": (a.component_accuracy, b.component_accuracy),
         "failure_class_accuracy": (a.failure_class_accuracy, b.failure_class_accuracy),
         "average_tool_calls": (a.average_tool_calls, b.average_tool_calls),
+        "median_tool_calls": (a.median_tool_calls, b.median_tool_calls),
         "average_latency_ms": (a.average_latency_ms, b.average_latency_ms),
         "average_total_tokens": (a.average_total_tokens, b.average_total_tokens),
         "valid_evidence_reference_rate": (
@@ -61,9 +69,44 @@ def compare_summaries(
         ),
         "unsupported_claim_rate": (a.unsupported_claim_rate, b.unsupported_claim_rate),
         "abstention_rate": (a.abstention_rate, b.abstention_rate),
+        "genuine_abstention_rate": (
+            a.genuine_abstention_rate,
+            b.genuine_abstention_rate,
+        ),
+        "confident_wrong_rate": (a.confident_wrong_rate, b.confident_wrong_rate),
+        "tool_budget_failure_rate": (
+            a.tool_budget_failure_rate,
+            b.tool_budget_failure_rate,
+        ),
+        "invalid_output_rate": (a.invalid_output_rate, b.invalid_output_rate),
+        "backend_failure_rate": (a.backend_failure_rate, b.backend_failure_rate),
         "timeout_rate": (a.timeout_rate, b.timeout_rate),
+        "brain_failure_rate": (a.brain_failure_rate, b.brain_failure_rate),
         "unsafe_attempt_rate": (a.unsafe_attempt_rate, b.unsafe_attempt_rate),
+        "brain_retrieval_count": (a.brain_retrieval_count, b.brain_retrieval_count),
+        "brain_memory_hit_rate": (a.brain_memory_hit_rate, b.brain_memory_hit_rate),
+        "investigations_using_retrieved_memory": (
+            a.investigations_using_retrieved_memory,
+            b.investigations_using_retrieved_memory,
+        ),
+        "brain_memory_write_count": (
+            a.brain_memory_write_count,
+            b.brain_memory_write_count,
+        ),
+        "average_brain_retrieval_latency_ms": (
+            a.average_brain_retrieval_latency_ms,
+            b.average_brain_retrieval_latency_ms,
+        ),
+        "brain_attributable_input_tokens": (
+            a.brain_attributable_input_tokens,
+            b.brain_attributable_input_tokens,
+        ),
     }
+    if a.average_end_to_end_latency_ms is not None or b.average_end_to_end_latency_ms is not None:
+        metrics["average_end_to_end_latency_ms"] = (
+            a.average_end_to_end_latency_ms,
+            b.average_end_to_end_latency_ms,
+        )
     deltas = {
         name: _delta(name, before, after, resolved, incompatible)
         for name, (before, after) in metrics.items()

@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from nexus.aegisops.models import Diagnosis, ModelUsage, RunFailure
+from nexus.brain.models import BrainMode, BrainRunMetadata, MemoryType
 from nexus.evaluation.aegisops.models import ScenarioScore
 
 BENCHMARK_SCHEMA_VERSION = 3
@@ -26,6 +27,7 @@ class OrderingStrategy(StrEnum):
 
 
 class BenchmarkMode(StrEnum):
+    TARGETED = "targeted"
     SMOKE = "smoke"
     BASELINE = "baseline"
 
@@ -44,14 +46,36 @@ class BenchmarkRunStatus(StrEnum):
     TOOL_BUDGET_EXCEEDED = "tool_budget_exceeded"
     MAX_TURNS_EXCEEDED = "max_turns_exceeded"
     INVALID_OUTPUT = "invalid_output"
+    BRAIN_FAILURE = "brain_failure"
     MODEL_ERROR = "model_error"
     BACKEND_FAILURE = "backend_failure"
     SETUP_FAILURE = "setup_failure"
     RESET_FAILURE = "reset_failure"
 
 
+class BrainIdentity(StrictModel):
+    identity_version: Literal[1] = 1
+    mode: BrainMode = BrainMode.DISABLED
+    namespace: str | None = None
+    schema_version: int | None = None
+    memory_record_schema_sha256: str | None = None
+    writer_policy_version: str | None = None
+    writer_allowlist_sha256: str | None = None
+    retrieval_algorithm_version: str | None = None
+    retrieval_as_of_policy: str | None = None
+    max_retrieved_memories: int = 0
+    max_context_tokens: int = 0
+    max_context_chars: int = 0
+    tokenizer_identity: str | None = None
+    renderer_template_sha256: str | None = None
+    retrieval_timeout_seconds: float = 0
+    snapshot_sha256: str | None = None
+    memory_type_counts: dict[MemoryType, int] = Field(default_factory=dict)
+    preregistration_sha256: str | None = None
+
+
 class BaselineIdentity(StrictModel):
-    baseline_name: Literal["aegisops-memoryless-v1"] = "aegisops-memoryless-v1"
+    baseline_name: str = BASELINE_NAME
     git_sha: str
     git_dirty: bool
     reproducible: bool
@@ -71,6 +95,14 @@ class BaselineIdentity(StrictModel):
     agents_sdk_version: str
     python_version: str
     platform: str
+    brain_enabled: bool = False
+    brain_namespace: str | None = None
+    brain_schema_version: int | None = None
+    brain_memory_sha256: str | None = None
+    brain_read_only: bool = False
+    brain_max_retrieved_memories: int = 0
+    brain_max_context_tokens: int = 0
+    brain_identity: BrainIdentity = Field(default_factory=BrainIdentity)
 
 
 class PlannedRun(StrictModel):
@@ -138,10 +170,13 @@ class BenchmarkRunRecord(StrictModel):
     abstained: bool
     tool_calls: list[ObservableToolCall]
     duration_ms: float = Field(ge=0)
+    agent_loop_duration_ms: float | None = Field(default=None, ge=0)
+    end_to_end_duration_ms: float | None = Field(default=None, ge=0)
     turn_count: int | None = Field(default=None, ge=0)
     accounting_complete: bool
     usage: ModelUsage | None = None
     failure: RunFailure | None = None
+    brain: BrainRunMetadata = Field(default_factory=BrainRunMetadata)
     valid_evidence_references: int = Field(ge=0)
     invalid_evidence_references: int = Field(ge=0)
     unsupported_claims: int = Field(ge=0)
@@ -195,10 +230,13 @@ class AggregateAnalysis(StrictModel):
     failure_class_accuracy: float = Field(ge=0, le=1)
     exact_diagnosis_accuracy: float = Field(ge=0, le=1)
     abstention_rate: float = Field(ge=0, le=1)
+    genuine_abstention_rate: float = Field(default=0, ge=0, le=1)
+    confident_wrong_rate: float = Field(default=0, ge=0, le=1)
     invalid_output_rate: float = Field(ge=0, le=1)
     backend_failure_rate: float = Field(ge=0, le=1)
     tool_budget_failure_rate: float = Field(ge=0, le=1)
     timeout_rate: float = Field(ge=0, le=1)
+    brain_failure_rate: float = Field(default=0, ge=0, le=1)
     valid_evidence_reference_rate: float = Field(ge=0, le=1)
     unsupported_claim_rate: float = Field(ge=0, le=1)
     unsafe_attempt_rate: float = Field(ge=0, le=1)
@@ -209,17 +247,25 @@ class AggregateAnalysis(StrictModel):
     p95_tool_calls: float | None = Field(default=None, ge=0)
     average_latency_ms: float = Field(ge=0)
     median_latency_ms: float = Field(ge=0)
+    average_end_to_end_latency_ms: float | None = Field(default=None, ge=0)
     input_tokens: int | None = Field(default=None, ge=0)
     output_tokens: int | None = Field(default=None, ge=0)
     total_tokens: int | None = Field(default=None, ge=0)
     average_total_tokens: float | None = Field(default=None, ge=0)
     exact_diagnoses_per_tool_call: float | None = Field(default=None, ge=0)
     exact_diagnoses_per_1000_tokens: float | None = Field(default=None, ge=0)
+    brain_retrieval_count: int = Field(default=0, ge=0)
+    brain_memory_hit_rate: float = Field(default=0, ge=0, le=1)
+    investigations_using_retrieved_memory: int = Field(default=0, ge=0)
+    brain_memory_write_count: int = Field(default=0, ge=0)
+    average_brain_retrieval_latency_ms: float = Field(default=0, ge=0)
+    brain_attributable_input_tokens: int = Field(default=0, ge=0)
 
 
 class BenchmarkSummary(StrictModel):
     benchmark_schema_version: Literal[3] = 3
     evaluation_schema_version: Literal[1] = 1
+    analysis_version: int = 1
     benchmark_session_id: UUID
     generated_at: datetime
     identity: BaselineIdentity
@@ -258,7 +304,7 @@ class BenchmarkComparison(StrictModel):
     deltas: dict[str, MetricDelta]
 
 
-class LockedBaselineManifest(StrictModel):
+class LegacyLockedBaselineManifest(StrictModel):
     benchmark_schema_version: Literal[3] = 3
     baseline_name: str
     benchmark_session_id: UUID
@@ -270,3 +316,24 @@ class LockedBaselineManifest(StrictModel):
     run_count: int = Field(ge=1)
     aggregate_result_path: str
     aggregate_result_sha256: str
+
+
+class LockedArtifactDigest(StrictModel):
+    path: str = Field(pattern=r"^[^\\]+$")
+    sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class LockedBaselineManifest(StrictModel):
+    lock_schema_version: Literal[2] = 2
+    benchmark_schema_version: Literal[3] = 3
+    baseline_name: str
+    benchmark_session_id: UUID
+    git_sha: str
+    model: str
+    accepted_at: datetime
+    evaluation_schema_version: Literal[1] = 1
+    scenario_schema_version: Literal[1] = 1
+    run_count: int = Field(ge=1)
+    session_relative_path: str = Field(pattern=r"^[^\\]+$")
+    artifacts: list[LockedArtifactDigest] = Field(min_length=3)
+    preregistration_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")

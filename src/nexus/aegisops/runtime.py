@@ -3,7 +3,7 @@
 import asyncio
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from threading import Lock
@@ -47,7 +47,17 @@ from nexus.aegisops.tools import (
     reset_tool_body_observer,
     set_tool_body_observer,
 )
-from nexus.diagnostics.audit import DiagnosticSession, ToolCallBudgetExceeded
+from nexus.brain.config import BrainSettings
+from nexus.brain.manager import AegisOpsBrain, BrainFailure
+from nexus.brain.models import (
+    AgentObservableRun,
+    BrainMode,
+    BrainRunMetadata,
+    InvestigationCompletion,
+    ObservableToolCall,
+    SelfReportedDiagnosis,
+)
+from nexus.diagnostics.audit import DiagnosticAuditEvent, DiagnosticSession, ToolCallBudgetExceeded
 from nexus.diagnostics.service import DiagnosticServiceLayer
 
 GENERIC_INCIDENT_PROMPT = (
@@ -257,9 +267,12 @@ class InvestigatorRuntime:
         self,
         settings: AgentSettings | None = None,
         engine: InvestigatorEngine | None = None,
+        brain_settings: BrainSettings | None = None,
+        brain: AegisOpsBrain | None = None,
     ) -> None:
         self.settings = settings or AgentSettings()
         self.engine = engine or OpenAIAgentsEngine()
+        self.brain = brain or AegisOpsBrain(brain_settings or BrainSettings())
 
     async def investigate(
         self,
@@ -283,6 +296,9 @@ class InvestigatorRuntime:
         accounting_complete = False
         error: str | None = None
         failure: RunFailure | None = None
+        brain_metadata = BrainRunMetadata()
+        retrieval_prompt = prompt
+        agent_loop_started: float | None = None
 
         try:
             if not self.settings.enabled:
@@ -291,8 +307,12 @@ class InvestigatorRuntime:
                 turn_count = 0
                 accounting_complete = True
             else:
+                retrieval = await self.brain.retrieve(prompt, as_of=started_at)
+                retrieval_prompt = retrieval.prompt
+                brain_metadata = retrieval.metadata
+                agent_loop_started = perf_counter()
                 outcome = await asyncio.wait_for(
-                    self.engine.run(prompt, context, self.settings),
+                    self.engine.run(retrieval_prompt, context, self.settings),
                     timeout=self.settings.timeout_seconds,
                 )
                 diagnosis = outcome.diagnosis
@@ -301,6 +321,8 @@ class InvestigatorRuntime:
                 accounting_complete = True
         except Exception as exc:
             status, error, failure = _classify_failure(exc, self.settings)
+            if isinstance(exc, BrainFailure):
+                brain_metadata = exc.metadata
             if isinstance(exc, EngineExecutionError):
                 turn_count = exc.turn_count
                 usage = exc.usage
@@ -313,13 +335,22 @@ class InvestigatorRuntime:
                 service.close()
 
         finished_at = datetime.now(UTC)
-        return InvestigationRunRecord(
+        agent_loop_duration_ms = (
+            (perf_counter() - agent_loop_started) * 1000 if agent_loop_started is not None else None
+        )
+        record = InvestigationRunRecord(
             run_id=run_id,
             model=self.settings.model,
             status=status,
             started_at=started_at,
             finished_at=finished_at,
-            duration_ms=(perf_counter() - started) * 1000,
+            duration_ms=(
+                agent_loop_duration_ms
+                if agent_loop_duration_ms is not None
+                else (perf_counter() - started) * 1000
+            ),
+            agent_loop_duration_ms=agent_loop_duration_ms,
+            end_to_end_duration_ms=(perf_counter() - started) * 1000,
             tool_call_count=session.tool_call_count,
             turn_count=turn_count,
             accounting_complete=accounting_complete,
@@ -327,8 +358,115 @@ class InvestigatorRuntime:
             diagnosis=diagnosis,
             usage=usage,
             failure=failure,
+            brain=brain_metadata,
             error=error,
         )
+        if status in {RunStatus.DISABLED, RunStatus.BRAIN_FAILURE}:
+            return record.model_copy(
+                update={"end_to_end_duration_ms": (perf_counter() - started) * 1000}
+            )
+        try:
+            if status is RunStatus.MISSING_CREDENTIALS:
+                if self.brain.settings.mode is BrainMode.FROZEN_EVAL:
+                    brain_metadata = self.brain.finish_frozen_run(brain_metadata)
+                return record.model_copy(
+                    update={
+                        "brain": brain_metadata,
+                        "end_to_end_duration_ms": (perf_counter() - started) * 1000,
+                    }
+                )
+            if self.brain.settings.mode is BrainMode.LEARN:
+                projection = _observable_projection(record, session.audit_records())
+                brain_metadata = self.brain.write_experience(projection, brain_metadata)
+            elif self.brain.settings.mode is BrainMode.FROZEN_EVAL:
+                brain_metadata = self.brain.finish_frozen_run(brain_metadata)
+            return record.model_copy(
+                update={
+                    "brain": brain_metadata,
+                    "end_to_end_duration_ms": (perf_counter() - started) * 1000,
+                }
+            )
+        except BrainFailure as exc:
+            failed_status, failed_error, failed_details = _classify_failure(exc, self.settings)
+            return record.model_copy(
+                update={
+                    "status": failed_status,
+                    "brain": exc.metadata,
+                    "failure": failed_details,
+                    "error": failed_error,
+                    "end_to_end_duration_ms": (perf_counter() - started) * 1000,
+                }
+            )
+
+
+def _observable_projection(
+    record: InvestigationRunRecord,
+    events: Sequence[DiagnosticAuditEvent],
+) -> AgentObservableRun:
+    """Copy the approved writer fields explicitly from agent-owned runtime state."""
+
+    diagnosis = record.diagnosis
+    hypothesis = diagnosis.primary_hypothesis if diagnosis is not None else None
+    current_tool_call_ids = {event.tool_call_id for event in events}
+    self_report = (
+        SelfReportedDiagnosis(
+            status=diagnosis.status.value,
+            component=hypothesis.component.value if hypothesis is not None else None,
+            failure_class=(hypothesis.failure_class.value if hypothesis is not None else None),
+            confidence=diagnosis.confidence,
+            evidence_tool_call_ids=[
+                reference.tool_call_id
+                for reference in [
+                    *diagnosis.supporting_evidence,
+                    *diagnosis.conflicting_evidence,
+                ]
+                if reference.tool_call_id in current_tool_call_ids
+            ],
+        )
+        if diagnosis is not None
+        else None
+    )
+    return AgentObservableRun(
+        agent_run_id=record.run_id,
+        started_at=record.started_at,
+        finished_at=record.finished_at,
+        runtime_outcome=_brain_completion(record),
+        diagnosis=self_report,
+        tool_calls=[
+            ObservableToolCall(
+                tool_call_id=event.tool_call_id,
+                tool=event.tool,
+                success=event.success,
+                backend=event.backend.value,
+                backend_error_code=(
+                    event.backend_error_code.value if event.backend_error_code is not None else None
+                ),
+                backend_status_code=event.backend_status_code,
+                result_count=event.result_count,
+            )
+            for event in events
+        ],
+        turn_count=record.turn_count,
+        input_tokens=record.usage.input_tokens if record.usage is not None else None,
+        output_tokens=record.usage.output_tokens if record.usage is not None else None,
+    )
+
+
+def _brain_completion(record: InvestigationRunRecord) -> InvestigationCompletion:
+    if record.status is RunStatus.COMPLETED:
+        if (
+            record.diagnosis is not None
+            and record.diagnosis.status.value == "diagnostic_backend_failure"
+        ):
+            return InvestigationCompletion.BACKEND_FAILURE
+        return InvestigationCompletion.COMPLETED
+    mapping = {
+        RunStatus.TOOL_BUDGET_EXCEEDED: InvestigationCompletion.TOOL_BUDGET_EXHAUSTED,
+        RunStatus.MAX_TURNS_EXCEEDED: InvestigationCompletion.TURN_LIMIT_EXHAUSTED,
+        RunStatus.TIMED_OUT: InvestigationCompletion.TIMED_OUT,
+        RunStatus.INVALID_OUTPUT: InvestigationCompletion.INVALID_OUTPUT,
+    }
+    return mapping.get(record.status, InvestigationCompletion.FAILED)
 
 
 def _model_usage(usage: Usage) -> ModelUsage:
@@ -532,6 +670,11 @@ def _classify_failure(
         category = FailureCategory.CREDENTIALS
         origin = FailureOrigin.CONFIGURATION
         message = "Live model credentials are unavailable"
+    elif any(isinstance(item, BrainFailure) for item in errors):
+        status = RunStatus.BRAIN_FAILURE
+        category = FailureCategory.BRAIN
+        origin = FailureOrigin.PRIVATE_MEMORY
+        message = "Private Brain operation failed"
     elif any(isinstance(item, ToolCallBudgetExceeded) for item in errors):
         status = RunStatus.TOOL_BUDGET_EXCEEDED
         category = FailureCategory.TOOL_BUDGET

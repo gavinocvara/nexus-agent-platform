@@ -8,6 +8,9 @@ from pydantic import BaseModel, ConfigDict
 
 from nexus.aegisops.config import AgentSettings
 from nexus.aegisops.tools import build_sdk_tools
+from nexus.brain.config import BrainSettings
+from nexus.brain.manager import AegisOpsBrain
+from nexus.brain.models import BrainMode
 from nexus.diagnostics.config import DiagnosticsSettings
 from nexus.evaluation.aegisops.benchmark_models import BaselineIdentity
 from nexus.evaluation.aegisops.identity import build_baseline_identity, repository_state
@@ -42,11 +45,13 @@ class BenchmarkPreflight:
         diagnostics_settings: DiagnosticsSettings | None = None,
         catalog: ScenarioCatalog | None = None,
         transport: httpx.BaseTransport | None = None,
+        brain_settings: BrainSettings | None = None,
     ) -> None:
         self.agent_settings = agent_settings
         self.diagnostics_settings = diagnostics_settings or DiagnosticsSettings()
         self.catalog = catalog or ScenarioCatalog.load()
         self.transport = transport
+        self.brain_settings = brain_settings or BrainSettings()
 
     def run(self, *, allow_dirty: bool = False) -> PreflightReport:
         checks: list[PreflightCheck] = []
@@ -65,8 +70,23 @@ class BenchmarkPreflight:
         self._record(
             checks,
             "model_identifier",
-            bool(self.agent_settings.model.strip()),
+            self.agent_settings.model == "gpt-5.6-sol",
             self.agent_settings.model or "missing",
+        )
+        frozen_contract = (
+            self.agent_settings.max_tool_calls == 12
+            and self.agent_settings.max_turns == 10
+            and self.agent_settings.timeout_seconds == 120
+        )
+        self._record(
+            checks,
+            "frozen_agent_contract",
+            frozen_contract,
+            (
+                f"calls={self.agent_settings.max_tool_calls} "
+                f"turns={self.agent_settings.max_turns} "
+                f"timeout={self.agent_settings.timeout_seconds:g}s"
+            ),
         )
         try:
             scenarios = self.catalog.list()
@@ -78,6 +98,18 @@ class BenchmarkPreflight:
             self._record(checks, "tool_policy_boundary", len(tools) == 11, "11 read-only tools")
         except Exception:
             self._record(checks, "tool_policy_boundary", False, "boundary validation failed")
+        brain_available, brain_detail, _brain_digest = AegisOpsBrain(self.brain_settings).check()
+        self._record(checks, "brain_storage", brain_available, brain_detail)
+        frozen_hash_configured = (
+            self.brain_settings.mode is not BrainMode.FROZEN_EVAL
+            or self.brain_settings.expected_snapshot_sha256 is not None
+        )
+        self._record(
+            checks,
+            "frozen_brain_identity",
+            frozen_hash_configured,
+            "configured" if frozen_hash_configured else "expected snapshot hash missing",
+        )
 
         identity: BaselineIdentity | None = None
         try:
@@ -91,6 +123,7 @@ class BenchmarkPreflight:
                     self.agent_settings,
                     self.catalog,
                     allow_dirty=allow_dirty,
+                    brain_settings=self.brain_settings,
                 )
         except ValueError as exc:
             self._record(checks, "repository_sha", False, str(exc))

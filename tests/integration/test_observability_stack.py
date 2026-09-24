@@ -128,7 +128,10 @@ def test_request_is_correlated_across_metrics_logs_and_trace() -> None:
     trace_response = _poll(
         lambda: httpx.get(f"{TEMPO}/api/traces/{trace_id}", timeout=5),
         lambda response: (
-            response.status_code == 200 and "gateway" in response.text and "orders" in response.text
+            response.status_code == 200
+            and "gateway" in response.text
+            and "orders" in response.text
+            and ("db.system" in response.text or "postgresql" in response.text)
         ),
     )
     trace_payload = trace_response.json()

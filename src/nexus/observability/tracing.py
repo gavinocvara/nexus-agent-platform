@@ -18,6 +18,7 @@ class TracingRuntime:
     """Own a service tracer provider and explicit client/database instrumentation."""
 
     provider: TracerProvider | None
+    sqlalchemy_instrumented: bool = False
 
     @property
     def tracer(self) -> trace.Tracer | None:
@@ -42,11 +43,15 @@ class TracingRuntime:
 
         if self.provider is not None:
             SQLAlchemyInstrumentor().instrument(engine=engine, tracer_provider=self.provider)
+            self.sqlalchemy_instrumented = True
 
     def shutdown(self) -> None:
         """Flush and stop telemetry without affecting service correctness."""
 
         if self.provider is not None:
+            if self.sqlalchemy_instrumented:
+                SQLAlchemyInstrumentor().uninstrument()
+                self.sqlalchemy_instrumented = False
             self.provider.shutdown()
 
 

@@ -47,7 +47,7 @@
 - Ground-truth-isolated five-scenario harness with deterministic scoring and recovery
 - Scripted no-key safety, policy, provenance, injection, and lifecycle validation
 
-## Phase 6 — Reproducible AegisOps Baseline Benchmarking (Infrastructure Complete)
+## Phase 6 — Reproducible AegisOps Baseline Benchmarking (Complete)
 
 - Frozen `aegisops-memoryless-v1` identity with behavior, environment, and version hashes
 - Secret-safe live preflight and explicit smoke/repeated live execution gates
@@ -55,11 +55,22 @@
 - Aggregate, calibration, scenario, tool-use, evidence, and efficiency analysis
 - Deterministic comparison reports with compatibility warnings and configurable thresholds
 - Clean-stack-per-run contamination control and deterministic non-scenario warm-up
-- Live smoke and official baseline pending genuine credentials and a Docker runtime
+- Immutable 15-run `aegisops-memoryless-v1` baseline accepted at `52bd5f4`
+
+## Phase 7 — Agent-Private Brain v1 (Deterministic Review Gate)
+
+- Private `aegisops.investigator` episodic and procedural memory namespace
+- Durable typed SQLite persistence with provenance, lifecycle state, and frozen snapshots
+- Deterministic bounded lexical retrieval with untrusted-context prompt framing
+- Default-off memoryless compatibility and frozen read-only Brain evaluation mode
+- Brain retrieval/write audit metadata and benchmark comparison metrics
+- Structural evaluator isolation, explicit learn/frozen modes, fail-closed execution,
+  pre-registered experiment identity, and cross-process deterministic replay
+- Full local/Compose/CI validation pending; no Brain-enabled live call has run
 
 ## Later Phases
 
-The full sequence is governed by `NEXUS_MASTER_BUILD_PROMPT.md`: accepted live
-baseline, Brain v1, Atlas v1, AegisOps remediation, Kubernetes, PatchForge,
+The full sequence is governed by `NEXUS_MASTER_BUILD_PROMPT.md`: Brain live calibration,
+Atlas v1, AegisOps remediation, Kubernetes, PatchForge,
 SentinelQA, Engram evolution, and integrated NEXUS workflows. Brain v1 should not
 begin without a genuine baseline unless the project owner explicitly chooses to.

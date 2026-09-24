@@ -1,5 +1,7 @@
 import asyncio
+import json
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 from uuid import uuid4
 
@@ -8,6 +10,7 @@ import pytest
 from nexus.aegisops.config import AgentSettings
 from nexus.aegisops.models import Diagnosis, DiagnosisStatus
 from nexus.aegisops.runtime import EngineOutcome
+from nexus.brain.models import BrainRunMetadata, BrainStorageStatus
 from nexus.evaluation.aegisops.analytics import summarize
 from nexus.evaluation.aegisops.benchmark import BenchmarkRunner
 from nexus.evaluation.aegisops.benchmark_models import (
@@ -220,7 +223,40 @@ def test_baseline_lock_requires_complete_reproducible_session(tmp_path: Path) ->
     completed = asyncio.run(runner.run(manifest))
     path = storage.lock_baseline(completed.benchmark_session_id, "accepted-v1")
     assert path.exists()
-    assert "aggregate_result_sha256" in path.read_text(encoding="utf-8")
+    payload = path.read_text(encoding="utf-8")
+    assert '"lock_schema_version": 2' in payload
+    assert '"artifacts"' in payload
+    assert "\\\\" not in payload
+    assert storage.resolve_baseline("accepted-v1").name == "summary.json"
+
+
+def test_legacy_lock_ignores_absolute_path_and_resolves_under_current_root(
+    tmp_path: Path,
+) -> None:
+    storage = BenchmarkStorage(tmp_path)
+    session_id = uuid4()
+    session = storage.session_directory(session_id)
+    session.mkdir(parents=True)
+    summary = session / "summary.json"
+    summary.write_text('{"legacy":true}\n', encoding="utf-8")
+    lock = {
+        "benchmark_schema_version": 3,
+        "baseline_name": "legacy-v1",
+        "benchmark_session_id": str(session_id),
+        "git_sha": "a" * 40,
+        "model": "gpt-5.6-sol",
+        "accepted_at": "2026-09-24T19:46:21Z",
+        "evaluation_schema_version": 1,
+        "scenario_schema_version": 1,
+        "run_count": 15,
+        "aggregate_result_path": "C:\\old-host\\unusable\\summary.json",
+        "aggregate_result_sha256": sha256(summary.read_bytes()).hexdigest(),
+    }
+    lock_path = tmp_path / "baselines" / "legacy-v1.json"
+    lock_path.parent.mkdir()
+    lock_path.write_text(json.dumps(lock), encoding="utf-8")
+
+    assert storage.resolve_baseline("legacy-v1") == summary
 
 
 def test_baseline_lock_rejects_a_dirty_tree_session(tmp_path: Path) -> None:
@@ -337,6 +373,21 @@ def test_analysis_reports_calibration_scenarios_tools_and_failures() -> None:
         _analysis_record("users_unavailable", BenchmarkRunStatus.COMPLETED, 0.9, True),
         _analysis_record("users_unavailable", BenchmarkRunStatus.TIMEOUT, 0.3, False),
     ]
+    records[0] = records[0].model_copy(
+        update={
+            "brain": BrainRunMetadata(
+                enabled=True,
+                namespace="aegisops.investigator",
+                storage_status=BrainStorageStatus.READ_ONLY,
+                retrieved_memory_ids=[uuid4()],
+                retrieved_memory_types=["procedural"],
+                procedural_memory_ids=[uuid4()],
+                retrieval_count=1,
+                serialized_context_bytes=100,
+                estimated_context_tokens=25,
+            )
+        }
+    )
     summary = summarize(uuid4(), _identity(), records)
     assert summary.aggregate.exact_diagnosis_accuracy == 0.5
     assert summary.aggregate.timeout_rate == 0.5
@@ -344,5 +395,8 @@ def test_analysis_reports_calibration_scenarios_tools_and_failures() -> None:
     assert summary.aggregate.p95_tool_calls is None
     assert summary.scenarios[0].success_count == 1
     assert summary.tools[0].tool == "get_system_health"
+    assert summary.aggregate.brain_retrieval_count == 1
+    assert summary.aggregate.brain_memory_hit_rate == 0.5
+    assert summary.aggregate.investigations_using_retrieved_memory == 1
     assert sum(bucket.count for bucket in summary.confidence_calibration) == 2
     assert all(bucket.small_sample for bucket in summary.confidence_calibration)

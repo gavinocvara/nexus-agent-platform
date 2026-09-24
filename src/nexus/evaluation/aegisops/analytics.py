@@ -7,6 +7,7 @@ from math import ceil
 from statistics import median
 from uuid import UUID
 
+from nexus.aegisops.models import DiagnosisStatus
 from nexus.evaluation.aegisops.benchmark_models import (
     AggregateAnalysis,
     BaselineIdentity,
@@ -25,6 +26,7 @@ def summarize(
     runs: list[BenchmarkRunRecord],
 ) -> BenchmarkSummary:
     return BenchmarkSummary(
+        analysis_version=2,
         benchmark_session_id=session_id,
         generated_at=datetime.now(UTC),
         identity=identity,
@@ -60,6 +62,9 @@ def _aggregate(runs: list[BenchmarkRunRecord]) -> AggregateAnalysis:
     exact = sum(score.exact_diagnosis for score in scored)
     tool_calls = [len(run.tool_calls) for run in runs]
     latencies = [run.duration_ms for run in runs]
+    end_to_end_latencies = [
+        run.end_to_end_duration_ms for run in runs if run.end_to_end_duration_ms is not None
+    ]
     input_tokens = _optional_total(
         [run.usage.input_tokens if run.usage is not None else None for run in runs]
     )
@@ -74,6 +79,8 @@ def _aggregate(runs: list[BenchmarkRunRecord]) -> AggregateAnalysis:
         float(sorted_calls[ceil(0.95 * len(sorted_calls)) - 1]) if len(sorted_calls) >= 20 else None
     )
     tool_call_total = sum(tool_calls)
+    investigations_with_memory = sum(run.brain.retrieval_count > 0 for run in runs)
+    brain_latencies = [run.brain.retrieval_latency_ms for run in runs if run.brain.enabled]
     return AggregateAnalysis(
         total_runs=total,
         completed_runs=completed,
@@ -82,6 +89,26 @@ def _aggregate(runs: list[BenchmarkRunRecord]) -> AggregateAnalysis:
         failure_class_accuracy=_rate(sum(score.failure_class_correct for score in scored), total),
         exact_diagnosis_accuracy=_rate(exact, total),
         abstention_rate=_rate(sum(score.abstained for score in scored), total),
+        genuine_abstention_rate=_rate(
+            sum(
+                run.run_status is BenchmarkRunStatus.COMPLETED
+                and run.agent_diagnosis is not None
+                and run.agent_diagnosis.status is not DiagnosisStatus.DIAGNOSED
+                for run in runs
+            ),
+            total,
+        ),
+        confident_wrong_rate=_rate(
+            sum(
+                run.score is not None
+                and not run.score.exact_diagnosis
+                and not run.score.abstained
+                and run.confidence is not None
+                and run.confidence >= 0.8
+                for run in runs
+            ),
+            total,
+        ),
         invalid_output_rate=_rate(
             sum(run.run_status is BenchmarkRunStatus.INVALID_OUTPUT for run in runs), total
         ),
@@ -99,6 +126,9 @@ def _aggregate(runs: list[BenchmarkRunRecord]) -> AggregateAnalysis:
         timeout_rate=_rate(
             sum(run.run_status is BenchmarkRunStatus.TIMEOUT for run in runs), total
         ),
+        brain_failure_rate=_rate(
+            sum(run.run_status is BenchmarkRunStatus.BRAIN_FAILURE for run in runs), total
+        ),
         valid_evidence_reference_rate=_rate(valid_references, references),
         unsupported_claim_rate=_rate(sum(run.unsupported_claims > 0 for run in runs), total),
         unsafe_attempt_rate=_rate(
@@ -111,6 +141,9 @@ def _aggregate(runs: list[BenchmarkRunRecord]) -> AggregateAnalysis:
         p95_tool_calls=p95,
         average_latency_ms=_mean(latencies),
         median_latency_ms=float(median(latencies)) if latencies else 0,
+        average_end_to_end_latency_ms=(
+            _mean(end_to_end_latencies) if end_to_end_latencies else None
+        ),
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         total_tokens=total_tokens,
@@ -118,6 +151,14 @@ def _aggregate(runs: list[BenchmarkRunRecord]) -> AggregateAnalysis:
         exact_diagnoses_per_tool_call=(exact / tool_call_total if tool_call_total else None),
         exact_diagnoses_per_1000_tokens=(
             exact / (total_tokens / 1000) if total_tokens is not None and total_tokens > 0 else None
+        ),
+        brain_retrieval_count=sum(run.brain.retrieval_count for run in runs),
+        brain_memory_hit_rate=_rate(investigations_with_memory, total),
+        investigations_using_retrieved_memory=investigations_with_memory,
+        brain_memory_write_count=sum(run.brain.memory_write_count for run in runs),
+        average_brain_retrieval_latency_ms=_mean(brain_latencies),
+        brain_attributable_input_tokens=sum(
+            run.brain.brain_attributable_input_tokens for run in runs
         ),
     )
 

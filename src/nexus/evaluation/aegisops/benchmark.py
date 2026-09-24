@@ -9,6 +9,8 @@ import httpx
 from nexus.aegisops.config import AgentSettings
 from nexus.aegisops.models import DiagnosisStatus, InvestigationRunRecord, RunStatus
 from nexus.aegisops.runtime import GENERIC_INCIDENT_PROMPT, InvestigatorEngine, InvestigatorRuntime
+from nexus.brain.config import BrainSettings
+from nexus.brain.models import BrainMode
 from nexus.diagnostics.audit import DiagnosticSession
 from nexus.diagnostics.service import DiagnosticServiceLayer
 from nexus.evaluation.aegisops.analytics import summarize
@@ -46,12 +48,14 @@ class BenchmarkRunner:
         engine: InvestigatorEngine | None = None,
         catalog: ScenarioCatalog | None = None,
         scenario_runner: ScenarioRunner | None = None,
+        brain_settings: BrainSettings | None = None,
     ) -> None:
         self.settings = settings
         self.storage = storage
         self.stack = stack
         self.warmup = warmup
         self.engine = engine
+        self.brain_settings = brain_settings or BrainSettings()
         self.catalog = catalog or ScenarioCatalog.load()
         self.scenario_runner = scenario_runner or ScenarioRunner(
             self.catalog, default_service_urls()
@@ -69,6 +73,8 @@ class BenchmarkRunner:
     ) -> BenchmarkManifest:
         if runs_per_scenario < 1:
             raise ValueError("runs_per_scenario must be at least 1")
+        if mode is not BenchmarkMode.TARGETED and self.brain_settings.mode is BrainMode.LEARN:
+            raise ValueError("Multi-scenario or repeated evaluation cannot use a writable Brain")
         if ordering is OrderingStrategy.SEEDED_SHUFFLE and shuffle_seed is None:
             raise ValueError("seeded_shuffle requires a recorded seed")
         if ordering is OrderingStrategy.CATALOG and shuffle_seed is not None:
@@ -172,7 +178,11 @@ class BenchmarkRunner:
                     self.scenario_runner.observe(expectation, client)
                 session = DiagnosticSession(max_tool_calls=self.settings.max_tool_calls)
                 with DiagnosticServiceLayer(session=session) as diagnostics:
-                    runtime = InvestigatorRuntime(self.settings, self.engine)
+                    runtime = InvestigatorRuntime(
+                        self.settings,
+                        self.engine,
+                        brain_settings=self.brain_settings,
+                    )
                     agent_record = await runtime.investigate(
                         GENERIC_INCIDENT_PROMPT, diagnostics=diagnostics
                     )
@@ -224,7 +234,7 @@ class BenchmarkRunner:
         status = _benchmark_status(record)
         return BenchmarkRunRecord(
             benchmark_session_id=manifest.benchmark_session_id,
-            evaluation_run_id=record.run_id,
+            evaluation_run_id=uuid4(),
             run_index=planned.index,
             scenario_id=scenario.id,
             failure_class=scenario.fault.type.value,
@@ -261,10 +271,13 @@ class BenchmarkRunner:
                 for position, event in enumerate(events, 1)
             ],
             duration_ms=record.duration_ms,
+            agent_loop_duration_ms=record.agent_loop_duration_ms,
+            end_to_end_duration_ms=record.end_to_end_duration_ms,
             turn_count=record.turn_count,
             accounting_complete=record.accounting_complete,
             usage=record.usage,
             failure=record.failure,
+            brain=record.brain,
             valid_evidence_references=score.valid_evidence_reference_count,
             invalid_evidence_references=(
                 score.evidence_reference_count - score.valid_evidence_reference_count
@@ -350,6 +363,7 @@ def _benchmark_status(record: InvestigationRunRecord) -> BenchmarkRunStatus:
         RunStatus.TOOL_BUDGET_EXCEEDED: BenchmarkRunStatus.TOOL_BUDGET_EXCEEDED,
         RunStatus.MAX_TURNS_EXCEEDED: BenchmarkRunStatus.MAX_TURNS_EXCEEDED,
         RunStatus.INVALID_OUTPUT: BenchmarkRunStatus.INVALID_OUTPUT,
+        RunStatus.BRAIN_FAILURE: BenchmarkRunStatus.BRAIN_FAILURE,
         RunStatus.MODEL_ERROR: BenchmarkRunStatus.MODEL_ERROR,
         RunStatus.DISABLED: BenchmarkRunStatus.MODEL_ERROR,
         RunStatus.MISSING_CREDENTIALS: BenchmarkRunStatus.MODEL_ERROR,

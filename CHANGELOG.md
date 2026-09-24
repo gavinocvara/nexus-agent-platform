@@ -6,6 +6,20 @@ All meaningful changes to NEXUS are recorded here.
 
 ### Added
 
+- Brain v1 private episodic and procedural memory for `aegisops.investigator`, with
+  strict provenance, namespace isolation, lifecycle state, deterministic retrieval,
+  prompt-injection framing, secret rejection, and durable SQLite storage.
+- Default-off Brain configuration, safe per-run retrieval/write audit metadata, logical
+  memory identity, frozen snapshot tooling, and a one-scenario targeted benchmark command.
+- Brain-specific aggregate/comparison metrics and deterministic coverage for persistence,
+  relevance, bounds, corruption, evaluator isolation, policy immutability, and snapshots.
+- A committed Brain v1 pre-registration, strict observable-run writer projection,
+  three execution modes, fail-closed Brain status, portable canonical snapshots,
+  evaluator-only held-out contamination guard, and adversarial leakage/replay tests.
+- Portable baseline lock schema 2 with storage-root-relative POSIX paths and digests for
+  the manifest, summary, and every run; legacy locks resolve by session ID without
+  trusting their historical absolute path.
+
 - Locale-independent Docker Compose subprocess regression coverage for arbitrary byte
   output, UTF-8 output, nonzero exits, timeouts, and executable failures.
 
@@ -87,6 +101,12 @@ All meaningful changes to NEXUS are recorded here.
   and integration tests.
 
 ### Changed
+
+- Advanced the package to version 0.8.0 for Phase 7 Brain v1. Benchmark schema 3 remains
+  unchanged because Brain fields are backward-compatible additions with memoryless defaults;
+  the locked Phase 6 baseline remains parseable and comparable.
+- Restricted SQLAlchemy to the OpenTelemetry instrumentor's supported `<2.1` range so
+  Orders database spans remain present in Compose traces.
 
 - Advanced the package to version 0.7.4 for the Phase 6 Windows evaluator portability
   repair. Clean-stack commands now capture bytes so output decoding cannot change command

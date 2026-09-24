@@ -199,7 +199,9 @@ It receives only the eleven registered diagnostic tools and returns a strict dia
 covering status, component, failure class, hypotheses, evidence references,
 alternatives, confidence, and the next read-only diagnostic action. Every evidence
 claim names a recorded tool call and an exact result value. There are no handoffs,
-sessions, memory, write/remediation tools, or ambient machine capabilities.
+sessions, write/remediation tools, or ambient machine capabilities. Phase 7 can add
+private memory context behind a separate default-off Brain toggle; it does not change
+the investigator's tools, permissions, model, or execution budgets.
 
 Live execution is opt-in and requires `NEXUS_AGENT_ENABLED=true` plus an
 `OPENAI_API_KEY` in the untracked environment. Run one generic investigation with:
@@ -251,3 +253,28 @@ locked. Comparisons report factual deltas, configurable threshold crossings, and
 identity warnings; they never declare a winner. See
 `docs/runbooks/aegisops-benchmarking.md` and
 `docs/adr/0007-reproducible-aegisops-benchmarking.md`.
+
+## Agent-Private Brain
+
+Phase 7 adds a private `aegisops.investigator` Brain backed by a local typed SQLite
+boundary. It stores compact episodic and procedural records derived only from the
+agent's diagnosis and observable diagnostic audit metadata. Evaluator labels, scenario
+IDs, scores, transcripts, evidence payloads, and secrets never enter memory.
+
+Brain remains disabled by default. Its explicit modes are `disabled`, `learn`, and
+`frozen_eval`. A writable calibration run, inspection, and frozen snapshot workflow is:
+
+```powershell
+$env:NEXUS_BRAIN_MODE = "learn"
+py -m nexus.evaluation.aegisops targeted orders_database_unavailable --confirm-live
+py -m nexus.brain inspect
+py -m nexus.brain snapshot .nexus/brain/snapshots/aegisops-brain-v1.sqlite3
+```
+
+For a Brain smoke, point `NEXUS_BRAIN_PATH` at that snapshot, set
+`NEXUS_BRAIN_MODE=frozen_eval`, and set the expected logical SHA-256 printed by the
+snapshot command. Frozen runs verify equal pre/post hashes and fail explicitly as
+`brain_failure`; they never silently fall back to memoryless execution. Retrieved memory
+is bounded, provenance-bearing, and delimiter-escaped inside an explicitly untrusted
+historical-data block. The committed protocol hash is part of benchmark identity. See
+`docs/runbooks/aegisops-brain-v1.md` and `docs/adr/0008-agent-private-brain-v1.md`.

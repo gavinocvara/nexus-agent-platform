@@ -6,6 +6,8 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from nexus.aegisops.config import AgentSettings
+from nexus.brain.config import BrainSettings
+from nexus.brain.models import BrainMode
 from nexus.evaluation.aegisops.benchmark import BenchmarkRunner
 from nexus.evaluation.aegisops.benchmark_config import BenchmarkSettings
 from nexus.evaluation.aegisops.benchmark_models import (
@@ -28,6 +30,9 @@ def _parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     preflight = commands.add_parser("preflight", help="verify live benchmark readiness")
     preflight.add_argument("--allow-dirty", action="store_true")
+    targeted = commands.add_parser("targeted", help="run one explicitly selected investigation")
+    targeted.add_argument("scenario")
+    _add_live_arguments(targeted, include_runs=False)
     smoke = commands.add_parser("smoke", help="run one live investigation per scenario")
     _add_live_arguments(smoke, include_runs=False)
     baseline = commands.add_parser("baseline", help="run a repeated live baseline")
@@ -93,9 +98,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     settings = AgentSettings()
+    brain_settings = BrainSettings()
     catalog = ScenarioCatalog.load()
     allow_dirty = bool(getattr(arguments, "allow_dirty", False))
-    preflight = BenchmarkPreflight(settings, catalog=catalog).run(allow_dirty=allow_dirty)
+    preflight = BenchmarkPreflight(
+        settings,
+        catalog=catalog,
+        brain_settings=brain_settings,
+    ).run(allow_dirty=allow_dirty)
     if arguments.command == "preflight":
         print(preflight.model_dump_json(indent=2))
         return 0 if preflight.ready else 2
@@ -106,13 +116,39 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(preflight.model_dump_json(indent=2))
         print("Preflight failed; no model calls were made")
         return 2
+    if (
+        brain_settings.enabled
+        and arguments.command == "targeted"
+        and brain_settings.mode is not BrainMode.LEARN
+    ):
+        print("Brain-enabled targeted calibration requires mode=learn; no model calls were made")
+        return 2
+    if (
+        brain_settings.enabled
+        and arguments.command in {"smoke", "baseline", "resume"}
+        and brain_settings.mode is not BrainMode.FROZEN_EVAL
+    ):
+        print(
+            "Brain-enabled smoke/baseline execution requires mode=frozen_eval; "
+            "no model calls were made"
+        )
+        return 2
+
+    runner_catalog = catalog
+    if arguments.command == "targeted":
+        try:
+            runner_catalog = ScenarioCatalog((catalog.get(arguments.scenario),))
+        except ValueError:
+            print(f"Unknown scenario: {arguments.scenario}; no model calls were made")
+            return 2
 
     runner = BenchmarkRunner(
         settings,
         storage,
         DockerComposeStackController(benchmark_settings.stack_timeout_seconds),
         BenchmarkWarmup(warmup_seconds=benchmark_settings.warmup_seconds),
-        catalog=catalog,
+        catalog=runner_catalog,
+        brain_settings=brain_settings,
     )
     if arguments.command == "resume":
         manifest = storage.load_manifest(arguments.session)
@@ -120,8 +156,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("Current baseline identity differs from the persisted session")
             return 2
     else:
-        runs = 1 if arguments.command == "smoke" else arguments.runs
-        mode = BenchmarkMode.SMOKE if arguments.command == "smoke" else BenchmarkMode.BASELINE
+        runs = 1 if arguments.command in {"targeted", "smoke"} else arguments.runs
+        mode = (
+            BenchmarkMode.TARGETED
+            if arguments.command == "targeted"
+            else BenchmarkMode.SMOKE
+            if arguments.command == "smoke"
+            else BenchmarkMode.BASELINE
+        )
         manifest = runner.create_manifest(
             preflight.identity,
             mode,
