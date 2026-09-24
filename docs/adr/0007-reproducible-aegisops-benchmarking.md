@@ -30,7 +30,7 @@ arguments, timing, result metadata, structured diagnoses, scores, and normalized
 usage. Do not persist prompts, transcripts, hidden reasoning, evidence payloads,
 credentials, authorization headers, or environment mappings.
 
-Use explicit version-1 benchmark and evaluation schemas. Parsing fails on unknown
+Use explicit versioned benchmark and evaluation schemas. Parsing fails on unknown
 schema shapes, and comparison reports incompatible schema versions instead of
 silently reinterpreting them. A locked baseline is a small immutable pointer carrying
 the accepted session identity and a SHA-256 digest of its aggregate summary.

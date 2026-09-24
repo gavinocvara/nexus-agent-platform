@@ -2,11 +2,12 @@
 
 import json
 from collections.abc import Callable
+from contextvars import ContextVar, Token
 from hashlib import sha256
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from agents import FunctionTool, RunContextWrapper, Tool, function_tool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from nexus.aegisops.context import InvestigatorContext
 from nexus.diagnostics.models import (
@@ -28,6 +29,17 @@ from nexus.diagnostics.policy import INVESTIGATOR_POLICY
 from nexus.diagnostics.registry import get_tool_registry
 
 EXPECTED_TOOLS = frozenset(INVESTIGATOR_POLICY.allowed_tools)
+ToolBodyObserver = Callable[[str, str | None], None]
+_TOOL_BODY_OBSERVER: ContextVar[ToolBodyObserver | None] = ContextVar(
+    "nexus_tool_body_observer", default=None
+)
+ResultLimit = Annotated[int, Field(ge=1, le=100)]
+HttpStatusCode = Annotated[int, Field(ge=100, le=599)]
+SdkCorrelationId = Annotated[
+    str,
+    Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$"),
+]
+SdkTraceId = Annotated[str, Field(pattern=r"^[0-9a-fA-F]{32}$")]
 
 
 class ToolBoundaryError(RuntimeError):
@@ -54,7 +66,19 @@ def validate_tool_boundary(implementation_names: set[str]) -> None:
 
 
 def tool_registry_hash() -> str:
-    payload = [item.model_dump(mode="json") for item in get_tool_registry()]
+    payload = {
+        "registry": [item.model_dump(mode="json") for item in get_tool_registry()],
+        "sdk_tools": [
+            {
+                "name": tool.name,
+                "params_json_schema": tool.params_json_schema,
+                "strict_json_schema": tool.strict_json_schema,
+                "allowed_callers": tool.allowed_callers,
+                "output_json_schema": tool.output_json_schema,
+            }
+            for tool in SDK_TOOLS
+        ],
+    }
     return sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
@@ -87,16 +111,30 @@ def _serialized(
     name: str,
     arguments: BaseModel | None = None,
 ) -> str:
+    observer = _TOOL_BODY_OBSERVER.get()
+    if observer is not None:
+        raw_call_id = getattr(context, "tool_call_id", None)
+        observer(name, raw_call_id if isinstance(raw_call_id, str) else None)
     return execute_tool(context.context, name, arguments).model_dump_json()
 
 
-@function_tool(failure_error_function=None)
+def set_tool_body_observer(observer: ToolBodyObserver) -> Token[ToolBodyObserver | None]:
+    """Install a payload-free SDK lifecycle observer for the current async context."""
+
+    return _TOOL_BODY_OBSERVER.set(observer)
+
+
+def reset_tool_body_observer(token: Token[ToolBodyObserver | None]) -> None:
+    _TOOL_BODY_OBSERVER.reset(token)
+
+
+@function_tool(failure_error_function=None, allowed_callers=["direct"])
 def list_services(context: RunContextWrapper[InvestigatorContext]) -> str:
     """List visible operational topology."""
     return _serialized(context, "list_services")
 
 
-@function_tool(failure_error_function=None)
+@function_tool(failure_error_function=None, allowed_callers=["direct"])
 def get_service_health(
     context: RunContextWrapper[InvestigatorContext], service: DiagnosticService
 ) -> str:
@@ -104,13 +142,13 @@ def get_service_health(
     return _serialized(context, "get_service_health", ServiceInput(service=service))
 
 
-@function_tool(failure_error_function=None)
+@function_tool(failure_error_function=None, allowed_callers=["direct"])
 def get_system_health(context: RunContextWrapper[InvestigatorContext]) -> str:
     """Read a bounded system health snapshot."""
     return _serialized(context, "get_system_health")
 
 
-@function_tool(failure_error_function=None)
+@function_tool(failure_error_function=None, allowed_callers=["direct"])
 def get_request_summary(
     context: RunContextWrapper[InvestigatorContext],
     service: ApplicationService,
@@ -122,11 +160,11 @@ def get_request_summary(
     )
 
 
-@function_tool(failure_error_function=None)
+@function_tool(failure_error_function=None, allowed_callers=["direct"])
 def get_dependency_summary(
     context: RunContextWrapper[InvestigatorContext],
-    service: ApplicationService,
-    dependency: DiagnosticService,
+    service: Literal[ApplicationService.GATEWAY],
+    dependency: Literal[DiagnosticService.USERS, DiagnosticService.ORDERS],
     window: DiagnosticWindow = DiagnosticWindow.FIVE_MINUTES,
 ) -> str:
     """Summarize one registered dependency edge."""
@@ -137,21 +175,21 @@ def get_dependency_summary(
     )
 
 
-@function_tool(failure_error_function=None)
+@function_tool(failure_error_function=None, allowed_callers=["direct"])
 def get_database_health(context: RunContextWrapper[InvestigatorContext]) -> str:
     """Read the Orders PostgreSQL health metric."""
     return _serialized(context, "get_database_health", DatabaseHealthInput())
 
 
-@function_tool(failure_error_function=None)
+@function_tool(failure_error_function=None, allowed_callers=["direct"])
 def search_logs(
     context: RunContextWrapper[InvestigatorContext],
     service: ApplicationService,
     window: DiagnosticWindow = DiagnosticWindow.FIVE_MINUTES,
     level: LogLevel | None = None,
-    correlation_id: str | None = None,
-    status_code: int | None = None,
-    limit: int = 20,
+    correlation_id: SdkCorrelationId | None = None,
+    status_code: HttpStatusCode | None = None,
+    limit: ResultLimit = 20,
 ) -> str:
     """Search logs with approved structured filters."""
     return _serialized(
@@ -168,9 +206,9 @@ def search_logs(
     )
 
 
-@function_tool(failure_error_function=None)
+@function_tool(failure_error_function=None, allowed_callers=["direct"])
 def get_request_evidence(
-    context: RunContextWrapper[InvestigatorContext], correlation_id: str
+    context: RunContextWrapper[InvestigatorContext], correlation_id: SdkCorrelationId
 ) -> str:
     """Find chronological logs for one exact correlation ID."""
     return _serialized(
@@ -178,24 +216,26 @@ def get_request_evidence(
     )
 
 
-@function_tool(failure_error_function=None)
-def find_traces(context: RunContextWrapper[InvestigatorContext], correlation_id: str) -> str:
+@function_tool(failure_error_function=None, allowed_callers=["direct"])
+def find_traces(
+    context: RunContextWrapper[InvestigatorContext], correlation_id: SdkCorrelationId
+) -> str:
     """Find trace IDs through exact correlation logs."""
     return _serialized(context, "find_traces", CorrelationInput(correlation_id=correlation_id))
 
 
-@function_tool(failure_error_function=None)
-def get_trace(context: RunContextWrapper[InvestigatorContext], trace_id: str) -> str:
+@function_tool(failure_error_function=None, allowed_callers=["direct"])
+def get_trace(context: RunContextWrapper[InvestigatorContext], trace_id: SdkTraceId) -> str:
     """Retrieve one exact normalized trace."""
     return _serialized(context, "get_trace", TraceInput(trace_id=trace_id))
 
 
-@function_tool(failure_error_function=None)
+@function_tool(failure_error_function=None, allowed_callers=["direct"])
 def get_recent_errors(
     context: RunContextWrapper[InvestigatorContext],
     service: ApplicationService,
     window: DiagnosticWindow = DiagnosticWindow.FIVE_MINUTES,
-    limit: int = 20,
+    limit: ResultLimit = 20,
 ) -> str:
     """Retrieve bounded recent error events."""
     return _serialized(
@@ -223,6 +263,11 @@ SDK_TOOLS: tuple[FunctionTool, ...] = (
 def build_sdk_tools() -> list[Tool]:
     implementations = {tool.name for tool in SDK_TOOLS}
     validate_tool_boundary(implementations)
+    for tool in SDK_TOOLS:
+        if tool.output_json_schema is not None or tool._output_type_adapter is not None:
+            raise ToolBoundaryError(
+                f"String tool {tool.name} unexpectedly declares structured SDK output"
+            )
     return list(SDK_TOOLS)
 
 

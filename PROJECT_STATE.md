@@ -3,7 +3,7 @@
 ## Current Milestone
 
 Phase 6 - Reproducible AegisOps Baseline Benchmarking and Regression History:
-live-runtime correctness repair validated deterministically; targeted live verification pending.
+SDK validation-contract repair validated deterministically; one targeted live replay pending.
 
 The memoryless Phase 5 investigator is frozen as `aegisops-memoryless-v1`. No prompt,
 tool, model guidance, scoring, scenario, memory, multi-agent, remediation, Atlas, or
@@ -18,21 +18,21 @@ MCP capability was added or tuned.
 - Invalid live smoke under investigation: `16e2dfa5-000f-45e7-b87a-5d275ae882a6`
   at `309caa7cb0f900b9c20948c07df79fa88c5597f9`; it is quarantined and cannot be
   accepted as baseline evidence.
-- Package version: `0.7.2`
+- Package version: `0.7.3`
 
 ## Phase 6 Baseline Identity
 
 - Baseline name: `aegisops-memoryless-v1`
 - Investigator instruction hash:
   `d858a63116e8579a4e19a19f01cea5441aa840213380455449528ca385dad456`
-- Diagnostic tool-registry hash:
-  `44292aa3ded19cf0e03f086be6716d51099efa78eb97e3517799b713175ff240`
+- Diagnostic SDK/tool-registry hash:
+  `b75d71fff306ab51f445eba5d9a438dc394d02c810ec7fceb4110975a15cbfbf`
 - Diagnosis-schema hash:
   `aea17a6803fe3c49f1d1e3268b5f58072e05b5edd5dce9fb72514b96a5b720ab`
 - Scenario-catalog hash:
   `6b47e28ee3d5c13619903d9885212022c49940224e333188d177a40e46214e2c`
 - Agents SDK: pinned and installed at `0.22.3`
-- Benchmark schema version: `2`; evaluation and scenario schema versions: `1`
+- Benchmark schema version: `3`; evaluation and scenario schema versions: `1`
 - Evaluator: `aegisops-evaluator-v1`
 - Runtime identity also records Git SHA/dirty state, NEXUS/model/Python/platform
   versions, max turns, max tool calls, and timeout.
@@ -77,6 +77,14 @@ MCP capability was added or tuned.
   provider status/code without exception messages, prompts, payloads, or evidence bodies.
 - Failed-run turns are nullable when unknown, accounting completeness is explicit, and
   SDK lifecycle/run data preserves exact partial turns and usage when available.
+- SDK validation failures now retain only phase, Pydantic error type/location, tool name,
+  function-call position, and invocation/body/output booleans; arguments and outputs are
+  never persisted.
+- SDK parameter schemas now expose the inner runtime constraints for dependency edges,
+  bounded result counts, HTTP status, correlation IDs, and trace IDs. All eleven tools
+  are direct-call-only string tools with no structured output adapter.
+- Tool identity covers the actual SDK schemas, strictness, caller policy, and output
+  metadata in addition to the diagnostic registry.
 - Diagnostic backend failures expose typed safe codes and HTTP status while legitimate
   empty Prometheus/Loki results remain successful evidence.
 - Sequential contamination integration coverage and deterministic clean-stack-per-run
@@ -115,33 +123,23 @@ py -m pytest -m integration tests/integration
 
 ## Latest Local Validation
 
-- Editable installation and `py -m pip check` passed for version `0.7.2`.
-- Ruff formatting and lint passed for 85 Python files.
+- Editable installation and `pip check` passed for version `0.7.3` with Agents SDK
+  exactly `0.22.3`.
+- Ruff formatting and lint passed for 106 Python files.
 - Strict mypy passed with no issues in 61 source files.
-- All 101 non-integration tests passed, including concurrent budget, output transport,
-  failure classification, partial accounting, and in-flight drain regressions.
-- All 17 Docker Compose integration tests passed.
-- The structured-output regression suite passed with the exact no-tools Agents SDK
-  response format and no API request.
+- All 112 non-integration tests passed; the focused 41-test suite covered all eleven
+  SDK wrappers, valid/invalid arguments, empty/non-empty results, validation phase and
+  lifecycle classification, concurrent budgets, and final Diagnosis output validation.
+- A fresh version `0.7.3` Docker build started all ten application, database,
+  observability, and dashboard containers healthy. All 17 Compose integration tests
+  passed, including sequential contamination and recovery coverage.
 - All 5 version 1 scenario files passed typed catalog validation.
-- Direct diagnostic replay under `orders_unavailable` and `users_latency` returned
-  successful Prometheus/Loki results; empty recent-error sets remained successful.
-- Historical run timestamps show the failed Prometheus/Loki calls completed after the
-  failed run timestamp while the next clean-stack teardown began. The repaired runtime
-  drains sibling SDK tool work before the shared clients can close.
 - Governing files are unchanged from approved Phase 5 commit `67081f3`.
-- Whitespace and tracked-file secret-pattern scans passed.
-- CLI command discovery and origin/`main` Git configuration passed.
+- Whitespace, tracked credential-value, ignored `.env`/`.nexus`, CLI discovery, Compose
+  configuration, and scenario validation checks passed.
 - GitHub Actions run `35915953170` passed for structured-output repair commit
   `e014a878b16a6c59212dbc708ba2e0e1975dde5c`; both `validate` and
   `compose-integration` completed successfully.
-- A clean local Compose rebuild started all ten application, database, telemetry, and
-  dashboard containers. Gateway, Users, Orders, Prometheus, Loki, Tempo, Grafana, and
-  both evaluator controls returned healthy responses.
-- Clean-tree preflight on the repaired commit passed live opt-in, model
-  `gpt-5.6-sol`, Git identity, all five scenarios, the 11-tool policy boundary, all
-  application services, all observability backends, and both evaluator controls. It
-  exited `2` solely because `OPENAI_API_KEY` is absent from the current process.
 - GitHub Actions run `35901974987` passed for Phase 6 implementation commit
   `0c75809a67980cc7b70cd7804759a9ee42705397`:
   - `validate` passed installation, Ruff, strict mypy, all 86 non-integration tests,
@@ -159,9 +157,14 @@ py -m pytest -m integration tests/integration
   remains gated until it is supplied locally without entering source control.
 - Smoke `16e2dfa5-000f-45e7-b87a-5d275ae882a6` is invalid framework evidence: four
   generic model errors, hard-budget overshoot to 15/16 calls, and incomplete accounting.
-- The current process still has no `OPENAI_API_KEY`, so the required targeted replay of
-  `orders_database_unavailable` cannot yet make a paid model request.
-- No repaired targeted live run or valid live smoke has completed.
+- Targeted session `3cab15e5-d257-4142-8059-47353072b7e6` at `2c2603a` recovered the
+  lab and preserved two turns plus 4,080 tokens, but failed after eight successful tool
+  bodies with an SDK `UserError -> ValidationError`; it is framework evidence only.
+- Its persisted artifact contains eight completed diagnostics and no raw SDK run-data,
+  so it cannot prove or disprove a ninth attempted call. Version 0.7.3 captures that
+  distinction safely on the next failure.
+- The current process still has no `OPENAI_API_KEY`; the one permitted repaired targeted
+  replay has not yet run.
 - Official repeated baseline was not executed.
 - No baseline lock manifest or fabricated live result was created.
 - Therefore there are no honest Phase 6 model, tool-use, evidence-quality, accuracy,
@@ -177,8 +180,8 @@ py -m pytest -m integration tests/integration
 - A genuine clean-tree smoke and repeated baseline still require an explicitly
   supplied API key.
 - Clean-stack-per-run isolation favors validity over speed and is intentionally costly.
-- Version 1 benchmark artifacts remain raw historical evidence and are intentionally
-  incompatible with version 2 comparison/locking without an explicit migration.
+- Version 1 and 2 benchmark artifacts remain raw historical evidence and are intentionally
+  incompatible with version 3 comparison/locking without an explicit migration.
 - Baseline lock acceptance is an operator decision. The software verifies baseline
   mode, completion, recovery, reproducibility, completeness, and summary integrity,
   but cannot independently attest that an external credential belonged to a specific
@@ -189,7 +192,8 @@ py -m pytest -m integration tests/integration
 
 ## Next Step
 
-Commit and push the runtime repair, obtain green CI, clean the Compose stack, and run
-preflight. Once `OPENAI_API_KEY` is present locally, run only the targeted
+Complete deterministic and Docker validation, commit and push the SDK contract repair,
+and obtain green CI. Once `OPENAI_API_KEY` is present locally, run exactly one targeted
 `orders_database_unavailable` investigation and review its typed outcome, hard budget,
-accounting, and evidence. Stop before the five-scenario smoke and do not begin Phase 7.
+accounting, lifecycle metadata, and evidence. Stop before the five-scenario smoke and
+do not begin Phase 7.

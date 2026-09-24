@@ -53,6 +53,9 @@ class FailureCategory(StrEnum):
     TIMEOUT = "timeout"
     OUTPUT_VALIDATION = "output_validation"
     MODEL_BEHAVIOR = "model_behavior"
+    TOOL_INPUT_VALIDATION = "tool_input_validation"
+    TOOL_OUTPUT_VALIDATION = "tool_output_validation"
+    SDK_RUN_ITEM_VALIDATION = "sdk_run_item_validation"
     TOOL_EXECUTION = "tool_execution"
     PROVIDER = "provider"
     SDK = "sdk"
@@ -63,10 +66,29 @@ class FailureOrigin(StrEnum):
     CONFIGURATION = "configuration"
     BUDGET_ENFORCEMENT = "budget_enforcement"
     FINAL_OUTPUT_VALIDATION = "final_output_validation"
+    TOOL_INPUT_VALIDATION = "tool_input_validation"
+    TOOL_OUTPUT_VALIDATION = "tool_output_validation"
+    SDK_RUN_ITEM_VALIDATION = "sdk_run_item_validation"
     TOOL_EXECUTION = "tool_execution"
     PROVIDER_TRANSPORT = "provider_transport"
     SDK_RUNTIME = "sdk_runtime"
     INTERNAL_RUNTIME = "internal_runtime"
+
+
+class SdkValidationPhase(StrEnum):
+    TOOL_INPUT = "tool_input"
+    TOOL_OUTPUT = "tool_output"
+    SDK_RUN_ITEM = "sdk_run_item"
+    UNKNOWN = "unknown"
+
+
+class SafeValidationError(BaseModel):
+    """Payload-free Pydantic validation structure."""
+
+    model_config = StrictConfig
+
+    location: list[str | int] = Field(default_factory=list, max_length=20)
+    error_type: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.-]+$")
 
 
 class RootCauseHypothesis(BaseModel):
@@ -134,6 +156,13 @@ class RunFailure(BaseModel):
     cause_chain_types: list[str] = Field(default_factory=list, max_length=12)
     provider_status_code: int | None = Field(default=None, ge=100, le=599)
     provider_error_code: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_.-]{1,64}$")
+    sdk_validation_phase: SdkValidationPhase | None = None
+    validation_errors: list[SafeValidationError] = Field(default_factory=list, max_length=20)
+    tool_name: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_.-]{1,100}$")
+    function_call_position: int | None = Field(default=None, ge=1)
+    invocation_began: bool | None = None
+    tool_body_invoked: bool | None = None
+    tool_output_produced: bool | None = None
 
 
 class InvestigationRunRecord(BaseModel):

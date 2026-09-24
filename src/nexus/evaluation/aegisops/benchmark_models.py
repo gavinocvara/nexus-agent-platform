@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from nexus.aegisops.models import Diagnosis, ModelUsage, RunFailure
 from nexus.evaluation.aegisops.models import ScenarioScore
 
-BENCHMARK_SCHEMA_VERSION = 2
+BENCHMARK_SCHEMA_VERSION = 3
 EVALUATION_SCHEMA_VERSION = 1
 EVALUATOR_VERSION = "aegisops-evaluator-v1"
 BASELINE_NAME = "aegisops-memoryless-v1"
@@ -62,7 +62,7 @@ class BaselineIdentity(StrictModel):
     diagnosis_schema_hash: str
     evaluator_version: str = EVALUATOR_VERSION
     evaluation_schema_version: Literal[1] = 1
-    benchmark_schema_version: Literal[2] = 2
+    benchmark_schema_version: Literal[3] = 3
     scenario_schema_version: Literal[1] = 1
     scenario_catalog_hash: str
     max_turns: int
@@ -80,7 +80,7 @@ class PlannedRun(StrictModel):
 
 
 class BenchmarkManifest(StrictModel):
-    benchmark_schema_version: Literal[2] = 2
+    benchmark_schema_version: Literal[3] = 3
     evaluation_schema_version: Literal[1] = 1
     benchmark_session_id: UUID
     mode: BenchmarkMode
@@ -117,7 +117,7 @@ class ObservableToolCall(StrictModel):
 
 
 class BenchmarkRunRecord(StrictModel):
-    benchmark_schema_version: Literal[2] = 2
+    benchmark_schema_version: Literal[3] = 3
     evaluation_schema_version: Literal[1] = 1
     benchmark_session_id: UUID
     evaluation_run_id: UUID
@@ -218,7 +218,7 @@ class AggregateAnalysis(StrictModel):
 
 
 class BenchmarkSummary(StrictModel):
-    benchmark_schema_version: Literal[2] = 2
+    benchmark_schema_version: Literal[3] = 3
     evaluation_schema_version: Literal[1] = 1
     benchmark_session_id: UUID
     generated_at: datetime
@@ -246,7 +246,7 @@ class MetricDelta(StrictModel):
 
 
 class BenchmarkComparison(StrictModel):
-    benchmark_schema_version: Literal[2] = 2
+    benchmark_schema_version: Literal[3] = 3
     evaluation_schema_version: Literal[1] = 1
     created_at: datetime
     comparison_type: Literal["same_baseline", "cross_model", "incompatible"]
@@ -259,7 +259,7 @@ class BenchmarkComparison(StrictModel):
 
 
 class LockedBaselineManifest(StrictModel):
-    benchmark_schema_version: Literal[2] = 2
+    benchmark_schema_version: Literal[3] = 3
     baseline_name: str
     benchmark_session_id: UUID
     git_sha: str

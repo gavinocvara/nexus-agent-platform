@@ -6,6 +6,11 @@ All meaningful changes to NEXUS are recorded here.
 
 ### Added
 
+- Payload-free SDK validation diagnostics recording phase, Pydantic error type/location,
+  tool identity, function-call position, and invocation/output lifecycle state.
+- Direct SDK-wrapper regression coverage for all eleven tools, legitimate empty and
+  non-empty results, invalid enums and filters, and pending-call run-data inspection.
+
 - Concurrency-safe diagnostic call permits, in-flight drain tracking, sanitized runtime
   failure classification, partial failed-run accounting, and safe diagnostic backend
   error codes/statuses.
@@ -79,6 +84,12 @@ All meaningful changes to NEXUS are recorded here.
   and integration tests.
 
 ### Changed
+
+- Advanced the package to version 0.7.3 and durable benchmark schema to version 3 for
+  Phase 6 SDK validation repair metadata.
+- Aligned every SDK-facing function-tool schema with its inner Pydantic constraints,
+  restricted tools to direct callers, pinned Agents SDK 0.22.3 exactly, and extended
+  the tool identity hash to cover the actual SDK parameter/output schemas.
 
 - Advanced the package to version 0.7.2 for the Phase 6 live-runtime correctness repair.
 - Advanced the durable benchmark schema to version 2 so failed-run turns distinguish

@@ -3,23 +3,27 @@
 import asyncio
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from threading import Lock
 from time import perf_counter
 from typing import Any, Protocol
 from uuid import uuid4
 
 import openai
-from agents import Agent, RunConfig, RunContextWrapper, Runner
+from agents import Agent, RunConfig, RunContextWrapper, Runner, Tool
 from agents.exceptions import (
     AgentsException,
     MaxTurnsExceeded,
     ModelBehaviorError,
     ModelTimeoutError,
 )
-from agents.items import ModelResponse
+from agents.items import ModelResponse, ToolCallOutputItem
 from agents.lifecycle import RunHooksBase
 from agents.usage import Usage
+from openai.types.responses import ResponseFunctionToolCall
+from pydantic import ValidationError
 
 from nexus.aegisops.config import AgentSettings
 from nexus.aegisops.context import InvestigatorContext
@@ -32,9 +36,17 @@ from nexus.aegisops.models import (
     ModelUsage,
     RunFailure,
     RunStatus,
+    SafeValidationError,
+    SdkValidationPhase,
 )
 from nexus.aegisops.output_schema import DIAGNOSIS_OUTPUT_SCHEMA, DiagnosisOutputValidationError
-from nexus.aegisops.tools import DiagnosticToolExecutionError, ToolBoundaryError, build_sdk_tools
+from nexus.aegisops.tools import (
+    DiagnosticToolExecutionError,
+    ToolBoundaryError,
+    build_sdk_tools,
+    reset_tool_body_observer,
+    set_tool_body_observer,
+)
 from nexus.diagnostics.audit import DiagnosticSession, ToolCallBudgetExceeded
 from nexus.diagnostics.service import DiagnosticServiceLayer
 
@@ -42,6 +54,24 @@ GENERIC_INCIDENT_PROMPT = (
     "Investigate the current AegisOps incident using only approved diagnostic evidence. "
     "Identify the most likely affected component and failure class, or abstain when the "
     "available evidence is insufficient."
+)
+_SAFE_VALIDATION_LOCATIONS = frozenset(
+    {
+        "service",
+        "dependency",
+        "window",
+        "level",
+        "correlation_id",
+        "status_code",
+        "limit",
+        "trace_id",
+        "tool",
+        "source",
+        "success",
+        "events",
+        "trace_ids",
+        "trace",
+    }
 )
 
 
@@ -55,20 +85,47 @@ class EngineOutcome:
 class EngineExecutionError(RuntimeError):
     """Preserve partial accounting while retaining the original exception as the cause."""
 
-    def __init__(self, turn_count: int | None, usage: ModelUsage | None) -> None:
+    def __init__(
+        self,
+        turn_count: int | None,
+        usage: ModelUsage | None,
+        sdk_failure: "_SdkFailureDetails | None" = None,
+    ) -> None:
         super().__init__("Agent engine execution failed")
         self.turn_count = turn_count
         self.usage = usage
+        self.sdk_failure = sdk_failure
 
 
 class EngineOutputContractError(TypeError):
     """The SDK returned a final value outside the configured Diagnosis contract."""
 
 
+@dataclass(slots=True)
+class _ToolLifecycle:
+    name: str
+    invocation_began: bool = False
+    body_invoked: bool = False
+    output_produced: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class _SdkFailureDetails:
+    phase: SdkValidationPhase
+    validation_errors: tuple[SafeValidationError, ...]
+    tool_name: str | None
+    function_call_position: int | None
+    invocation_began: bool | None
+    tool_body_invoked: bool | None
+    tool_output_produced: bool | None
+
+
 class _AccountingHooks(RunHooksBase[InvestigatorContext, Agent[InvestigatorContext]]):
     def __init__(self) -> None:
         self.turn_count = 0
         self.usage: ModelUsage | None = None
+        self._tool_calls: dict[str, _ToolLifecycle] = {}
+        self._lock = Lock()
 
     async def on_llm_end(
         self,
@@ -79,6 +136,54 @@ class _AccountingHooks(RunHooksBase[InvestigatorContext, Agent[InvestigatorConte
         del agent, response
         self.turn_count += 1
         self.usage = _model_usage(context.usage)
+
+    async def on_tool_start(
+        self,
+        context: RunContextWrapper[InvestigatorContext],
+        agent: Agent[InvestigatorContext],
+        tool: Tool,
+    ) -> None:
+        del agent
+        call_id = getattr(context, "tool_call_id", None)
+        if not isinstance(call_id, str):
+            return
+        with self._lock:
+            self._tool_calls[call_id] = _ToolLifecycle(name=tool.name, invocation_began=True)
+
+    async def on_tool_end(
+        self,
+        context: RunContextWrapper[InvestigatorContext],
+        agent: Agent[InvestigatorContext],
+        tool: Tool,
+        result: object,
+    ) -> None:
+        del agent, tool, result
+        call_id = getattr(context, "tool_call_id", None)
+        if not isinstance(call_id, str):
+            return
+        with self._lock:
+            lifecycle = self._tool_calls.get(call_id)
+            if lifecycle is not None:
+                lifecycle.output_produced = True
+
+    def mark_tool_body(self, tool_name: str, call_id: str | None) -> None:
+        if call_id is None:
+            return
+        with self._lock:
+            lifecycle = self._tool_calls.setdefault(call_id, _ToolLifecycle(name=tool_name))
+            lifecycle.body_invoked = True
+
+    def tool_calls(self) -> dict[str, _ToolLifecycle]:
+        with self._lock:
+            return {
+                call_id: _ToolLifecycle(
+                    name=value.name,
+                    invocation_began=value.invocation_began,
+                    body_invoked=value.body_invoked,
+                    output_produced=value.output_produced,
+                )
+                for call_id, value in self._tool_calls.items()
+            }
 
 
 class InvestigatorEngine(Protocol):
@@ -115,6 +220,7 @@ class OpenAIAgentsEngine:
             output_type=DIAGNOSIS_OUTPUT_SCHEMA,
         )
         accounting = _AccountingHooks()
+        observer_token = set_tool_body_observer(accounting.mark_tool_body)
         try:
             result = await Runner.run(
                 agent,
@@ -130,7 +236,10 @@ class OpenAIAgentsEngine:
             )
         except Exception as exc:
             turn_count, usage = _partial_accounting(exc, accounting)
-            raise EngineExecutionError(turn_count, usage) from exc
+            sdk_failure = _sdk_failure_details(exc, accounting)
+            raise EngineExecutionError(turn_count, usage, sdk_failure) from exc
+        finally:
+            reset_tool_body_observer(observer_token)
         if not isinstance(result.final_output, Diagnosis):
             raise EngineOutputContractError("Agent SDK returned an invalid structured diagnosis")
         usage = _model_usage(result.context_wrapper.usage)
@@ -245,6 +354,132 @@ def _partial_accounting(
     return turn_count, usage
 
 
+def _traceback_frames(error: BaseException) -> set[tuple[str, str]]:
+    frames: set[tuple[str, str]] = set()
+    traceback = error.__traceback__
+    while traceback is not None:
+        module = traceback.tb_frame.f_globals.get("__name__")
+        if isinstance(module, str):
+            frames.add((module, traceback.tb_frame.f_code.co_name))
+        traceback = traceback.tb_next
+    return frames
+
+
+def _validation_phase(errors: list[BaseException]) -> SdkValidationPhase:
+    frames = {frame for error in errors for frame in _traceback_frames(error)}
+    if any(
+        module == "agents.tool"
+        and function in {"_prepare_arguments", "_parse_function_tool_json_input"}
+        for module, function in frames
+    ):
+        return SdkValidationPhase.TOOL_INPUT
+    if any(
+        (module == "agents.tool" and function == "_validate_function_tool_output")
+        or (module == "agents.items" and function == "tool_call_output_item")
+        for module, function in frames
+    ):
+        return SdkValidationPhase.TOOL_OUTPUT
+    return SdkValidationPhase.SDK_RUN_ITEM
+
+
+def _safe_validation_errors(errors: list[BaseException]) -> tuple[SafeValidationError, ...]:
+    validation = next((item for item in errors if isinstance(item, ValidationError)), None)
+    if validation is None:
+        return ()
+    safe: list[SafeValidationError] = []
+    for item in validation.errors(
+        include_url=False,
+        include_context=False,
+        include_input=False,
+    )[:20]:
+        location: list[str | int] = []
+        for part in item.get("loc", ())[:20]:
+            if isinstance(part, int):
+                location.append(part)
+            elif isinstance(part, str) and part in _SAFE_VALIDATION_LOCATIONS:
+                location.append(part)
+            else:
+                location.append("unrecognized_field")
+        error_type = item.get("type")
+        if not isinstance(error_type, str) or not re.fullmatch(
+            r"[A-Za-z0-9_.-]{1,100}", error_type
+        ):
+            error_type = "unknown"
+        safe.append(SafeValidationError(location=location, error_type=error_type))
+    return tuple(safe)
+
+
+def _run_data_calls(error: Exception) -> tuple[list[tuple[str, str, int]], set[str]]:
+    if not isinstance(error, AgentsException) or error.run_data is None:
+        return [], set()
+    calls: list[tuple[str, str, int]] = []
+    for response in error.run_data.raw_responses:
+        for item in response.output:
+            if isinstance(item, ResponseFunctionToolCall):
+                calls.append((item.call_id, item.name, len(calls) + 1))
+    output_call_ids: set[str] = set()
+    for run_item in error.run_data.new_items:
+        if not isinstance(run_item, ToolCallOutputItem):
+            continue
+        raw_item = run_item.raw_item
+        raw_call_id = (
+            raw_item.get("call_id")
+            if isinstance(raw_item, Mapping)
+            else getattr(raw_item, "call_id", None)
+        )
+        if isinstance(raw_call_id, str):
+            output_call_ids.add(raw_call_id)
+    return calls, output_call_ids
+
+
+def _sdk_failure_details(error: Exception, hooks: _AccountingHooks) -> _SdkFailureDetails | None:
+    errors = _exception_graph(error)
+    validation_errors = _safe_validation_errors(errors)
+    if not validation_errors:
+        return None
+    phase = _validation_phase(errors)
+    calls, run_data_outputs = _run_data_calls(error)
+    lifecycles = hooks.tool_calls()
+    candidates = [
+        (call_id, name, position)
+        for call_id, name, position in calls
+        if call_id in lifecycles
+        and not (lifecycles[call_id].output_produced or call_id in run_data_outputs)
+    ]
+    candidate: tuple[str, str, int | None] | None = candidates[0] if len(candidates) == 1 else None
+    if candidate is None:
+        pending = [
+            (call_id, lifecycle)
+            for call_id, lifecycle in lifecycles.items()
+            if not lifecycle.output_produced and call_id not in run_data_outputs
+        ]
+        if len(pending) == 1:
+            call_id, lifecycle = pending[0]
+            position = next((p for cid, _name, p in calls if cid == call_id), None)
+            candidate = (call_id, lifecycle.name, position)
+    if candidate is None:
+        return _SdkFailureDetails(
+            phase=phase,
+            validation_errors=validation_errors,
+            tool_name=None,
+            function_call_position=None,
+            invocation_began=None,
+            tool_body_invoked=None,
+            tool_output_produced=None,
+        )
+    call_id, tool_name, position = candidate
+    lifecycle = lifecycles[call_id]
+    return _SdkFailureDetails(
+        phase=phase,
+        validation_errors=validation_errors,
+        tool_name=tool_name,
+        function_call_position=position,
+        invocation_began=lifecycle.invocation_began,
+        tool_body_invoked=lifecycle.body_invoked,
+        tool_output_produced=lifecycle.output_produced or call_id in run_data_outputs,
+    )
+
+
 def _exception_graph(error: BaseException) -> list[BaseException]:
     pending = [error]
     found: list[BaseException] = []
@@ -287,6 +522,7 @@ def _classify_failure(
     error: Exception, settings: AgentSettings
 ) -> tuple[RunStatus, str, RunFailure]:
     errors = _exception_graph(error)
+    sdk_failure = error.sdk_failure if isinstance(error, EngineExecutionError) else None
     status = RunStatus.MODEL_ERROR
     category = FailureCategory.INTERNAL
     origin = FailureOrigin.INTERNAL_RUNTIME
@@ -319,6 +555,18 @@ def _classify_failure(
         category = FailureCategory.OUTPUT_VALIDATION
         origin = FailureOrigin.FINAL_OUTPUT_VALIDATION
         message = "Structured diagnosis failed domain validation"
+    elif sdk_failure is not None and sdk_failure.phase is SdkValidationPhase.TOOL_INPUT:
+        category = FailureCategory.TOOL_INPUT_VALIDATION
+        origin = FailureOrigin.TOOL_INPUT_VALIDATION
+        message = "Function-tool input failed SDK validation"
+    elif sdk_failure is not None and sdk_failure.phase is SdkValidationPhase.TOOL_OUTPUT:
+        category = FailureCategory.TOOL_OUTPUT_VALIDATION
+        origin = FailureOrigin.TOOL_OUTPUT_VALIDATION
+        message = "Function-tool output failed SDK validation"
+    elif sdk_failure is not None:
+        category = FailureCategory.SDK_RUN_ITEM_VALIDATION
+        origin = FailureOrigin.SDK_RUN_ITEM_VALIDATION
+        message = "Agent SDK run item failed validation"
     elif any(isinstance(item, ModelBehaviorError) for item in errors):
         category = FailureCategory.MODEL_BEHAVIOR
         origin = FailureOrigin.SDK_RUNTIME
@@ -343,5 +591,16 @@ def _classify_failure(
         cause_chain_types=[_qualified_type(item) for item in errors[1:]],
         provider_status_code=provider_status,
         provider_error_code=provider_code,
+        sdk_validation_phase=sdk_failure.phase if sdk_failure is not None else None,
+        validation_errors=(list(sdk_failure.validation_errors) if sdk_failure is not None else []),
+        tool_name=sdk_failure.tool_name if sdk_failure is not None else None,
+        function_call_position=(
+            sdk_failure.function_call_position if sdk_failure is not None else None
+        ),
+        invocation_began=sdk_failure.invocation_began if sdk_failure is not None else None,
+        tool_body_invoked=sdk_failure.tool_body_invoked if sdk_failure is not None else None,
+        tool_output_produced=(
+            sdk_failure.tool_output_produced if sdk_failure is not None else None
+        ),
     )
     return status, message, failure

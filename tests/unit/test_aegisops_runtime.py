@@ -2,21 +2,39 @@ import asyncio
 import json
 from threading import Event, Thread
 from time import sleep
+from uuid import uuid4
 
 import httpx
-from agents.exceptions import MaxTurnsExceeded
+import pytest
+from agents import Agent, RunContextWrapper, _debug
+from agents.exceptions import MaxTurnsExceeded, ModelBehaviorError, RunErrorDetails, UserError
+from agents.items import ItemHelpers, ModelResponse
+from agents.tool_context import ToolContext
+from agents.usage import Usage
+from openai.types.responses import ResponseFunctionToolCall
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from nexus.aegisops.config import AgentSettings
+from nexus.aegisops.context import InvestigatorContext
 from nexus.aegisops.models import (
     Diagnosis,
     DiagnosisStatus,
+    FailureCategory,
     FailureOrigin,
     ModelUsage,
     RunStatus,
+    SdkValidationPhase,
 )
 from nexus.aegisops.output_schema import DiagnosisOutputValidationError
-from nexus.aegisops.runtime import EngineExecutionError, EngineOutcome, InvestigatorRuntime
-from nexus.aegisops.tools import execute_tool
+from nexus.aegisops.runtime import (
+    EngineExecutionError,
+    EngineOutcome,
+    InvestigatorRuntime,
+    _AccountingHooks,
+    _classify_failure,
+    _sdk_failure_details,
+)
+from nexus.aegisops.tools import build_sdk_tools, execute_tool
 from nexus.diagnostics.audit import DiagnosticSession, ToolCallBudgetExceeded
 from nexus.diagnostics.config import DiagnosticsSettings
 from nexus.diagnostics.logs import LokiAdapter
@@ -170,6 +188,136 @@ def test_failed_engine_preserves_exact_partial_accounting_when_available() -> No
     assert record.usage == usage
     assert record.accounting_complete is False
     assert "provider payload" not in record.model_dump_json()
+
+
+def test_sdk_output_validation_is_safely_classified_with_pending_call_position() -> None:
+    class ExpectedOutput(BaseModel):
+        count: int
+
+    calls = [
+        ResponseFunctionToolCall(
+            id=f"function-{index}",
+            call_id=f"call-{index}",
+            name="get_recent_errors" if index < 9 else "get_dependency_summary",
+            arguments="{}",
+            type="function_call",
+            status="completed",
+        )
+        for index in range(1, 10)
+    ]
+    with pytest.raises(UserError) as caught:
+        ItemHelpers.tool_call_output_item(
+            calls[-1],
+            '{"count":"private-model-value"}',
+            output_type_adapter=TypeAdapter(ExpectedOutput),
+        )
+    assert isinstance(caught.value.__cause__, ValidationError)
+
+    agent = Agent(name="test", instructions="test", tools=build_sdk_tools())
+    session = DiagnosticSession()
+    context = InvestigatorContext(
+        diagnostics=_diagnostics(session), session=session, run_id=uuid4()
+    )
+    wrapper = RunContextWrapper(context)
+    caught.value.run_data = RunErrorDetails(
+        input="redacted",
+        new_items=[],
+        raw_responses=[ModelResponse(output=calls, usage=Usage(), response_id="response-1")],
+        last_agent=agent,
+        context_wrapper=wrapper,
+        input_guardrail_results=[],
+        output_guardrail_results=[],
+    )
+    hooks = _AccountingHooks()
+    tool = next(item for item in build_sdk_tools() if item.name == "get_dependency_summary")
+    tool_context = ToolContext(
+        context=context,
+        tool_name=tool.name,
+        tool_call_id="call-9",
+        tool_arguments="{}",
+    )
+    asyncio.run(hooks.on_tool_start(tool_context, agent, tool))
+    hooks.mark_tool_body(tool.name, "call-9")
+
+    details = _sdk_failure_details(caught.value, hooks)
+    assert details is not None
+    assert details.phase is SdkValidationPhase.TOOL_OUTPUT
+    assert details.tool_name == "get_dependency_summary"
+    assert details.function_call_position == 9
+    assert details.invocation_began is True
+    assert details.tool_body_invoked is True
+    assert details.tool_output_produced is False
+    assert details.validation_errors[0].location == ["unrecognized_field"]
+    assert details.validation_errors[0].error_type == "int_parsing"
+
+    wrapped = EngineExecutionError(2, None, details)
+    wrapped.__cause__ = caught.value
+    status, message, failure = _classify_failure(
+        wrapped, AgentSettings(_env_file=None, enabled=True)
+    )
+    assert status is RunStatus.MODEL_ERROR
+    assert message == "Function-tool output failed SDK validation"
+    assert failure.category is FailureCategory.TOOL_OUTPUT_VALIDATION
+    assert failure.origin is FailureOrigin.TOOL_OUTPUT_VALIDATION
+    assert "private-model-value" not in failure.model_dump_json()
+
+
+def test_sdk_input_validation_is_safely_classified_before_tool_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_debug, "DONT_LOG_TOOL_DATA", False)
+    tool = next(item for item in build_sdk_tools() if item.name == "get_dependency_summary")
+    agent = Agent(name="test", instructions="test", tools=[tool])
+    session = DiagnosticSession()
+    context = InvestigatorContext(
+        diagnostics=_diagnostics(session), session=session, run_id=uuid4()
+    )
+    arguments = '{"service":"gateway","dependency":"private-invalid","window":"5m"}'
+    call = ResponseFunctionToolCall(
+        id="function-1",
+        call_id="call-1",
+        name=tool.name,
+        arguments=arguments,
+        type="function_call",
+        status="completed",
+    )
+    tool_context = ToolContext(
+        context=context,
+        tool_name=tool.name,
+        tool_call_id=call.call_id,
+        tool_arguments=arguments,
+    )
+    hooks = _AccountingHooks()
+    asyncio.run(hooks.on_tool_start(tool_context, agent, tool))
+    with pytest.raises(ModelBehaviorError) as caught:
+        asyncio.run(tool.on_invoke_tool(tool_context, arguments))
+    caught.value.run_data = RunErrorDetails(
+        input="redacted",
+        new_items=[],
+        raw_responses=[ModelResponse(output=[call], usage=Usage(), response_id="response-1")],
+        last_agent=agent,
+        context_wrapper=RunContextWrapper(context),
+        input_guardrail_results=[],
+        output_guardrail_results=[],
+    )
+
+    details = _sdk_failure_details(caught.value, hooks)
+    assert details is not None
+    assert details.phase is SdkValidationPhase.TOOL_INPUT
+    assert details.tool_name == "get_dependency_summary"
+    assert details.function_call_position == 1
+    assert details.invocation_began is True
+    assert details.tool_body_invoked is False
+    assert details.tool_output_produced is False
+    assert details.validation_errors[0].location == ["dependency"]
+    wrapped = EngineExecutionError(1, None, details)
+    wrapped.__cause__ = caught.value
+    _status, _message, failure = _classify_failure(
+        wrapped, AgentSettings(_env_file=None, enabled=True)
+    )
+    assert failure.category is FailureCategory.TOOL_INPUT_VALIDATION
+    assert failure.origin is FailureOrigin.TOOL_INPUT_VALIDATION
+    assert "private-invalid" not in failure.model_dump_json()
 
 
 def test_runtime_drains_parallel_tool_work_before_returning() -> None:

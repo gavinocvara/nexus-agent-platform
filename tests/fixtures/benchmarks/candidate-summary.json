@@ -1,5 +1,5 @@
 {
-  "benchmark_schema_version": 2,
+  "benchmark_schema_version": 3,
   "evaluation_schema_version": 1,
   "benchmark_session_id": "00000000-0000-0000-0000-000000000002",
   "generated_at": "2026-01-02T00:00:00Z",
@@ -15,7 +15,7 @@
     "diagnosis_schema_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     "evaluator_version": "aegisops-evaluator-v1",
     "evaluation_schema_version": 1,
-    "benchmark_schema_version": 2,
+    "benchmark_schema_version": 3,
     "scenario_schema_version": 1,
     "scenario_catalog_hash": "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
     "max_turns": 10,

@@ -124,7 +124,7 @@ def test_schema_versions_and_atomic_persistence_are_secret_free(tmp_path: Path) 
     manifest = runner.create_manifest(_identity(), BenchmarkMode.SMOKE, 1)
     directory = storage.create_session(manifest)
     loaded = storage.load_manifest(manifest.benchmark_session_id)
-    assert loaded.benchmark_schema_version == 2
+    assert loaded.benchmark_schema_version == 3
     assert loaded.evaluation_schema_version == 1
     assert not list(directory.rglob("*.tmp"))
     serialized = (directory / "manifest.json").read_text(encoding="utf-8")
