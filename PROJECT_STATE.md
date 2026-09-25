@@ -21,6 +21,7 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - Accepted Phase 6 baseline-record checkpoint: `5c0200d`
 - Phase 7 implementation checkpoint: `a7b6f5c1fbfc1e218cfabb1d78ad8d830e2bc17c`
 - Phase 7 validation handoff: the commit containing this document
+- Post-calibration hardening: `15eff373cd92bcfd37611c3c7d9dd59f4c9e5efc`
 
 ## Locked Phase 6 Baseline
 
@@ -132,8 +133,9 @@ py -m pytest -m integration tests/integration
   pass Ruff formatting; Ruff lint passes; strict mypy reports no issues in 69 source
   files; all 149 non-integration tests pass; the 68 focused Brain/runtime/benchmark/
   evaluator/preflight tests pass; all 20 Compose integration tests pass.
-- The five scenario documents and Compose configuration validate. GitHub Actions for the
-  post-calibration commit is pending commit and push.
+- The five scenario documents and Compose configuration validate. GitHub Actions run
+  `36104819422` for `15eff37` passed both `validate` and `compose-integration` on the
+  first attempt.
 - The immutable Phase 6 analysis-version-1 summary parses `genuine_abstention_rate`,
   `confident_wrong_rate`, and `brain_failure_rate` as unavailable rather than zero. Its
   historical `abstention_rate=0.533333...` remains distinct from the recorded
