@@ -2,9 +2,9 @@
 
 ## Current Milestone
 
-Phase 7 - Agent-Private Brain v1. A coherent implementation checkpoint is complete,
-but final validation, CI, and the narrowly authorized calibration remain. Phase 7 is
-not complete or approved. No Phase 7 live call has been made.
+Phase 7 - Agent-Private Brain v1. Deterministic implementation, local validation, and
+CI are complete. The narrowly authorized live calibration remains, so Phase 7 is not
+complete or approved. No Phase 7 live call has been made.
 
 The frozen Phase 5 investigator and official Phase 6 memoryless baseline remain the
 comparison control. Phase 7 does not change the model, investigator instructions,
@@ -19,7 +19,8 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - Phase 7 starting point: `52bd5f47dfbf5591e5263911b1c64dab66158d90`
 - Package version: `0.8.0`
 - Accepted Phase 6 baseline-record checkpoint: `5c0200d`
-- Phase 7 recoverable checkpoint: the commit containing this document
+- Phase 7 implementation checkpoint: `a7b6f5c1fbfc1e218cfabb1d78ad8d830e2bc17c`
+- Phase 7 validation handoff: the commit containing this document
 
 ## Locked Phase 6 Baseline
 
@@ -111,17 +112,14 @@ py -m pytest -m integration tests/integration
 
 ## Latest Validation
 
-- Post-final-edit checkpoint validation on 2026-09-24: Ruff formatting and lint pass;
-  strict mypy reports no issues in 69 source files; the 51 focused Brain, runtime,
-  benchmark, and comparison tests pass.
-- Before the final readable escaped-JSON renderer and split agent-loop/end-to-end
-  latency metadata edits, the editable package reported NEXUS `0.8.0`; `pip check`
-  passed with Agents SDK `0.22.3` and SQLAlchemy `2.0.46`; all 142 non-integration
-  tests passed with 20 integration tests deselected.
-- At that same pre-final-edit boundary, a fresh volume-removing Compose rebuild plus
-  standard warm-up passed all 20 integration tests. This included Brain survival across
-  `down --volumes`, retrieval during the orders database fault, no Brain data in
-  diagnostic telemetry, and PostgreSQL spans.
+- Post-final-edit validation on 2026-09-24: `pip check` passes; all 121 files pass Ruff
+  formatting; Ruff lint passes; strict mypy reports no issues in 69 source files; all
+  142 non-integration tests pass; the 51 focused Brain/runtime/benchmark/comparison
+  tests pass.
+- With the documented local-only PostgreSQL values supplied to Compose, a fresh
+  volume-removing rebuild plus standard warm-up passes all 20 integration tests. This
+  includes Brain survival across `down --volumes`, retrieval during the orders database
+  fault, no Brain data in diagnostic telemetry, and PostgreSQL spans.
 - The first fresh-stack integration pass was 19/20 because one Loki correlation test saw
   only one of two logs during startup ingestion. It passed immediately in isolation;
   adding the evaluator's standard warm-up after the deliberate reset produced the clean
@@ -131,8 +129,17 @@ py -m pytest -m integration tests/integration
 - The real locked schema-3 summary parses under 0.8.0 as 15 memoryless runs. Historical
   lock SHA-256 remains
   `b6a46c51bf235f4bbe4465ee060f5d92cf0b0571a3835ce0c67ff062c0209d74`.
-- Governing specification files are unchanged. GitHub Actions validation is pending the
-  Phase 7 commit and push.
+- Governing specification files are unchanged. GitHub Actions run `36063663628` for
+  `a7b6f5c` passed both `validate` and `compose-integration` on the first attempt.
+- Disabled-mode preflight at `a7b6f5c` passed the frozen contract, five scenarios,
+  eleven-tool policy, Brain identity, clean reproducible Git identity, all services,
+  observability APIs, and lab controls. It correctly remained not ready because live
+  execution was not opted in, no `OPENAI_API_KEY` was present, and the local default
+  model was `gpt-5-mini` rather than frozen `gpt-5.6-sol`.
+- One local integration attempt could not reach Docker from the filesystem sandbox. An
+  unrestricted attempt then exposed the absent ignored `.env`: empty PostgreSQL values
+  prevented startup. No code was changed for either environmental issue; supplying the
+  documented process-local values produced the clean 20/20 result above.
 
 ## Recoverable Phase 7 Checkpoint
 
@@ -151,15 +158,44 @@ Complete in this checkpoint:
 
 Incomplete and still required:
 
-- Re-run the complete non-integration suite after the final renderer/latency edits.
-- Re-run the complete integration suite after those edits, then obtain green GitHub CI.
-- Run the final preflight and inspect the exact Brain identity before any live call.
-- Only after those gates: one targeted learn investigation, audit inspection, freeze a
-  snapshot, one five-scenario frozen smoke, then stop and report. Do not run an official
-  Brain baseline or the deferred 100-plus-run held-out study.
+- Configure the frozen live model, explicit live opt-in, API credential, `learn` mode,
+  and a fresh ignored Brain path; then re-run preflight and inspect the exact enabled
+  Brain identity before any live call.
+- Only after a ready preflight: one targeted learn investigation and audit inspection.
+  Freeze and hash its snapshot only if that audit is clean. The five-scenario frozen
+  smoke follows only under the already documented Phase 7 authorization, then stop and
+  report. Do not run an official Brain baseline or the deferred 100-plus-run study.
 
-Exact continuation point: start with the full non-integration test command in
-`Validation Commands`; do not alter the accepted Phase 6 lock or enable Brain first.
+Exact continuation point: create local-only live settings without committing them, run
+enabled learn-mode preflight, and stop if any check fails. Do not alter the accepted
+Phase 6 lock and do not start the targeted run before preflight is fully ready.
+
+## Independent Review Disposition
+
+Satisfied and enforced: structural evaluator isolation, the exact observable writer
+projection, no score-conditioned behavior, unverified self-diagnoses, explicit modes,
+frozen read-only hashes, fail-closed Brain errors, complete identity/audit metadata,
+canonical replayable snapshots, isolated SQLite storage/telemetry, separate retrieval
+budgets, escaped untrusted context, current-run-only evidence, contamination guards,
+portable future locks, derived metric hygiene, and deterministic T1-T28-equivalent
+coverage.
+
+Already satisfied before review-driven hardening: the unchanged eleven read-only tools,
+12-call/10-turn/120-second limits, stable investigator instruction and Diagnosis hashes,
+runtime-owned current evidence validation, and local ignored storage boundary.
+
+Changed because of review: exact field-by-field projection and import tests; explicit
+`disabled`/`learn`/`frozen_eval`; self-report trust labels and dispute lifecycle; escaped
+renderer and persistent-injection tests; Brain identity and per-run hashes; split
+retrieval/agent/end-to-end latency and token accounting; evaluator-only fold ledger;
+pre-registration; Brain calibration lock prohibition; and portable lock schema 2 with
+legacy resolution.
+
+Deferred by design: placebo snapshot generation, interleaved leave-one-scenario-out
+orchestration, and the 100-plus-run official study require later explicit authorization.
+Semantic/reflective memory, supervised confirmed outcomes, vectors, Engram, cross-agent
+sharing, and off-machine evidence publication are outside Brain v1. No review
+requirement is incompatible with the architecture.
 
 ## Storage And Security
 
@@ -183,8 +219,8 @@ Exact continuation point: start with the full non-integration test command in
 
 ## Next Step
 
-Verify the recoverable checkpoint is on `origin/main`, then run the outstanding full
-non-integration and integration validation and obtain green CI. Next run preflight. The
-authorized live calibration is one targeted learn investigation, audit inspection,
-snapshot freeze, and one five-scenario frozen smoke, then stop and report. No official
-Brain benchmark or large held-out study is authorized.
+Configure local-only live settings and obtain a fully ready enabled learn-mode preflight.
+Then run exactly one targeted Brain-enabled investigation and inspect its retrieval/write
+audit. Do not start the frozen smoke unless that audit and snapshot freeze succeed under
+the documented workflow. No official Brain benchmark or large held-out study is
+authorized.
