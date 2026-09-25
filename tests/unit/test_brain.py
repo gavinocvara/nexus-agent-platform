@@ -197,6 +197,19 @@ def test_disabled_mode_is_exact_memoryless_path(tmp_path: Path) -> None:
     assert not path.exists()
 
 
+def test_runtime_does_not_implicitly_inherit_writable_brain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ambient_path = tmp_path / "ambient.sqlite3"
+    monkeypatch.setenv("NEXUS_BRAIN_MODE", "learn")
+    monkeypatch.setenv("NEXUS_BRAIN_PATH", str(ambient_path))
+
+    runtime = InvestigatorRuntime(AgentSettings(_env_file=None, enabled=False))
+
+    assert runtime.brain.settings.mode.value == "disabled"
+    assert not ambient_path.exists()
+
+
 def test_namespace_and_agent_identity_are_closed() -> None:
     for value in (
         "aegisops.other",

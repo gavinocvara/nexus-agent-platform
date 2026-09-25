@@ -11,6 +11,8 @@ from nexus.aegisops.config import AgentSettings
 from nexus.aegisops.instructions import instruction_hash
 from nexus.aegisops.runtime import GENERIC_INCIDENT_PROMPT, InvestigatorEngine, InvestigatorRuntime
 from nexus.aegisops.tools import tool_registry_hash
+from nexus.brain.config import BrainSettings
+from nexus.brain.models import BrainMode
 from nexus.diagnostics.audit import DiagnosticSession
 from nexus.diagnostics.service import DiagnosticServiceLayer
 from nexus.evaluation.aegisops.models import (
@@ -33,9 +35,16 @@ class AegisOpsEvaluationHarness:
         engine: InvestigatorEngine | None = None,
         catalog: ScenarioCatalog | None = None,
         scenario_runner: ScenarioRunner | None = None,
+        brain_settings: BrainSettings | None = None,
     ) -> None:
         self.settings = settings
         self.engine = engine
+        self.brain_settings = brain_settings or BrainSettings(mode=BrainMode.DISABLED)
+        if self.brain_settings.mode is BrainMode.LEARN:
+            raise ValueError(
+                "AegisOpsEvaluationHarness refuses writable Brain mode; "
+                "use the guarded benchmark targeted command for calibration"
+            )
         self.catalog = catalog or ScenarioCatalog.load()
         self.scenario_runner = scenario_runner or ScenarioRunner(
             self.catalog, default_service_urls()
@@ -57,7 +66,11 @@ class AegisOpsEvaluationHarness:
                             self.scenario_runner.observe(expectation, client)
                         session = DiagnosticSession(max_tool_calls=self.settings.max_tool_calls)
                         with DiagnosticServiceLayer(session=session) as diagnostics:
-                            runtime = InvestigatorRuntime(self.settings, self.engine)
+                            runtime = InvestigatorRuntime(
+                                self.settings,
+                                self.engine,
+                                brain_settings=self.brain_settings,
+                            )
                             record = await runtime.investigate(
                                 GENERIC_INCIDENT_PROMPT, diagnostics=diagnostics
                             )

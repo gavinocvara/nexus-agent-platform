@@ -1,5 +1,6 @@
 import asyncio
 import json
+from pathlib import Path
 from threading import Event, Thread
 from time import sleep
 from uuid import uuid4
@@ -14,6 +15,7 @@ from agents.usage import Usage
 from openai.types.responses import ResponseFunctionToolCall
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
+from nexus.aegisops.__main__ import main as investigator_main
 from nexus.aegisops.config import AgentSettings
 from nexus.aegisops.context import InvestigatorContext
 from nexus.aegisops.models import (
@@ -112,6 +114,21 @@ def test_live_engine_without_key_fails_clearly(monkeypatch) -> None:  # type: ig
     assert record.error == "Live model credentials are unavailable"
     assert record.accounting_complete is True
     assert record.turn_count == 0
+
+
+def test_ad_hoc_cli_refuses_ambient_writable_brain(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    brain_path = tmp_path / "must-not-exist.sqlite3"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("NEXUS_BRAIN_MODE", "learn")
+    monkeypatch.setenv("NEXUS_BRAIN_PATH", str(brain_path))
+
+    assert investigator_main(["investigate"]) == 2
+    assert "refuses ambient Brain mode=learn" in capsys.readouterr().out
+    assert not brain_path.exists()
 
 
 def test_max_turns_failure_is_typed() -> None:

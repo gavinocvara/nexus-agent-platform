@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 import pytest
 
@@ -14,6 +15,7 @@ from nexus.aegisops.models import (
     RunStatus,
 )
 from nexus.aegisops.runtime import EngineOutcome
+from nexus.brain.config import BrainSettings
 from nexus.diagnostics.audit import DiagnosticSession
 from nexus.diagnostics.service import DiagnosticServiceLayer
 from nexus.evaluation.aegisops.harness import AegisOpsEvaluationHarness
@@ -134,6 +136,34 @@ def test_evaluator_always_resets_and_passes_only_generic_prompt() -> None:
     assert report.aggregate.run_count == 5
     assert events[0:3] == ["reset", "health:200", "activate"]
     assert events[-2:] == ["reset", "health:200"]
+
+
+def test_evaluator_harness_refuses_explicit_writable_brain(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="refuses writable Brain mode"):
+        AegisOpsEvaluationHarness(
+            AgentSettings(_env_file=None, enabled=True, model="scripted-test"),
+            brain_settings=BrainSettings(
+                _env_file=None,
+                mode="learn",
+                path=tmp_path / "must-not-exist.sqlite3",
+            ),
+        )
+    assert not (tmp_path / "must-not-exist.sqlite3").exists()
+
+
+def test_evaluator_harness_ignores_ambient_writable_brain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "ambient.sqlite3"
+    monkeypatch.setenv("NEXUS_BRAIN_MODE", "learn")
+    monkeypatch.setenv("NEXUS_BRAIN_PATH", str(path))
+
+    harness = AegisOpsEvaluationHarness(
+        AgentSettings(_env_file=None, enabled=False, model="scripted-test")
+    )
+
+    assert harness.brain_settings.mode.value == "disabled"
+    assert not path.exists()
 
 
 def test_evaluator_resets_when_symptom_generation_fails() -> None:

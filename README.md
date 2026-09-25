@@ -271,6 +271,10 @@ py -m nexus.brain inspect
 py -m nexus.brain snapshot .nexus/brain/snapshots/aegisops-brain-v1.sqlite3
 ```
 
+Writable Brain configuration is accepted only through the guarded benchmark targeted
+path. The ad-hoc investigator and legacy evaluation harness cannot silently inherit
+`learn` from the environment.
+
 For a Brain smoke, point `NEXUS_BRAIN_PATH` at that snapshot, set
 `NEXUS_BRAIN_MODE=frozen_eval`, and set the expected logical SHA-256 printed by the
 snapshot command. Frozen runs verify equal pre/post hashes and fail explicitly as
@@ -278,3 +282,8 @@ snapshot command. Frozen runs verify equal pre/post hashes and fail explicitly a
 is bounded, provenance-bearing, and delimiter-escaped inside an explicitly untrusted
 historical-data block. The committed protocol hash is part of benchmark identity. See
 `docs/runbooks/aegisops-brain-v1.md` and `docs/adr/0008-agent-private-brain-v1.md`.
+
+Legacy analysis-version-1 summaries expose Phase 7-only aggregate metrics as unavailable,
+not zero. In particular, the historical Phase 6 `abstention_rate` combines genuine
+abstentions with tool-budget failures and must be interpreted alongside the separately
+recorded `tool_budget_failure_rate`.

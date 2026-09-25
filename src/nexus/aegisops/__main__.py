@@ -6,6 +6,8 @@ from collections.abc import Sequence
 
 from nexus.aegisops.models import RunStatus
 from nexus.aegisops.runtime import GENERIC_INCIDENT_PROMPT, InvestigatorRuntime
+from nexus.brain.config import BrainSettings
+from nexus.brain.models import BrainMode
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -19,7 +21,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     if arguments.command != "investigate":
         raise AssertionError("Unhandled AegisOps command")
-    record = asyncio.run(InvestigatorRuntime().investigate(GENERIC_INCIDENT_PROMPT))
+    ambient_brain = BrainSettings()
+    if ambient_brain.enabled:
+        print(
+            f"Ad-hoc investigator refuses ambient Brain mode={ambient_brain.mode.value}; "
+            "use the guarded benchmark targeted command for writable calibration"
+        )
+        return 2
+    record = asyncio.run(
+        InvestigatorRuntime(brain_settings=BrainSettings(mode=BrainMode.DISABLED)).investigate(
+            GENERIC_INCIDENT_PROMPT
+        )
+    )
     print(record.model_dump_json(indent=2))
     return 0 if record.status is RunStatus.COMPLETED else 2
 

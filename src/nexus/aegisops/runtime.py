@@ -272,7 +272,8 @@ class InvestigatorRuntime:
     ) -> None:
         self.settings = settings or AgentSettings()
         self.engine = engine or OpenAIAgentsEngine()
-        self.brain = brain or AegisOpsBrain(brain_settings or BrainSettings())
+        explicit_brain_settings = brain_settings or BrainSettings(mode=BrainMode.DISABLED)
+        self.brain = brain or AegisOpsBrain(explicit_brain_settings)
 
     async def investigate(
         self,

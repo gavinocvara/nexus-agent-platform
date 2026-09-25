@@ -46,6 +46,13 @@ record ID. Count, rendered-character, estimated-token, and two-second time bound
 independent of the 12 diagnostic calls and 10 turns. No live-system observation enters
 the retrieval key.
 
+The generic prompt contains no incident-specific signal. In Brain v1, procedural
+memories therefore behave mainly as a learned reusable context prefix, lexical ties tend
+toward recency, and incident-specific episodic records may not match. Learning order is
+experimentally material and must follow a fixed pre-registered seed. Unverified
+self-reports can anchor later runs; the targeted calibration result is not a basis for
+tuning this policy.
+
 Selected records are canonical JSON with delimiter characters escaped inside a block labeled
 untrusted historical data. The block is appended to the user input, never to
 `INVESTIGATOR_INSTRUCTIONS`. It cannot alter settings, tool registry, policy, identity,

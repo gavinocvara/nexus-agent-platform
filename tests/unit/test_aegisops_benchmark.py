@@ -1,16 +1,25 @@
 import asyncio
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from nexus.aegisops.config import AgentSettings
-from nexus.aegisops.models import Diagnosis, DiagnosisStatus
+from nexus.aegisops.models import (
+    Component,
+    Diagnosis,
+    DiagnosisStatus,
+    FailureClass,
+    RootCauseHypothesis,
+)
 from nexus.aegisops.runtime import EngineOutcome
-from nexus.brain.models import BrainRunMetadata, BrainStorageStatus
+from nexus.brain.config import BrainSettings
+from nexus.brain.manager import AegisOpsBrain
+from nexus.brain.models import AEGISOPS_AGENT_ID, BrainRunMetadata, BrainStorageStatus
+from nexus.brain.storage import SQLiteMemoryStore
 from nexus.evaluation.aegisops.analytics import summarize
 from nexus.evaluation.aegisops.benchmark import BenchmarkRunner
 from nexus.evaluation.aegisops.benchmark_models import (
@@ -214,6 +223,106 @@ def test_ordering_is_deterministic_and_seed_is_required(tmp_path: Path) -> None:
     ]
 
 
+def test_evaluator_scores_and_scenario_canaries_cannot_change_brain_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixed_time = datetime(2026, 9, 25, 1, tzinfo=UTC)
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[no-untyped-def]
+            return fixed_time
+
+    class DiagnosedEngine:
+        async def run(self, prompt, context, settings):  # type: ignore[no-untyped-def]
+            return EngineOutcome(
+                Diagnosis(
+                    status=DiagnosisStatus.DIAGNOSED,
+                    summary="Orders latency is the self-reported diagnosis.",
+                    primary_hypothesis=RootCauseHypothesis(
+                        component=Component.ORDERS,
+                        failure_class=FailureClass.LATENCY,
+                        rationale="Scripted agent-owned output.",
+                        confidence=0.9,
+                    ),
+                    confidence=0.9,
+                    next_diagnostic_action="Read current request evidence.",
+                ),
+                turn_count=1,
+            )
+
+    monkeypatch.setattr("nexus.aegisops.runtime.datetime", FixedDateTime)
+    monkeypatch.setattr("nexus.aegisops.runtime.uuid4", lambda: UUID(int=700))
+    base = ScenarioCatalog.load().get("orders_latency")
+    scenarios = [
+        base.model_copy(
+            update={
+                "id": "evaluator_canary_correct",
+                "title": "EVALUATOR_CANARY_CORRECT_TITLE",
+                "activation": base.activation.model_copy(
+                    update={"failure_id": "evaluator_canary_correct"}
+                ),
+            }
+        ),
+        base.model_copy(
+            update={
+                "id": "evaluator_canary_wrong",
+                "title": "EVALUATOR_CANARY_WRONG_TITLE",
+                "activation": base.activation.model_copy(
+                    update={"failure_id": "evaluator_canary_wrong"}
+                ),
+                "expected_root_cause": base.expected_root_cause.model_copy(
+                    update={"component": "users", "failure": "service_unavailable"}
+                ),
+            }
+        ),
+    ]
+
+    digests: list[str] = []
+    exact_scores: list[bool] = []
+    for index, scenario in enumerate(scenarios):
+        root = tmp_path / str(index)
+        storage = BenchmarkStorage(root / "benchmarks")
+        brain_settings = BrainSettings(
+            _env_file=None,
+            mode="learn",
+            path=root / "brain.sqlite3",
+        )
+        runner = BenchmarkRunner(
+            AgentSettings(_env_file=None, enabled=True, model="scripted-model"),
+            storage,
+            FakeStack(),
+            FakeWarmup(),
+            DiagnosedEngine(),
+            ScenarioCatalog((scenario,)),
+            FakeScenarioRunner(),  # type: ignore[arg-type]
+            brain_settings,
+        )
+        manifest = runner.create_manifest(_identity(), BenchmarkMode.TARGETED, 1)
+        storage.create_session(manifest)
+        asyncio.run(runner.run(manifest))
+        record = storage.load_runs(manifest.benchmark_session_id)[0]
+        assert record.score is not None
+        exact_scores.append(record.score.exact_diagnosis)
+
+        store = SQLiteMemoryStore(brain_settings.path)
+        digests.append(store.logical_sha256(AEGISOPS_AGENT_ID))
+        rendered = asyncio.run(
+            AegisOpsBrain(brain_settings).retrieve(
+                "Investigate the current production incident using read-only diagnostics.",
+                as_of=fixed_time + timedelta(seconds=1),
+            )
+        ).prompt
+        persisted = brain_settings.path.read_bytes()
+        assert b"EVALUATOR_CANARY" not in persisted
+        assert "EVALUATOR_CANARY" not in rendered
+        assert scenario.id.encode() not in persisted
+        assert scenario.id not in rendered
+
+    assert exact_scores == [True, False]
+    assert digests[0] == digests[1]
+
+
 def test_baseline_lock_requires_complete_reproducible_session(tmp_path: Path) -> None:
     runner, storage, _, _ = _runner(tmp_path)
     manifest = runner.create_manifest(_identity(), BenchmarkMode.BASELINE, 1)
@@ -228,6 +337,21 @@ def test_baseline_lock_requires_complete_reproducible_session(tmp_path: Path) ->
     assert '"artifacts"' in payload
     assert "\\\\" not in payload
     assert storage.resolve_baseline("accepted-v1").name == "summary.json"
+
+
+def test_portable_lock_artifact_count_must_match_run_count(tmp_path: Path) -> None:
+    runner, storage, _, _ = _runner(tmp_path)
+    manifest = runner.create_manifest(_identity(), BenchmarkMode.BASELINE, 2)
+    storage.create_session(manifest)
+    completed = asyncio.run(runner.run(manifest))
+    path = storage.lock_baseline(completed.benchmark_session_id, "complete-v2")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert len(payload["artifacts"]) == payload["run_count"] + 2
+
+    payload["artifacts"].pop()
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(BenchmarkStorageError, match="Invalid baseline lock"):
+        storage.resolve_baseline("complete-v2")
 
 
 def test_legacy_lock_ignores_absolute_path_and_resolves_under_current_root(

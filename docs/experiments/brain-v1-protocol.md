@@ -6,15 +6,28 @@ and must start a new session.
 
 ## Calibration
 
-The currently authorized live work is one `learn` investigation, audit inspection,
-snapshot export, and one five-scenario `frozen_eval` smoke. This validates mechanics,
-storage isolation, budgets, failure handling, and auditability. It is not an official
-evaluation and cannot support a claim that Brain improves diagnosis.
+The single authorized `learn` investigation completed in session
+`c6832bae-feb7-4216-933e-139c734c2173`. Its initial retrieval was empty, it wrote one
+episodic and one procedural memory, and its post-run logical snapshot hash was
+`9e7d36376c6b0c8c77d5a3f94cafcea22cb2a53a313986a2a3fe6aed4f0fd3b6`.
+The diagnosis identified the component but reported the wrong failure class at 0.97
+confidence. That claim remains `self_reported/unverified`; it is not corrected, promoted,
+or removed based on evaluator knowledge.
+
+Snapshot export and one five-scenario `frozen_eval` smoke remain pending. They validate
+mechanics, storage isolation, budgets, failure handling, and auditability. They are not
+an official evaluation and cannot support a claim that Brain improves diagnosis.
 
 The incident prompt is identical for all five scenarios. Pre-run Brain retrieval is
 therefore primarily a test of reusable procedural context, similar to a learned prompt
 prefix, rather than incident-specific episodic recall. A length-matched placebo is
 required before attributing any later difference to learned content.
+
+Lexical ties tend toward recency under the deterministic rank key, and the generic prompt
+may not match incident-specific episodic terms at all. Self-reported diagnoses can still
+anchor later runs despite their unverified label. Future fold learning order must
+therefore use the fixed pre-registered seed; the retrieval policy must not be tuned from
+the targeted calibration result.
 
 ## Deferred Official Study
 

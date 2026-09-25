@@ -55,7 +55,7 @@ class BenchmarkRunner:
         self.stack = stack
         self.warmup = warmup
         self.engine = engine
-        self.brain_settings = brain_settings or BrainSettings()
+        self.brain_settings = brain_settings or BrainSettings(mode=BrainMode.DISABLED)
         self.catalog = catalog or ScenarioCatalog.load()
         self.scenario_runner = scenario_runner or ScenarioRunner(
             self.catalog, default_service_urls()

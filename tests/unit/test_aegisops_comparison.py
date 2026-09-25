@@ -16,8 +16,45 @@ def test_identical_comparison_has_zero_deltas() -> None:
     baseline = _load("baseline-summary.json")
     comparison = compare_summaries(baseline, baseline)
     assert comparison.comparison_type == "same_baseline"
-    assert comparison.warnings == []
-    assert all(delta.absolute_delta == 0 for delta in comparison.deltas.values())
+    assert "Analysis-version-1 summaries" in comparison.warnings[0]
+    measured = [
+        delta
+        for delta in comparison.deltas.values()
+        if delta.baseline is not None and delta.candidate is not None
+    ]
+    assert all(delta.absolute_delta == 0 for delta in measured)
+    assert comparison.deltas["genuine_abstention_rate"].baseline is None
+    assert comparison.deltas["confident_wrong_rate"].absolute_delta is None
+    assert comparison.deltas["brain_failure_rate"].absolute_delta is None
+
+
+def test_real_phase6_analysis_v1_metrics_remain_unavailable() -> None:
+    baseline = _load("phase6-legacy-summary.json")
+    candidate = _load("candidate-summary.json").model_copy(
+        update={
+            "analysis_version": 2,
+            "aggregate": _load("candidate-summary.json").aggregate.model_copy(
+                update={
+                    "genuine_abstention_rate": 0.1,
+                    "confident_wrong_rate": 0.2,
+                    "brain_failure_rate": 0.0,
+                }
+            ),
+        }
+    )
+
+    assert baseline.analysis_version == 1
+    assert baseline.aggregate.abstention_rate == pytest.approx(8 / 15)
+    assert baseline.aggregate.tool_budget_failure_rate == pytest.approx(5 / 15)
+    assert baseline.aggregate.genuine_abstention_rate is None
+    assert baseline.aggregate.confident_wrong_rate is None
+    assert baseline.aggregate.brain_failure_rate is None
+
+    comparison = compare_summaries(baseline, candidate)
+    assert comparison.deltas["genuine_abstention_rate"].baseline is None
+    assert comparison.deltas["genuine_abstention_rate"].candidate == 0.1
+    assert comparison.deltas["genuine_abstention_rate"].absolute_delta is None
+    assert any("Analysis-version-1" in warning for warning in comparison.warnings)
 
 
 def test_comparison_reports_improvements_regressions_and_mixed_tradeoffs() -> None:
@@ -77,6 +114,7 @@ def test_brain_candidate_remains_schema_compatible_and_explicit() -> None:
     candidate = _load("candidate-summary.json")
     candidate = candidate.model_copy(
         update={
+            "analysis_version": 2,
             "identity": candidate.identity.model_copy(
                 update={
                     "baseline_name": "aegisops-brain-v1",

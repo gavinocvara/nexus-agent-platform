@@ -43,6 +43,11 @@ def compare_summaries(
         warnings.append("Brain memory identities differ")
     if left.brain_identity != right.brain_identity:
         warnings.append("Brain configuration or protocol identities differ")
+    if baseline.analysis_version == 1 or candidate.analysis_version == 1:
+        warnings.append(
+            "Analysis-version-1 summaries do not contain Brain, genuine-abstention, "
+            "confident-wrong, or end-to-end latency metrics"
+        )
     comparison_type: Literal["same_baseline", "cross_model", "incompatible"]
     if incompatible:
         warnings.append("Benchmark or evaluation schema versions are incompatible")

@@ -2,9 +2,9 @@
 
 ## Current Milestone
 
-Phase 7 - Agent-Private Brain v1. Deterministic implementation, local validation, and
-CI are complete. The narrowly authorized live calibration remains, so Phase 7 is not
-complete or approved. No Phase 7 live call has been made.
+Phase 7 - Agent-Private Brain v1. The single authorized targeted learn calibration is
+complete. Post-calibration compatibility and entry-point hardening are under validation.
+No further live call, snapshot freeze, frozen smoke, or Phase 8 work has begun.
 
 The frozen Phase 5 investigator and official Phase 6 memoryless baseline remain the
 comparison control. Phase 7 does not change the model, investigator instructions,
@@ -17,7 +17,7 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - Remote: `https://github.com/gavinocvara/nexus-agent-platform.git`
 - Branch: `main`
 - Phase 7 starting point: `52bd5f47dfbf5591e5263911b1c64dab66158d90`
-- Package version: `0.8.0`
+- Package version: `0.8.1`
 - Accepted Phase 6 baseline-record checkpoint: `5c0200d`
 - Phase 7 implementation checkpoint: `a7b6f5c1fbfc1e218cfabb1d78ad8d830e2bc17c`
 - Phase 7 validation handoff: the commit containing this document
@@ -91,6 +91,22 @@ they cannot support a causal improvement claim. Brain calibration cannot be lock
 an official baseline. Current protocol SHA-256:
 `c6c3cff80da44c6fbc486a57b4eaf1ea6215c1ba923c1afed75d6717f94368ed`.
 
+## Targeted Brain Calibration
+
+- Session: `c6832bae-feb7-4216-933e-139c734c2173`
+- Completed with recovery verified, 11/12 diagnostic calls, three turns, complete
+  accounting, zero backend failures, and zero Brain failures.
+- Initial retrieval was empty: zero retrieved records and zero Brain-attributable input
+  tokens. The run wrote one episodic and one procedural memory.
+- Empty pre-snapshot advanced to logical SHA-256
+  `9e7d36376c6b0c8c77d5a3f94cafcea22cb2a53a313986a2a3fe6aed4f0fd3b6`; inspection
+  reported two active memories.
+- Diagnosis component was correct and failure class was wrong at 0.97 confidence. This
+  remains legitimate `self_reported/unverified` history and was not corrected, promoted,
+  removed, or used to tune retrieval.
+- The live store remains only in the ignored canonical checkout and has not been opened
+  writable during post-calibration implementation.
+
 ## Validation Commands
 
 ```powershell
@@ -112,6 +128,22 @@ py -m pytest -m integration tests/integration
 
 ## Latest Validation
 
+- Post-calibration 0.8.1 validation on 2026-09-25: `pip check` passes; all 121 files
+  pass Ruff formatting; Ruff lint passes; strict mypy reports no issues in 69 source
+  files; all 149 non-integration tests pass; the 68 focused Brain/runtime/benchmark/
+  evaluator/preflight tests pass; all 20 Compose integration tests pass.
+- The five scenario documents and Compose configuration validate. GitHub Actions for the
+  post-calibration commit is pending commit and push.
+- The immutable Phase 6 analysis-version-1 summary parses `genuine_abstention_rate`,
+  `confident_wrong_rate`, and `brain_failure_rate` as unavailable rather than zero. Its
+  historical `abstention_rate=0.533333...` remains distinct from the recorded
+  `tool_budget_failure_rate=0.333333...`.
+- Read-only compatibility inspection reports the calibration store at logical SHA-256
+  `9e7d36376c6b0c8c77d5a3f94cafcea22cb2a53a313986a2a3fe6aed4f0fd3b6`, with one
+  episodic and one procedural memory. Its physical file SHA-256 remains
+  `41cee12dd35c38c62fcecaf38e8b2aad3f19231029d356142621c3d5254de38c`.
+- Frozen behavior, memory-record schema, writer allowlist, retrieval algorithm, renderer,
+  and protocol identities are unchanged by the post-calibration fixes.
 - Post-final-edit validation on 2026-09-24: `pip check` passes; all 121 files pass Ruff
   formatting; Ruff lint passes; strict mypy reports no issues in 69 source files; all
   142 non-integration tests pass; the 51 focused Brain/runtime/benchmark/comparison
@@ -126,7 +158,7 @@ py -m pytest -m integration tests/integration
   20/20 full pass.
 - All five scenario documents validate. Compose configuration, diff whitespace, ignored
   `.env`/`.nexus`, and package dependency checks pass.
-- The real locked schema-3 summary parses under 0.8.0 as 15 memoryless runs. Historical
+- The real locked schema-3 summary parses under 0.8.1 as 15 memoryless runs. Historical
   lock SHA-256 remains
   `b6a46c51bf235f4bbe4465ee060f5d92cf0b0571a3835ce0c67ff062c0209d74`.
 - Governing specification files are unchanged. GitHub Actions run `36063663628` for
@@ -158,17 +190,15 @@ Complete in this checkpoint:
 
 Incomplete and still required:
 
-- Configure the frozen live model, explicit live opt-in, API credential, `learn` mode,
-  and a fresh ignored Brain path; then re-run preflight and inspect the exact enabled
-  Brain identity before any live call.
-- Only after a ready preflight: one targeted learn investigation and audit inspection.
-  Freeze and hash its snapshot only if that audit is clean. The five-scenario frozen
-  smoke follows only under the already documented Phase 7 authorization, then stop and
-  report. Do not run an official Brain baseline or the deferred 100-plus-run study.
+- Finish full deterministic, Compose, and CI validation of the post-calibration fixes.
+- After owner review, freeze and hash the existing calibration store without modifying
+  it, configure `frozen_eval`, and run preflight before any further live call.
+- The five-scenario frozen smoke remains the only next live sequence. Stop and report
+  afterward. Do not run another learn investigation, official Brain baseline, or the
+  deferred 100-plus-run study.
 
-Exact continuation point: create local-only live settings without committing them, run
-enabled learn-mode preflight, and stop if any check fails. Do not alter the accepted
-Phase 6 lock and do not start the targeted run before preflight is fully ready.
+Exact continuation point: complete and commit the post-calibration deterministic fixes.
+Do not alter the Phase 6 lock, calibration database, protocol JSON, or frozen behavior.
 
 ## Independent Review Disposition
 
@@ -210,17 +240,20 @@ requirement is incompatible with the architecture.
 ## Known Limitations
 
 - Lexical retrieval can be empty for the intentionally generic benchmark prompt; v1
-  fails closed instead of injecting unrelated history.
+  fails closed instead of injecting unrelated history. Procedural records act mainly as
+  a reusable context prefix, lexical ties favor recency, and episodic records may not
+  match the generic prompt.
 - Procedural extraction is deterministic and conservative; it is never evaluator-
-  validated truth. Directly contradictory self-reports are disputed and not retrieved.
+  validated truth. Unverified self-reports may anchor later runs; directly contradictory
+  self-reports are disputed and not retrieved. Future fold learning order must use its
+  fixed pre-registered seed.
 - SQLite supports this one-agent local experiment; PostgreSQL/Engram migration is deferred.
 - No semantic, reflective, shared, vector, or graph memory exists in Brain v1.
 - Five scenarios are insufficient for independent learning-effect estimates.
 
 ## Next Step
 
-Configure local-only live settings and obtain a fully ready enabled learn-mode preflight.
-Then run exactly one targeted Brain-enabled investigation and inspect its retrieval/write
-audit. Do not start the frozen smoke unless that audit and snapshot freeze succeed under
-the documented workflow. No official Brain benchmark or large held-out study is
-authorized.
+Finish validation and CI for the post-calibration fixes, then report whether the existing
+logical snapshot is compatible and safe to freeze. Do not freeze it or run the
+five-scenario smoke in this work item. No additional learn run, official Brain benchmark,
+large held-out study, or Phase 8 work is authorized.

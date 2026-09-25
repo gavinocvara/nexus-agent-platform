@@ -102,6 +102,14 @@ All meaningful changes to NEXUS are recorded here.
 
 ### Changed
 
+- Advanced the package to version 0.8.1 after the targeted Brain calibration. Legacy
+  analysis-version-1 summaries now preserve unavailable Phase 7 metrics as `null`, so
+  comparisons cannot manufacture historical zero values or deltas.
+- Made Brain configuration explicit outside the guarded benchmark CLI. Generic runtime
+  and benchmark constructors default to disabled, the legacy evaluation harness rejects
+  writable mode, and the ad-hoc investigator refuses ambient writable Brain settings.
+- Strengthened evaluator score/canary invariance through the complete scripted
+  benchmark/runtime path and require lock-schema-2 artifact digests to match `run_count`.
 - Advanced the package to version 0.8.0 for Phase 7 Brain v1. Benchmark schema 3 remains
   unchanged because Brain fields are backward-compatible additions with memoryless defaults;
   the locked Phase 6 baseline remains parseable and comparable.

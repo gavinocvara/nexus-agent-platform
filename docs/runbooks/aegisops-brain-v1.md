@@ -23,7 +23,10 @@ Instruction, tool, Diagnosis, scenario, model, and execution-limit hashes remain
 
 ## Learn Calibration
 
-Use a new ignored database. Do not point learn mode at a frozen snapshot.
+Use a new ignored database. Do not point learn mode at a frozen snapshot. Writable Brain
+is accepted only by the guarded benchmark `targeted` command. The ad-hoc
+`python -m nexus.aegisops` entry point refuses ambient enabled Brain settings, and the
+legacy multi-scenario evaluation harness refuses explicit `learn` mode.
 
 ```powershell
 $env:NEXUS_AGENT_ENABLED = "true"
@@ -39,6 +42,15 @@ Inspect the targeted run for recovery, at most 12 diagnostic calls, complete tur
 accounting, retrieval status and latency, context hash/size, retrieved IDs/content
 hashes, write count/latency, and pre/post snapshot hashes. An empty initial Brain has
 `retrieval_status=empty`; that is valid.
+
+The authorized targeted calibration is complete as session
+`c6832bae-feb7-4216-933e-139c734c2173`. It completed with verified recovery, 11/12 tool
+calls, three turns, complete accounting, no backend or Brain failure, empty initial
+retrieval, and two writes. The resulting active store contains one episodic and one
+procedural memory at logical SHA-256
+`9e7d36376c6b0c8c77d5a3f94cafcea22cb2a53a313986a2a3fe6aed4f0fd3b6`.
+Its component was correct but failure class was wrong at 0.97 confidence. Preserve that
+diagnosis as unverified historical self-report; do not tune retrieval or rewrite memory.
 
 ## Freeze State
 
@@ -70,6 +82,11 @@ Brain v1 therefore tests reusable procedural context, much like a learned prompt
 not true situation-specific episodic recall. The five-run smoke validates mechanism and
 security only. It overlaps the targeted learning scenario, has no placebo arm, and must
 not support a causal improvement claim or an official Brain baseline lock.
+
+With identical lexical overlap, ranking favors newer records before stable record-ID
+tie-breaking. The generic prompt may retrieve a procedural record while failing to match
+an episodic record's incident-specific terms. Because unverified self-reports may anchor
+later output, future fold learning order must use its fixed pre-registered seed.
 
 The deferred official protocol uses a contemporaneous memoryless control,
 length-matched placebo, five leave-one-scenario-out frozen snapshots, an evaluator-only

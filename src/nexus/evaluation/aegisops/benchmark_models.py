@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from nexus.aegisops.models import Diagnosis, ModelUsage, RunFailure
 from nexus.brain.models import BrainMode, BrainRunMetadata, MemoryType
@@ -230,13 +230,13 @@ class AggregateAnalysis(StrictModel):
     failure_class_accuracy: float = Field(ge=0, le=1)
     exact_diagnosis_accuracy: float = Field(ge=0, le=1)
     abstention_rate: float = Field(ge=0, le=1)
-    genuine_abstention_rate: float = Field(default=0, ge=0, le=1)
-    confident_wrong_rate: float = Field(default=0, ge=0, le=1)
+    genuine_abstention_rate: float | None = Field(default=None, ge=0, le=1)
+    confident_wrong_rate: float | None = Field(default=None, ge=0, le=1)
     invalid_output_rate: float = Field(ge=0, le=1)
     backend_failure_rate: float = Field(ge=0, le=1)
     tool_budget_failure_rate: float = Field(ge=0, le=1)
     timeout_rate: float = Field(ge=0, le=1)
-    brain_failure_rate: float = Field(default=0, ge=0, le=1)
+    brain_failure_rate: float | None = Field(default=None, ge=0, le=1)
     valid_evidence_reference_rate: float = Field(ge=0, le=1)
     unsupported_claim_rate: float = Field(ge=0, le=1)
     unsafe_attempt_rate: float = Field(ge=0, le=1)
@@ -254,12 +254,12 @@ class AggregateAnalysis(StrictModel):
     average_total_tokens: float | None = Field(default=None, ge=0)
     exact_diagnoses_per_tool_call: float | None = Field(default=None, ge=0)
     exact_diagnoses_per_1000_tokens: float | None = Field(default=None, ge=0)
-    brain_retrieval_count: int = Field(default=0, ge=0)
-    brain_memory_hit_rate: float = Field(default=0, ge=0, le=1)
-    investigations_using_retrieved_memory: int = Field(default=0, ge=0)
-    brain_memory_write_count: int = Field(default=0, ge=0)
-    average_brain_retrieval_latency_ms: float = Field(default=0, ge=0)
-    brain_attributable_input_tokens: int = Field(default=0, ge=0)
+    brain_retrieval_count: int | None = Field(default=None, ge=0)
+    brain_memory_hit_rate: float | None = Field(default=None, ge=0, le=1)
+    investigations_using_retrieved_memory: int | None = Field(default=None, ge=0)
+    brain_memory_write_count: int | None = Field(default=None, ge=0)
+    average_brain_retrieval_latency_ms: float | None = Field(default=None, ge=0)
+    brain_attributable_input_tokens: int | None = Field(default=None, ge=0)
 
 
 class BenchmarkSummary(StrictModel):
@@ -273,6 +273,25 @@ class BenchmarkSummary(StrictModel):
     confidence_calibration: list[ConfidenceBucket]
     scenarios: list[ScenarioAnalysis]
     tools: list[ToolUsageAnalysis]
+
+    @model_validator(mode="after")
+    def preserve_legacy_metric_availability(self) -> "BenchmarkSummary":
+        if self.analysis_version == 1:
+            self.aggregate = self.aggregate.model_copy(
+                update={
+                    "genuine_abstention_rate": None,
+                    "confident_wrong_rate": None,
+                    "brain_failure_rate": None,
+                    "average_end_to_end_latency_ms": None,
+                    "brain_retrieval_count": None,
+                    "brain_memory_hit_rate": None,
+                    "investigations_using_retrieved_memory": None,
+                    "brain_memory_write_count": None,
+                    "average_brain_retrieval_latency_ms": None,
+                    "brain_attributable_input_tokens": None,
+                }
+            )
+        return self
 
 
 class RegressionThresholds(StrictModel):
@@ -337,3 +356,16 @@ class LockedBaselineManifest(StrictModel):
     session_relative_path: str = Field(pattern=r"^[^\\]+$")
     artifacts: list[LockedArtifactDigest] = Field(min_length=3)
     preregistration_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+    @model_validator(mode="after")
+    def validate_complete_artifact_set(self) -> "LockedBaselineManifest":
+        prefix = self.session_relative_path.rstrip("/")
+        expected = {
+            f"{prefix}/manifest.json",
+            f"{prefix}/summary.json",
+            *(f"{prefix}/runs/run-{index:04d}.json" for index in range(1, self.run_count + 1)),
+        }
+        actual = [artifact.path for artifact in self.artifacts]
+        if len(actual) != len(set(actual)) or set(actual) != expected:
+            raise ValueError("Baseline artifact digests do not match run_count")
+        return self
