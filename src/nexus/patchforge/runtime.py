@@ -5,12 +5,13 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from hashlib import sha256
 from typing import Literal, Protocol, runtime_checkable
 from uuid import UUID
 
 from pydantic import AwareDatetime, Field, model_validator
 
-from nexus.atlas.models import StrictModel
+from nexus.atlas.models import CommitSha, Sha256, StrictModel
 from nexus.patchforge.canonical import canonical_sha256
 from nexus.patchforge.gateway import (
     BUDGET_FAILURE_CODES,
@@ -32,6 +33,7 @@ from nexus.patchforge.models import (
     PatchForgeFailure,
     PatchForgePhase,
     PatchOutcome,
+    RepositoryPath,
     RunBudgets,
     RunBudgetUsage,
     RunIdentity,
@@ -40,7 +42,13 @@ from nexus.patchforge.models import (
 )
 from nexus.patchforge.policy import PatchForgePolicy
 from nexus.patchforge.sandbox import SandboxExecution, SandboxStatus
-from nexus.patchforge.workspace import WorkspaceError, WorkspaceHandle
+from nexus.patchforge.workspace import (
+    ProposedCommit,
+    WorkspaceDiff,
+    WorkspaceError,
+    WorkspaceHandle,
+    WorkspaceNoChangesError,
+)
 
 Clock = Callable[[], datetime]
 
@@ -205,6 +213,89 @@ class LeaseRenewalRecord(StrictModel):
         return self
 
 
+# Tools that can change the worktree: writes, and operator commands run in the sandbox.
+STATE_TRACKED_TOOLS = frozenset(
+    {
+        ToolName.WRITE_PATCH,
+        ToolName.CREATE_FILE,
+        ToolName.DELETE_FILE,
+        ToolName.RUN_TARGETED_TESTS,
+        ToolName.RUN_TEST_SUITE,
+        ToolName.RUN_FORMATTER,
+        ToolName.RUN_LINTER,
+        ToolName.RUN_TYPECHECK,
+    }
+)
+
+
+class WorkspaceStateKind(StrEnum):
+    INITIAL = "initial"
+    BEFORE_CALL = "before_call"
+    AFTER_CALL = "after_call"
+
+
+class WorkspaceStateRecord(StrictModel):
+    """A runtime-owned fingerprint of the worktree diff at one point in the run."""
+
+    run_id: UUID
+    sequence: int = Field(ge=1)
+    kind: WorkspaceStateKind
+    tool_call_sequence: int | None = Field(default=None, ge=1)
+    diff_sha256: Sha256
+    changed_files: int = Field(ge=0)
+    captured_at: AwareDatetime
+    attested_by: Literal["patchforge.runtime"] = "patchforge.runtime"
+
+    @model_validator(mode="after")
+    def validate_call_link(self) -> WorkspaceStateRecord:
+        if (self.kind is WorkspaceStateKind.INITIAL) != (self.tool_call_sequence is None):
+            raise ValueError("Only the initial workspace state has no tool-call link")
+        return self
+
+
+class FinalCaptureError(StrEnum):
+    NO_CHANGES = "no_changes"
+    WORKSPACE_ERROR = "workspace_error"
+
+
+class FinalWorkspaceCapture(StrictModel):
+    """The reported worktree, committed by the runtime before cleanup removes it."""
+
+    run_id: UUID
+    base_sha: CommitSha
+    proposed_head_sha: CommitSha
+    diff_sha256: Sha256
+    patch: bytes
+    changed_files: list[RepositoryPath] = Field(min_length=1, max_length=1000)
+    binary_files: list[RepositoryPath] = Field(default_factory=list, max_length=1000)
+    additions: int = Field(ge=0)
+    deletions: int = Field(ge=0)
+    committed_at: AwareDatetime
+    attested_by: Literal["patchforge.runtime"] = "patchforge.runtime"
+
+    @model_validator(mode="after")
+    def validate_patch_hash(self) -> FinalWorkspaceCapture:
+        if sha256(self.patch).hexdigest() != self.diff_sha256:
+            raise ValueError("Final patch bytes do not match their recorded hash")
+        return self
+
+    @classmethod
+    def from_proposal(cls, run_id: UUID, proposal: ProposedCommit) -> FinalWorkspaceCapture:
+        diff = proposal.diff
+        return cls(
+            run_id=run_id,
+            base_sha=diff.base_sha,
+            proposed_head_sha=proposal.commit_sha,
+            diff_sha256=diff.diff_sha256,
+            patch=diff.patch,
+            changed_files=list(diff.changed_files),
+            binary_files=list(diff.binary_files),
+            additions=diff.additions,
+            deletions=diff.deletions,
+            committed_at=proposal.committed_at,
+        )
+
+
 class RuntimeCompletion(StrictModel):
     identity: RunIdentity
     snapshot: RuntimeSnapshot
@@ -214,6 +305,9 @@ class RuntimeCompletion(StrictModel):
     executions: list[SandboxExecution] = Field(default_factory=list, max_length=1000)
     budget_usage: RunBudgetUsage
     lease_renewals: list[LeaseRenewalRecord] = Field(default_factory=list, max_length=10_000)
+    workspace_states: list[WorkspaceStateRecord] = Field(default_factory=list, max_length=30_000)
+    final_capture: FinalWorkspaceCapture | None = None
+    final_capture_error: FinalCaptureError | None = None
     workspace_cleaned: bool
     attested_by: Literal["patchforge.runtime"] = "patchforge.runtime"
 
@@ -235,6 +329,23 @@ class RuntimeCompletion(StrictModel):
             raise ValueError("Runtime budget usage does not match tool-call evidence")
         if any(item.run_id != self.identity.run_id for item in self.lease_renewals):
             raise ValueError("Lease renewal belongs to another run")
+        if any(item.run_id != self.identity.run_id for item in self.workspace_states):
+            raise ValueError("Workspace state belongs to another run")
+        if [item.sequence for item in self.workspace_states] != list(
+            range(1, len(self.workspace_states) + 1)
+        ):
+            raise ValueError("Workspace state sequence must be contiguous")
+        if self.final_capture is not None and self.final_capture_error is not None:
+            raise ValueError("Final capture cannot both exist and fail")
+        if self.final_capture is not None:
+            if self.final_capture.run_id != self.identity.run_id:
+                raise ValueError("Final capture belongs to another run")
+            if self.final_capture.base_sha != self.identity.source.commit_sha:
+                raise ValueError("Final capture base does not match the run source")
+        if self.report is None and (
+            self.final_capture is not None or self.final_capture_error is not None
+        ):
+            raise ValueError("Only a reported run captures its final workspace")
         report_outputs = [
             item.output for item in self.gateway_results if isinstance(item.output, ReportOutput)
         ]
@@ -292,6 +403,16 @@ class RuntimeGateway(Protocol):
 
 @runtime_checkable
 class RuntimeWorkspaceManager(Protocol):
+    def inspect_diff(self, handle: WorkspaceHandle) -> WorkspaceDiff: ...
+
+    def propose_commit(
+        self,
+        handle: WorkspaceHandle,
+        *,
+        message: str,
+        committed_at: datetime,
+    ) -> ProposedCommit: ...
+
     def renew_lease(
         self,
         handle: WorkspaceHandle,
@@ -480,6 +601,9 @@ class PatchForgeRuntime:
         self._results: list[GatewayResult] = []
         self._renewals: list[LeaseRenewalRecord] = []
         self._report: AgentReport | None = None
+        self._states: list[WorkspaceStateRecord] = []
+        self._final_capture: FinalWorkspaceCapture | None = None
+        self._final_capture_error: FinalCaptureError | None = None
         self._workspace_cleaned = False
 
     def execute(self) -> RuntimeCompletion:
@@ -487,6 +611,10 @@ class PatchForgeRuntime:
         try:
             self.lifecycle.advance(PatchForgePhase.PROVISIONING)
             self.lifecycle.advance(PatchForgePhase.RECON)
+            try:
+                self._capture_state(WorkspaceStateKind.INITIAL)
+            except WorkspaceError:
+                self._record_failure(PatchForgeFailure.WORKSPACE_ERROR)
             while self.lifecycle.phase not in {
                 PatchForgePhase.REPORTED,
                 PatchForgePhase.CLEANUP,
@@ -505,9 +633,12 @@ class PatchForgeRuntime:
                 action = self._next_action(turn)
                 if action is None:
                     continue
+                tracked = action.tool_name in STATE_TRACKED_TOOLS
                 try:
                     if self.gateway.requires_workspace(action.tool_name):
                         self._renew_workspace()
+                    if tracked:
+                        self._capture_state(WorkspaceStateKind.BEFORE_CALL)
                 except WorkspaceError:
                     self._record_failure(PatchForgeFailure.WORKSPACE_ERROR)
                     continue
@@ -525,6 +656,12 @@ class PatchForgeRuntime:
                     continue
                 self._results.append(result)
                 previous_result = result
+                if tracked:
+                    try:
+                        self._capture_state(WorkspaceStateKind.AFTER_CALL)
+                    except WorkspaceError:
+                        self._record_failure(PatchForgeFailure.WORKSPACE_ERROR)
+                        continue
                 try:
                     self._accept_result(action, result)
                 except RuntimeTransitionError as exc:
@@ -545,6 +682,9 @@ class PatchForgeRuntime:
             executions=list(self.gateway.executions),
             budget_usage=self.gateway.budget_usage,
             lease_renewals=self._renewals,
+            workspace_states=self._states,
+            final_capture=self._final_capture,
+            final_capture_error=self._final_capture_error,
             workspace_cleaned=self._workspace_cleaned,
         )
 
@@ -556,6 +696,43 @@ class PatchForgeRuntime:
         except Exception:
             self._record_failure(PatchForgeFailure.ENGINE_ERROR)
         return None
+
+    def _capture_state(self, kind: WorkspaceStateKind) -> None:
+        diff = self.workspace_manager.inspect_diff(self.gateway.workspace)
+        call_sequence: int | None = None
+        if kind is WorkspaceStateKind.BEFORE_CALL:
+            call_sequence = len(self.gateway.records) + 1
+        elif kind is WorkspaceStateKind.AFTER_CALL:
+            call_sequence = self.gateway.records[-1].sequence
+        self._states.append(
+            WorkspaceStateRecord(
+                run_id=self.gateway.identity.run_id,
+                sequence=len(self._states) + 1,
+                kind=kind,
+                tool_call_sequence=call_sequence,
+                diff_sha256=diff.diff_sha256,
+                changed_files=len(diff.changed_files),
+                captured_at=self._clock(),
+            )
+        )
+
+    def _capture_final(self) -> None:
+        identity = self.gateway.identity
+        try:
+            proposal = self.workspace_manager.propose_commit(
+                self.gateway.workspace,
+                message=(
+                    f"PatchForge proposal for task {identity.task_id}\n\n"
+                    f"Run: {identity.run_id}\nAtlas job: {identity.atlas_job_id}"
+                ),
+                committed_at=self._clock(),
+            )
+        except WorkspaceNoChangesError:
+            self._final_capture_error = FinalCaptureError.NO_CHANGES
+        except (WorkspaceError, OSError):
+            self._final_capture_error = FinalCaptureError.WORKSPACE_ERROR
+        else:
+            self._final_capture = FinalWorkspaceCapture.from_proposal(identity.run_id, proposal)
 
     def _renew_workspace(self) -> None:
         current = self.gateway.workspace
@@ -624,6 +801,7 @@ class PatchForgeRuntime:
     def _finish_cleanup(self) -> None:
         phase = self.lifecycle.phase
         if phase is PatchForgePhase.REPORTED:
+            self._capture_final()
             self.lifecycle.begin_cleanup()
         elif phase is PatchForgePhase.FINALIZE:
             self.lifecycle.finalization_failed(PatchForgeFailure.ENGINE_ERROR)

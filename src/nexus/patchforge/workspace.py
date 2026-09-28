@@ -65,6 +65,10 @@ class WorkspaceIntegrityError(WorkspaceError):
     """The workspace cannot be attested faithfully and must fail closed."""
 
 
+class WorkspaceNoChangesError(WorkspaceError):
+    """The workspace has no changes relative to its source commit."""
+
+
 class WorkspaceState(StrEnum):
     PROVISIONING = "provisioning"
     ACTIVE = "active"
@@ -442,7 +446,7 @@ class WorkspaceManager:
         current = self._verify_handle(handle)
         diff = self.inspect_diff(current)
         if not diff.changed_files:
-            raise WorkspaceError("Workspace has no changes to propose")
+            raise WorkspaceNoChangesError("Workspace has no changes to propose")
         index_file = current.root / "control" / "proposal.index"
         timestamp = f"@{int(committed_at.timestamp())} +0000"
         environment = {

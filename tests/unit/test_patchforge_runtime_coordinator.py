@@ -50,16 +50,21 @@ from nexus.patchforge.policy import (
     SandboxPolicy,
 )
 from nexus.patchforge.runtime import (
+    FinalCaptureError,
     PatchForgeRuntime,
     RuntimeCancelledError,
     RuntimeToolAction,
     RuntimeTurn,
+    WorkspaceStateKind,
 )
 from nexus.patchforge.sandbox import FakeSandbox, FakeSandboxPlan, SandboxStatus
 from nexus.patchforge.workspace import (
+    ProposedCommit,
+    WorkspaceDiff,
     WorkspaceError,
     WorkspaceHandle,
     WorkspaceManager,
+    WorkspaceNoChangesError,
     WorkspaceRecord,
     WorkspaceState,
 )
@@ -167,6 +172,19 @@ class FakeWorkspaceManager:
         self.cleanup_error = cleanup_error
         self.renewals = 0
         self.cleanup_calls = 0
+        self.proposals = 0
+        self.proposed_before_cleanup = False
+        self.inspections = 0
+        self.inspect_error_at: int | None = None
+        self.diff = WorkspaceDiff(
+            base_sha="a" * 40,
+            patch=b"",
+            diff_sha256=sha256(b"").hexdigest(),
+            changed_files=(),
+            additions=0,
+            deletions=0,
+            binary_files=(),
+        )
 
     def renew_lease(
         self,
@@ -179,6 +197,25 @@ class FakeWorkspaceManager:
             update={"lease_expires_at": handle.record.lease_expires_at + lease_duration}
         )
         return handle.model_copy(update={"record": record})
+
+    def inspect_diff(self, handle: WorkspaceHandle) -> WorkspaceDiff:
+        self.inspections += 1
+        if self.inspect_error_at is not None and self.inspections >= self.inspect_error_at:
+            raise WorkspaceError("fixture inspection failed")
+        return self.diff
+
+    def propose_commit(
+        self,
+        handle: WorkspaceHandle,
+        *,
+        message: str,
+        committed_at: datetime,
+    ) -> ProposedCommit:
+        self.proposals += 1
+        self.proposed_before_cleanup = self.cleanup_calls == 0
+        if not self.diff.changed_files:
+            raise WorkspaceNoChangesError("fixture has no changes")
+        return ProposedCommit(commit_sha="e" * 40, committed_at=committed_at, diff=self.diff)
 
     def cleanup(self, workspace_id: UUID) -> bool:
         assert workspace_id == UUID(int=1)
@@ -813,3 +850,105 @@ def test_real_gateway_workspace_and_fake_sandbox_complete_closed_runtime(
     )
     assert completion.gateway_results[-1].record.tool_name is ToolName.SUBMIT_REPORT
     assert not handle.root.exists()
+
+    states = completion.workspace_states
+    assert states[0].kind is WorkspaceStateKind.INITIAL and states[0].changed_files == 0
+    tracked = [item for item in states if item.kind is not WorkspaceStateKind.INITIAL]
+    assert len(tracked) == 8
+    by_call = {(item.tool_call_sequence, item.kind): item.diff_sha256 for item in tracked}
+    write_sequence = next(
+        item.record.sequence
+        for item in completion.gateway_results
+        if item.record.tool_name is ToolName.WRITE_PATCH
+    )
+    assert (
+        by_call[(write_sequence, WorkspaceStateKind.BEFORE_CALL)]
+        != by_call[(write_sequence, WorkspaceStateKind.AFTER_CALL)]
+    )
+    capture = completion.final_capture
+    assert capture is not None and completion.final_capture_error is None
+    assert capture.base_sha == source_sha
+    assert capture.changed_files == ["calculator.py"]
+    assert capture.diff_sha256 == states[-1].diff_sha256
+    assert b"return a - b" in capture.patch
+    assert capture.proposed_head_sha != source_sha
+    assert capture.committed_at == NOW
+
+
+def _changed_diff() -> WorkspaceDiff:
+    patch = b"diff --git a/calculator.py b/calculator.py\n"
+    return WorkspaceDiff(
+        base_sha="a" * 40,
+        patch=patch,
+        diff_sha256=sha256(patch).hexdigest(),
+        changed_files=("calculator.py",),
+        additions=1,
+        deletions=1,
+        binary_files=(),
+    )
+
+
+def test_tracked_tools_are_fingerprinted_before_and_after_each_call() -> None:
+    actions: list[RuntimeToolAction | Exception] = [
+        RuntimeToolAction(tool_name=ToolName.RUN_LINTER),
+        RuntimeToolAction(tool_name=ToolName.GIT_STATUS),
+        *_happy_actions(),
+    ]
+    runtime, gateway, manager, _ = _runtime(actions=actions)
+    manager.diff = _changed_diff()
+
+    completion = runtime.execute()
+
+    states = completion.workspace_states
+    assert [(item.kind, item.tool_call_sequence) for item in states] == [
+        (WorkspaceStateKind.INITIAL, None),
+        (WorkspaceStateKind.BEFORE_CALL, 1),
+        (WorkspaceStateKind.AFTER_CALL, 1),
+    ]
+    assert gateway.records[0].tool_name is ToolName.RUN_LINTER
+    assert all(item.diff_sha256 == manager.diff.diff_sha256 for item in states)
+    capture = completion.final_capture
+    assert capture is not None and completion.final_capture_error is None
+    assert capture.proposed_head_sha == "e" * 40
+    assert capture.changed_files == ["calculator.py"]
+    assert capture.diff_sha256 == sha256(capture.patch).hexdigest()
+    assert manager.proposals == 1 and manager.proposed_before_cleanup is True
+    assert completion.workspace_cleaned is True
+
+
+def test_reported_run_without_changes_records_a_typed_capture_error() -> None:
+    runtime, _, manager, _ = _runtime(actions=_happy_actions())
+
+    completion = runtime.execute()
+
+    assert completion.final_capture is None
+    assert completion.final_capture_error is FinalCaptureError.NO_CHANGES
+    assert completion.workspace_states[0].kind is WorkspaceStateKind.INITIAL
+    assert completion.workspace_states[0].changed_files == 0
+    assert manager.proposals == 1
+
+
+@pytest.mark.parametrize("error_at", [1, 2, 3])
+def test_workspace_fingerprint_failures_are_typed_workspace_failures(error_at: int) -> None:
+    actions: list[RuntimeToolAction | Exception] = [
+        RuntimeToolAction(tool_name=ToolName.RUN_LINTER),
+        *_happy_actions(),
+    ]
+    runtime, _, manager, _ = _runtime(actions=actions)
+    manager.inspect_error_at = error_at
+
+    completion = runtime.execute()
+
+    assert completion.snapshot.failure is PatchForgeFailure.WORKSPACE_ERROR
+    assert len(completion.workspace_states) == error_at - 1
+    assert completion.workspace_cleaned is True
+
+
+def test_unreported_runs_do_not_propose_a_commit() -> None:
+    runtime, _, manager, _ = _runtime(actions=[RuntimeCancelledError("stop")])
+
+    completion = runtime.execute()
+
+    assert completion.report is None
+    assert completion.final_capture is None and completion.final_capture_error is None
+    assert manager.proposals == 0
