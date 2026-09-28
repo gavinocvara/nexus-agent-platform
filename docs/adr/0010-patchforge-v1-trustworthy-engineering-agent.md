@@ -169,8 +169,15 @@ committed with a fixed identity and date. Fixed clocks and content-derived ident
 make every scenario replay to a byte-identical `PatchResult`. The catalog covers success
 and one scenario per `PatchForgeFailure`, and `python -m nexus.patchforge.e2e_catalog`
 (a CI step) fails on any unexpected outcome or non-identical replay. Fault injection is
-limited to the harness: out-of-band worktree edits, in-sandbox edits, and a refused
-cleanup.
+limited to the harness: out-of-band worktree edits, in-sandbox edits, a refused lease
+renewal, and a refused cleanup.
+
+In 0.16.1 every E2E run must also satisfy universal invariants: a closed transcript
+through cleanup, workspace removal, runtime-owned evidence linkage, an untouched source
+repository (no push, merge, or approval), sandbox requests without network or secrets,
+memory disabled, and a scripted engine. A failure during `finalize` still ends
+finalization without a report, even when the refusal came from the report reserve; this
+fails closed and remains an open design question.
 
 ## Budgets And Runtime
 

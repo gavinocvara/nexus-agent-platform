@@ -8,6 +8,20 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
+## 0.16.1 — PatchForge Milestone G completion
+
+- The deterministic E2E catalog grows to 21 scenarios: success, inability to reproduce
+  (already passing and skipped), targeted and full-suite validation failure, a
+  successful bounded retry, budget exhaustion, cancellation, policy, workspace and
+  lease-renewal failure, sandbox, engine, finalization and cleanup failure, in-run and
+  post-final tamper, stale validation, unknown report evidence, and
+  finalization-reserve use and refusal.
+- Every E2E run is checked for universal invariants: a closed transcript through
+  cleanup, workspace removal, runtime-owned evidence linkage, an untouched source
+  repository, isolated sandbox requests, memory disabled, and a scripted engine.
+- The harness can refuse the Nth lease renewal, and the gate reports the specific
+  expectation a scenario violated.
+
 ## 0.16.0 — PatchForge Milestone G: Deterministic E2E (`915ea12`)
 
 - `PatchForgeE2EHarness` runs scenarios through the real PatchForge path around a
