@@ -49,6 +49,24 @@ class SandboxCommand(StrictModel):
     timeout_seconds: int = Field(ge=1, le=86_400)
     max_output_bytes: int = Field(ge=1, le=100_000_000)
 
+    @field_validator("executable")
+    @classmethod
+    def reject_shells(cls, value: Identifier) -> Identifier:
+        if value.casefold() in {
+            "bash",
+            "cmd",
+            "cmd.exe",
+            "dash",
+            "fish",
+            "powershell",
+            "powershell.exe",
+            "pwsh",
+            "sh",
+            "zsh",
+        }:
+            raise ValueError("Repository commands cannot invoke a shell")
+        return value
+
 
 class RepositoryProfile(StrictModel):
     schema_version: Literal[1] = 1

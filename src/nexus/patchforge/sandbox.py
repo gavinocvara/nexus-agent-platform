@@ -207,6 +207,7 @@ class DockerSandbox:
 
     def execute(self, request: SandboxRequest) -> SandboxExecution:
         workspace = self._validate_workspace(request.workspace)
+        self._validate_working_directory(workspace, request.command.working_directory)
         started_at = self._now()
         execution_id = self._id_factory()
         container_name = self.container_name(request)
@@ -326,6 +327,9 @@ class DockerSandbox:
         policy = request.policy
         cpu_limit = f"{policy.cpu_limit_millis / 1000:.3f}"
         mount = f"type=bind,source={workspace},target=/workspace"
+        container_workdir = "/workspace"
+        if request.command.working_directory != ".":
+            container_workdir = f"/workspace/{request.command.working_directory}"
         return [
             self.docker_executable,
             "run",
@@ -356,7 +360,7 @@ class DockerSandbox:
             "--mount",
             mount,
             "--workdir",
-            "/workspace",
+            container_workdir,
             "--env",
             "HOME=/tmp",
             "--env",
@@ -385,6 +389,21 @@ class DockerSandbox:
             if ".git" in directories or ".git" in files:
                 raise SandboxPolicyError("Sandbox workspace cannot contain Git metadata")
         return resolved
+
+    @staticmethod
+    def _validate_working_directory(workspace: Path, relative: str) -> None:
+        candidate = workspace if relative == "." else workspace.joinpath(*relative.split("/"))
+        try:
+            resolved = candidate.resolve(strict=True)
+        except OSError as exc:
+            raise SandboxPolicyError("Sandbox working directory does not exist") from exc
+        if not resolved.is_relative_to(workspace) or not resolved.is_dir():
+            raise SandboxPolicyError("Sandbox working directory is invalid")
+        current = workspace
+        for part in () if relative == "." else relative.split("/"):
+            current = current / part
+            if current.is_symlink():
+                raise SandboxPolicyError("Sandbox working directory cannot use symbolic links")
 
     @staticmethod
     def _drain(stream: BinaryIO, capture: _ProcessCapture, name: str) -> None:

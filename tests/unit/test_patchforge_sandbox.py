@@ -156,6 +156,26 @@ def test_docker_command_enforces_every_v1_isolation_flag(tmp_path: Path) -> None
     assert "--volume" not in command
 
 
+def test_docker_command_uses_only_a_verified_repository_working_directory(
+    tmp_path: Path,
+) -> None:
+    subdirectory = tmp_path / "tests"
+    subdirectory.mkdir()
+    request = _request(tmp_path).model_copy(
+        update={
+            "command": _command().model_copy(update={"working_directory": "tests"}),
+        }
+    )
+    docker = DockerSandbox(docker_executable=str(tmp_path / "docker"))
+
+    docker._validate_working_directory(tmp_path.resolve(), "tests")
+    command = docker.build_command(request, tmp_path.resolve(), docker.container_name(request))
+    assert "/workspace/tests" in command
+
+    with pytest.raises(SandboxPolicyError, match="does not exist"):
+        docker._validate_working_directory(tmp_path.resolve(), "missing")
+
+
 @pytest.mark.parametrize("entry_type", ["file", "directory"])
 def test_docker_sandbox_rejects_git_metadata_anywhere(
     tmp_path: Path,

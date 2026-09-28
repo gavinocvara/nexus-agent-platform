@@ -3,10 +3,10 @@
 ## Current Milestone
 
 The accelerated PatchForge v1 track is active. Milestones A - Contracts, B -
-WorkspaceManager, and C - SandboxExecutor are complete in the current checkpoint;
-Milestone D - ToolGateway is next. Atlas-min remains the outer job, policy, review,
-approval, persistence, and audit boundary. No PatchForge model-facing tool gateway,
-runtime, model call, GitHub action, or memory behavior is claimed yet.
+WorkspaceManager, and C - SandboxExecutor are complete. Milestone D - ToolGateway is in
+progress at a typed foundation checkpoint. Atlas-min remains the outer job, policy,
+review, approval, persistence, and audit boundary. No PatchForge runtime, model call,
+GitHub action, or memory behavior is claimed yet.
 
 Phase 7 Brain v1 remains accepted complete with its documented negative behavioral
 calibration and preserved frozen evidence. Phase 8 Atlas remains complete and unchanged.
@@ -33,6 +33,7 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - PatchForge v1 contracts checkpoint: the commit containing this document
 - PatchForge v1 workspace checkpoint: the commit containing this document
 - PatchForge v1 sandbox checkpoint: the commit containing this document
+- PatchForge v1 ToolGateway foundation: the commit containing this document
 
 ## Locked Phase 6 Baseline
 
@@ -188,6 +189,24 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - The sandbox trusts the operator-selected content-addressed image itself. No model-facing
   tool gateway, runtime phase loop, target-repository commit, or remote operation exists.
 
+## PatchForge v1 ToolGateway (In Progress)
+
+- The typed gateway foundation validates strict arguments and emits runtime-owned IDs,
+  contiguous call records, typed outputs, canonical argument hashes, and append-only
+  evidence for read, write, Git-inspection, fixed-profile execution, and control tools.
+- Read tools are bounded and deny sensitive paths and symbolic links. Writes are atomic,
+  compare-and-swap where applicable, constrained to task scope, and reject protected,
+  sensitive, and policy-disabled test paths. Git remains runtime-owned outside Docker.
+- Execution tools can select only immutable operator-profile commands and run through the
+  existing `SandboxExecutor`; repository profiles now reject shell executables. Docker
+  validates profile-selected repository working directories before execution.
+- Capability, phase, call, duration, output, and finalization-reserve checks exist at the
+  gateway boundary. `advance_phase` and `submit_report` emit typed requests only and do
+  not mutate lifecycle state; Milestone E remains responsible for transitions.
+- This is a resumable foundation checkpoint, not Milestone D completion. Expected
+  workspace/sandbox I/O error normalization, exhaustive execution-tool mapping coverage,
+  repository-wide validation, documentation/version finalization, and CI remain required.
+
 ## Experimental Design
 
 The byte-hashed protocol in `docs/experiments/brain-v1-protocol.json` pre-registers the
@@ -261,6 +280,12 @@ py -m pytest -m integration tests/integration
 
 ## Latest Validation
 
+- PatchForge Milestone D foundation validation on 2026-09-27: all 45 focused gateway,
+  policy, and sandbox unit tests pass; Ruff formatting and lint pass for the affected
+  files; strict mypy reports no issues in all 7 PatchForge source files. The previously
+  reported policy-fixture regression is not present: the valid fixture remains within
+  its sandbox bounds and explicit negative timeout/output-bound tests pass. The broad
+  repository suite and CI have not yet run for this in-progress milestone.
 - PatchForge Milestone C version 0.12.0 validation on 2026-09-27: the editable package
   installs and `pip check` passes; all 149 files pass Ruff formatting; Ruff lint passes;
   strict mypy reports no issues in 83 source files; all 313 non-integration tests pass
@@ -456,14 +481,15 @@ requirement is incompatible with the architecture.
 - Five scenarios are insufficient for independent learning-effect estimates.
 - Atlas v1 is deliberately single-node. It has no remote API, scheduler, worker heartbeat,
   distributed claim protocol, credential broker, or PostgreSQL control-plane backend.
-- PatchForge has no model-facing ToolGateway or runtime yet. `DockerSandbox` enforces the
-  Milestone C boundary, but only for operator-selected content-addressed images and
-  operator-profile commands; image provenance/signing is outside v1.
+- PatchForge's ToolGateway is in progress and has no model adapter or runtime yet.
+  `DockerSandbox` enforces the Milestone C boundary, but only for operator-selected
+  content-addressed images and operator-profile commands; image provenance/signing is
+  outside v1.
 
 ## Next Step
 
-Implement PatchForge Milestone D `ToolGateway`: expose only narrow, typed repository
-read/search/write, operator-profile command execution, diff, and control operations over
-the disposable workspace and `SandboxExecutor`. Enforce phase/capability/budget/path
-policy before every call, record runtime-owned evidence, and keep shell, Git metadata,
-network, secrets, commits, pushes, approvals, deployment, and memory inaccessible.
+Continue PatchForge Milestone D from the typed gateway foundation. Normalize expected
+workspace/sandbox I/O failures into typed call evidence, verify truncation accounting,
+cover every fixed execution-tool mapping and constructor binding, then run the complete
+deterministic suite. Finalize Milestone D documentation/version and CI only after those
+checks pass. Do not begin the Milestone E runtime state machine yet.
