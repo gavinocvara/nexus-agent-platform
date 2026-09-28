@@ -5,7 +5,10 @@
 - Branch: `main`
 - Milestone D implementation checkpoint:
   `cbb65ce9eb9bf8d437d9d62ac57f2c4aeb6b3edd`
-- Milestone D release commit: the commit containing this file; resolve with
+- Milestone D release commit: `bbb093e37421050bf2d31ea8a912c3e7a634ac9f`
+- Verified release CI: GitHub Actions run `36390696248`; `validate` and
+  `compose-integration` both passed on the first attempt
+- Final handoff checkpoint: the commit containing this file; resolve with
   `git rev-parse HEAD`
 - NEXUS version: `0.13.0`
 - Completed milestone: PatchForge Milestone D - ToolGateway
@@ -64,16 +67,16 @@
 - Real Docker sandbox integration: **3 passed**.
 - Secret-pattern scan: **no matches**. Governing specifications and frozen Phase 7
   protocol/report files remain unchanged.
-- The final release gate and GitHub Actions result are recorded in `PROJECT_STATE.md`
-  and should be verified against the release commit before Milestone E begins.
+- GitHub Actions run `36390696248` passed both required jobs for release commit
+  `bbb093e37421050bf2d31ea8a912c3e7a634ac9f`.
 
 ## Current State
 
 - No known Milestone D test failure remains.
 - Expected uncommitted work after the release commit: none. Verify with
   `git status --short`.
-- The Milestone D release is complete only when the release commit is on `origin/main`
-  and both `validate` and `compose-integration` GitHub Actions jobs pass.
+- Milestone D release commit `bbb093e` is on `origin/main`, and both required GitHub
+  Actions jobs passed. Milestone D is complete.
 - No live model calls were performed.
 
 ## Exact Next Step

@@ -33,7 +33,7 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - PatchForge v1 contracts checkpoint: the commit containing this document
 - PatchForge v1 workspace checkpoint: the commit containing this document
 - PatchForge v1 sandbox checkpoint: the commit containing this document
-- PatchForge v1 ToolGateway completion: the commit containing this document
+- PatchForge v1 ToolGateway release: `bbb093e37421050bf2d31ea8a912c3e7a634ac9f`
 
 ## Locked Phase 6 Baseline
 
@@ -289,6 +289,8 @@ py -m pytest -m integration tests/integration
   All five scenarios validate, Compose configuration is valid, and all three explicitly
   enabled real Docker isolation tests pass. Secret scanning found no matches; governing
   specifications and frozen Phase 7 protocol/report files are unchanged.
+- GitHub Actions run `36390696248` for release commit `bbb093e` passed both `validate`
+  and `compose-integration` on the first attempt.
 - PatchForge Milestone D command/binding hardening on 2026-09-28: all 37 gateway unit
   tests pass; strict mypy remains clean across 7 PatchForge source files and focused Ruff
   lint passes. Reproduction and targeted validation select distinct operator commands;
