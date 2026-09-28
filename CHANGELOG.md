@@ -8,7 +8,7 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
-## 0.13.1 — PatchForge Milestone D hardening
+## 0.13.1 — PatchForge Milestone D hardening (`16a58f3`)
 
 ### Security
 

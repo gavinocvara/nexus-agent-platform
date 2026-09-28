@@ -10,18 +10,17 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
   D (ToolGateway) are complete, plus the Milestone D hardening release.
 - Hardening fixed all seven findings from the independent adversarial review of
   Milestone D, with one deterministic regression test each (ADR 0010, CHANGELOG 0.13.1).
-- Last local gate: see the 0.13.1 commit message. GitHub Actions for the 0.13.1 commit
-  must be green before Milestone E starts. The Docker sandbox integration tests were not
-  rerun locally; `sandbox.py` is unchanged and CI `compose-integration` covers them.
+- Release commit `16a58f338267237c261233764e167433b3cb28c3`. GitHub Actions run
+  `36399394926` passed `validate` and `compose-integration` on the first attempt.
+  Locally: 372 passed (23 integration deselected), Ruff and strict mypy clean.
 
 ## Active Issues
 
 - No known failing tests.
-- Record the 0.13.1 commit SHA in its CHANGELOG heading once CI is green.
 
 ## Exact Next Step
 
-After CI is green for 0.13.1, begin PatchForge Milestone E (Runtime): a closed phased
+Begin PatchForge Milestone E (Runtime): a closed phased
 workflow over the existing ToolGateway, with bounded implement ⇄ validate loops and a
 structurally reserved finalization capacity. The runtime must call
 `ToolGateway.refresh_workspace` after every lease renewal.
