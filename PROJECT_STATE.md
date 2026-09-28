@@ -282,6 +282,12 @@ py -m pytest -m integration tests/integration
 
 ## Latest Validation
 
+- PatchForge Milestone D pre-release validation on 2026-09-28: the complete local gate
+  passes with 351 non-integration tests and 23 deselected, 60 focused gateway/policy/
+  sandbox tests, all 152 files formatted, Ruff clean, strict mypy clean across 84 source
+  files, dependency health clean, five scenarios validated, and Compose configuration
+  valid. All three real Docker isolation tests pass. Secret scanning found no matches;
+  governing specifications and frozen Phase 7 protocol/report files are unchanged.
 - PatchForge Milestone D command/binding hardening on 2026-09-28: all 37 gateway unit
   tests pass; strict mypy remains clean across 7 PatchForge source files and focused Ruff
   lint passes. Reproduction and targeted validation select distinct operator commands;
@@ -500,7 +506,6 @@ requirement is incompatible with the architecture.
 
 ## Next Step
 
-Continue PatchForge Milestone D with the complete deterministic suite, full Ruff/mypy,
-frozen-boundary checks, scenario/Compose validation, and the three real Docker sandbox
-tests. Finalize documentation/version and CI only after those checks pass. Do not begin
-the Milestone E runtime state machine.
+Finalize PatchForge Milestone D documentation and version `0.13.0`, rerun the release
+gate, commit and push, then require successful `validate` and `compose-integration` CI
+jobs. Do not begin the Milestone E runtime state machine in that checkpoint.

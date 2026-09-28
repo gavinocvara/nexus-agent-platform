@@ -10,6 +10,8 @@
   `03b9e5d8ecb545ab6207ed7a83d44e071743225d`
 - Error/truncation hardening commit:
   `c19a623` (resolve the full SHA with `git rev-parse c19a623`)
+- Command-routing and trust-binding commit:
+  `9bdd774` (resolve the full SHA with `git rev-parse 9bdd774`)
 - NEXUS version: `0.12.0`
 - Active milestone: PatchForge Milestone D - ToolGateway, **in progress**
 
@@ -38,6 +40,9 @@
   now has explicit deterministic coverage.
 - Bound gateway construction to Atlas job, agent, task hash, source revision, repository
   profile URL/hash, and a runtime-verified workspace handle.
+- Completed the local Milestone D validation gate with the full deterministic suite,
+  repository-wide Ruff/mypy, dependency/scenario/Compose checks, three real Docker
+  isolation proofs, secret scanning, and frozen-specification checks.
 
 ## Files Changed
 
@@ -55,6 +60,15 @@
 - Foundation focused gate: **45 passed** across gateway, policy, and sandbox unit tests.
 - Latest gateway hardening gate: `pytest tests/unit/test_patchforge_gateway.py -q`:
   **37 passed**
+- Combined focused gateway/policy/sandbox gate: **60 passed**
+- Full non-integration suite: **351 passed, 23 deselected**
+- Repository formatting: **152 files already formatted**; Ruff lint: **passed**
+- Strict mypy: **84 source files passed**; `pip check`: **passed**
+- Scenarios: **5 validated**; Compose configuration: **passed** with expected warnings
+  for absent local PostgreSQL environment values
+- Real Docker sandbox integration: **3 passed**
+- Secret-pattern scan: **no matches**; governing specifications and frozen Phase 7
+  protocol/report: **unchanged from HEAD**
 - `ruff check` on PatchForge sources and the three focused test files: **passed**
 - `ruff format --check` on the same files: **10 files already formatted**
 - `mypy src/nexus/patchforge`: **passed, 7 source files**
@@ -65,9 +79,9 @@
 ## Current Gaps
 
 - No focused test is failing.
-- The full repository suite, real Docker integration, secret scan, frozen-artifact diff,
-  and GitHub Actions have not yet run for the Milestone D foundation.
 - Milestone D docs, changelog, version bump, and final CI are intentionally deferred.
+- GitHub Actions for the latest implementation commits must be checked; the final
+  Milestone D release commit still requires both `validate` and `compose-integration`.
 
 ## Uncommitted Work
 
@@ -77,11 +91,11 @@
 
 ## Exact Next Step
 
-Continue Milestone D only. Run the complete deterministic suite, full Ruff/mypy checks,
-frozen-boundary checks, scenario/Compose validation, and the three real Docker sandbox
-tests. Fix only failures within Milestone D scope. After those pass, update version,
-changelog, README, ADR, ROADMAP, PROJECT_STATE, and this handoff; commit Milestone D
-complete, push, and wait for both CI jobs. Do not start Milestone E in the same checkpoint.
+Continue Milestone D only. Review the already validated diff, advance NEXUS to `0.13.0`,
+and update CHANGELOG, README, ADR 0010, ROADMAP, PROJECT_STATE, and this handoff to mark
+Milestone D complete. Rerun the focused and repository-wide deterministic release gate,
+commit, push, and wait for both `validate` and `compose-integration` jobs. Do not start
+Milestone E in the same checkpoint.
 
 ## Recommended Commands
 
