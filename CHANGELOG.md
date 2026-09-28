@@ -8,6 +8,20 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
+## 0.16.0 — PatchForge Milestone G: Deterministic E2E
+
+- `PatchForgeE2EHarness` runs scenarios through the real PatchForge path around a
+  `ScriptedEngine` and `FakeSandbox`, with no model, network, Docker, or secrets.
+- Fixture repositories are built as data and committed with a fixed Git identity and
+  date; fixed clocks and content-derived IDs make each scenario replay to a
+  byte-identical `PatchResult`.
+- The scenario catalog covers success and one end-to-end scenario per
+  `PatchForgeFailure`. `python -m nexus.patchforge.e2e_catalog` runs each twice and
+  fails on an unexpected outcome or a non-identical replay; CI runs it as a new
+  "Validate PatchForge deterministic E2E" step.
+- Fixed an intermittent workspace test that compared proposal commits built on two
+  separately created fixture repositories, whose wall-clock commit times could differ.
+
 ## 0.15.0 — PatchForge Milestone F: Attestor (`d6d39d3`)
 
 - `PatchForgeAttestor` turns a closed `RuntimeCompletion` into a `PatchResult` from

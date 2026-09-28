@@ -449,9 +449,20 @@ def _mutate(worktree: Path) -> None:
 def test_proposal_commit_is_deterministic_and_matches_the_worktree_diff(
     tmp_path: Path,
 ) -> None:
+    # Both workspaces share one source repository: its commit SHA depends on wall-clock
+    # time, so two separately created fixtures can legitimately differ.
+    source, source_sha = _repository(tmp_path / "source")
+    profile = _profile()
     commits = []
     for name in ("first", "second"):
-        manager, handle, source_sha = _provisioned(tmp_path, name, 21)
+        manager = WorkspaceManager(tmp_path / f"{name}-workspaces", clock=lambda: NOW)
+        handle = manager.provision(
+            _task(source_sha, profile),
+            profile,
+            UUID(int=21),
+            source,
+            lease_duration=timedelta(minutes=5),
+        )
         _mutate(handle.worktree)
         proposal = manager.propose_commit(handle, message="PatchForge proposal", committed_at=NOW)
         assert proposal.diff == manager.inspect_diff(handle)

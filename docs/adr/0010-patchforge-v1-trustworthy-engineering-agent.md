@@ -162,6 +162,16 @@ Milestone F (0.15.0) adds that attestation:
   then policy (`policy_denied`), then validation (`validation_failed`). Runtime failures
   keep their own classification. Only a clean attestation is `patch_proposed`.
 
+Milestone G (0.16.0) adds the deterministic end-to-end gate that live execution depends
+on. `PatchForgeE2EHarness` runs the production path (WorkspaceManager, ToolGateway,
+FakeSandbox, Runtime, Attestor) around a scripted engine over fixture repositories
+committed with a fixed identity and date. Fixed clocks and content-derived identifiers
+make every scenario replay to a byte-identical `PatchResult`. The catalog covers success
+and one scenario per `PatchForgeFailure`, and `python -m nexus.patchforge.e2e_catalog`
+(a CI step) fails on any unexpected outcome or non-identical replay. Fault injection is
+limited to the harness: out-of-band worktree edits, in-sandbox edits, and a refused
+cleanup.
+
 ## Budgets And Runtime
 
 PatchForge uses the closed phases:

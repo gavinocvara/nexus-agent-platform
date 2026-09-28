@@ -6,52 +6,35 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 ## Checkpoint
 
 - Branch `main`; local `HEAD` must equal `origin/main` at every checkpoint.
-- NEXUS `0.15.0`: PatchForge Milestones A-F complete. Milestone F (Attestor) release
-  `d6d39d3c1f2954921d03631dc7b1d4add5dca4b8`; GitHub Actions run `36491013537` passed
-  `validate` and `compose-integration` on the first attempt.
-- Local release gate: `pip check` passed; Ruff format (156 files) and lint clean; strict
-  mypy clean (86 files); pytest 602 passed, 23 deselected; 5 scenarios validated; Compose
-  config passed. Compose integration was not run locally (no Docker daemon); CI's
-  `compose-integration` job is the integration gate.
+- NEXUS `0.16.0`: PatchForge Milestones A-G complete. The Milestone G release is the
+  commit that set 0.16.0; its SHA and GitHub Actions run are recorded here once CI is
+  green.
+- Previous release: 0.15.0 (Attestor) `d6d39d3`, GitHub Actions run `36491013537` green.
+- Local release gate: `pip check` passed; Ruff format (159 files) and lint clean; strict
+  mypy clean (88 files); pytest 618 passed, 23 deselected (six consecutive clean runs);
+  5 scenarios validated; E2E gate passed; Compose config passed. Compose integration was
+  not run locally (no Docker daemon); CI's `compose-integration` job is the gate.
 
-## Milestone F Summary
+## Milestone G Summary
 
-- `WorkspaceManager.propose_commit`: runtime-owned proposal commit, byte-identical diff.
-- Runtime workspace fingerprints and pre-cleanup `FinalWorkspaceCapture`.
-- `PatchForgeAttestor` + `LocalArtifactStore`: reproduction, final-tree checks, diff,
-  scope/protected/sensitive/test/size findings, and tamper checks; only a clean
-  attestation is `patch_proposed` (ADR 0010, CHANGELOG 0.15.0).
-
-## Milestone G Progress (in progress, unreleased)
-
-Done:
-
-1. `nexus.patchforge.e2e`: `PatchForgeE2EHarness` composes WorkspaceManager, ToolGateway,
-   FakeSandbox, Runtime, and Attestor around a `ScriptedEngine`; `materialize_fixture`
-   builds fixture repositories with a fixed Git identity and date. Fixed clocks and
-   content-derived IDs make a scenario replay to a byte-identical `PatchResult`. Fault
-   hooks: out-of-band worktree steps, in-sandbox hooks, and a refused cleanup.
-2. `nexus.patchforge.e2e_catalog`: calculator fixture, profile, budgets, step helpers,
-   and the `patch_proposed` scenario.
-
-3. Catalog: success plus one scenario per `PatchForgeFailure` (validation, budget,
-   policy, cancelled, sandbox, workspace, engine, attestation, cleanup), each asserting
-   outcome and classification. `python -m nexus.patchforge.e2e_catalog` runs every
-   scenario twice, requires the expected outcome and a byte-identical replay, and exits
-   nonzero otherwise; CI runs it as "Validate PatchForge deterministic E2E".
+- `nexus.patchforge.e2e`: `PatchForgeE2EHarness`, `ScriptedEngine`, and
+  `materialize_fixture` run the production path deterministically (byte-identical
+  replay).
+- `nexus.patchforge.e2e_catalog`: calculator fixture; success plus one scenario per
+  `PatchForgeFailure`; `python -m nexus.patchforge.e2e_catalog` is a CI gate.
 
 ## Exact Next Step
 
-Release 0.16.0 (ADR 0010 note, ROADMAP, CHANGELOG, README status, full gate, green CI),
-then hand off Milestone H - Benchmark v0. No live model calls.
+After CI is green for 0.16.0, begin PatchForge Milestone H - Benchmark v0: a small
+synthetic defect corpus and a reproducible harness (see `ROADMAP.md`). Build it on the
+Milestone G harness and fixtures. No live model calls; Milestone I needs explicit owner
+authorization.
 
 ## Active Issues
 
-- No known failing tests. Focused PatchForge suite: 352 passed.
-- During Milestone F, one focused-suite run reported a single failure that was not
-  captured and did not recur in 19 later runs. Watch for PatchForge flakiness.
-- Test modules are not type-checked in CI and carry pre-existing strict-mypy noise
-  (`HttpUrl` literals, fake gateway locals).
+- No known failing tests. The intermittent failure seen in Milestones F and G was a test
+  that compared proposal commits on two separately created fixture repositories; fixed.
+- Test modules are not type-checked in CI and carry pre-existing strict-mypy noise.
 - Remote branch `maintenance/repo-hygiene-claude` is unmerged and untouched; owner decides.
 
 ## Critical Constraints
