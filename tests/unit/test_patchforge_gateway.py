@@ -46,7 +46,7 @@ from nexus.patchforge.policy import (
     SandboxPolicy,
 )
 from nexus.patchforge.sandbox import FakeSandbox, FakeSandboxPlan, SandboxStatus
-from nexus.patchforge.workspace import WorkspaceHandle, WorkspaceManager
+from nexus.patchforge.workspace import WorkspaceError, WorkspaceHandle, WorkspaceManager
 
 NOW = datetime(2026, 9, 28, 3, tzinfo=UTC)
 
@@ -520,6 +520,107 @@ def test_invalid_arguments_are_rejected_before_evidence_is_created(tmp_path: Pat
             phase=PatchForgePhase.RECON,
         )
     assert gateway.records == ()
+
+
+def test_expected_workspace_and_sandbox_errors_become_failed_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gateway, _, _ = _gateway(tmp_path)
+    monkeypatch.setattr(
+        gateway.workspace_manager,
+        "status_porcelain",
+        lambda handle: (_ for _ in ()).throw(WorkspaceError("status unavailable")),
+    )
+    workspace_failure = gateway.invoke(
+        ToolName.GIT_STATUS,
+        {},
+        phase=PatchForgePhase.RECON,
+    )
+    assert workspace_failure.record.status is ToolCallStatus.FAILED
+    assert workspace_failure.record.error_code == "tool_error"
+    assert isinstance(workspace_failure.output, FailureOutput)
+
+    sandbox_failure = gateway.invoke(
+        ToolName.RUN_TARGETED_TESTS,
+        {},
+        phase=PatchForgePhase.TARGETED_VALIDATE,
+    )
+    assert sandbox_failure.record.status is ToolCallStatus.FAILED
+    assert sandbox_failure.record.error_code == "sandbox_error"
+    assert isinstance(sandbox_failure.output, FailureOutput)
+    assert [record.sequence for record in gateway.records] == [1, 2]
+
+
+def test_programming_errors_are_not_swallowed_as_tool_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gateway, _, _ = _gateway(tmp_path)
+    monkeypatch.setattr(
+        gateway,
+        "_dispatch",
+        lambda *args: (_ for _ in ()).throw(AssertionError("programming defect")),
+    )
+    with pytest.raises(AssertionError, match="programming defect"):
+        gateway.invoke(ToolName.LIST_TREE, {}, phase=PatchForgePhase.RECON)
+    assert gateway.records == ()
+
+
+def test_all_bounded_repository_outputs_attest_truncation(tmp_path: Path) -> None:
+    gateway, handle, _ = _gateway(tmp_path)
+    tree = gateway.invoke(
+        ToolName.LIST_TREE,
+        {"max_entries": 1},
+        phase=PatchForgePhase.RECON,
+    )
+    search = gateway.invoke(
+        ToolName.SEARCH_CODE,
+        {"query": "a", "max_results": 1},
+        phase=PatchForgePhase.RECON,
+    )
+    file_range = gateway.invoke(
+        ToolName.READ_FILE_RANGE,
+        {
+            "path": "calculator.py",
+            "start_line": 1,
+            "end_line": 2,
+            "max_output_bytes": 1,
+        },
+        phase=PatchForgePhase.RECON,
+    )
+    (handle.worktree / "calculator.py").write_text("changed\n", encoding="utf-8")
+    diff = gateway.invoke(
+        ToolName.GIT_DIFF,
+        {"max_output_bytes": 1},
+        phase=PatchForgePhase.RECON,
+    )
+    assert [result.record.output_truncated for result in (tree, search, file_range, diff)] == [
+        True,
+        True,
+        True,
+        True,
+    ]
+
+
+def test_phase_output_exhaustion_suppresses_oversized_payload(tmp_path: Path) -> None:
+    gateway, handle, _ = _gateway(tmp_path, budgets=_budgets(recon_output=512))
+    (handle.worktree / "calculator.py").write_text("x" * 10_000, encoding="utf-8")
+    result = gateway.invoke(
+        ToolName.READ_FILE_RANGE,
+        {
+            "path": "calculator.py",
+            "start_line": 1,
+            "end_line": 1,
+            "max_output_bytes": 100_000,
+        },
+        phase=PatchForgePhase.RECON,
+    )
+    assert result.record.status is ToolCallStatus.FAILED
+    assert result.record.error_code == "output_budget_exceeded"
+    assert result.record.output_truncated is True
+    assert result.record.output_bytes <= 512
+    assert isinstance(result.output, FailureOutput)
 
 
 @pytest.mark.parametrize("shell", ["sh", "bash", "cmd", "powershell", "pwsh"])

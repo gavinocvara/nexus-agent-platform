@@ -26,12 +26,13 @@ from nexus.patchforge.models import (
 )
 from nexus.patchforge.policy import CommandPurpose, PatchForgePolicy, RepositoryProfile
 from nexus.patchforge.sandbox import (
+    SandboxError,
     SandboxExecution,
     SandboxExecutor,
     SandboxRequest,
     SandboxStatus,
 )
-from nexus.patchforge.workspace import WorkspaceHandle, WorkspaceManager
+from nexus.patchforge.workspace import WorkspaceError, WorkspaceHandle, WorkspaceManager
 
 Clock = Callable[[], datetime]
 IdFactory = Callable[[], UUID]
@@ -452,9 +453,24 @@ class ToolGateway:
             output = FailureOutput(code="policy_denied", detail=str(exc))
             status = ToolCallStatus.DENIED
             error_code = "policy_denied"
+        except SandboxError as exc:
+            output = FailureOutput(
+                code="sandbox_error",
+                detail=_failure_detail(exc, "Sandbox execution failed"),
+            )
+            status = ToolCallStatus.FAILED
+            error_code = "sandbox_error"
+        except (WorkspaceError, OSError, UnicodeError) as exc:
+            output = FailureOutput(
+                code="tool_error",
+                detail=_failure_detail(exc, "Tool execution failed"),
+            )
+            status = ToolCallStatus.FAILED
+            error_code = "tool_error"
         completed_at = self._now()
         elapsed = max(0.0, (completed_at - started_at).total_seconds())
         output_bytes = len(canonical_json(output).encode("utf-8"))
+        output_truncated = _output_is_truncated(output)
         phase_budget = self.policy.budgets.for_phase(phase)
         if self._phase_output.get(phase, 0) + output_bytes > phase_budget.max_output_bytes:
             output = FailureOutput(
@@ -462,6 +478,7 @@ class ToolGateway:
                 detail="Tool output exceeded the remaining phase output budget.",
             )
             output_bytes = len(canonical_json(output).encode("utf-8"))
+            output_truncated = True
             status = ToolCallStatus.FAILED
             error_code = "output_budget_exceeded"
         if self._phase_duration.get(phase, 0.0) + elapsed > phase_budget.max_duration_seconds:
@@ -483,7 +500,7 @@ class ToolGateway:
             started_at=started_at,
             completed_at=completed_at,
             output_bytes=output_bytes,
-            output_truncated=(isinstance(output, ExecutionOutput) and output.output_truncated),
+            output_truncated=output_truncated,
             error_code=error_code,
         )
         self._records.append(record)
@@ -947,3 +964,15 @@ def _bounded_text_outputs(stdout: bytes, stderr: bytes, limit: int) -> tuple[str
         stderr_part.decode("utf-8", errors="replace"),
         combined > limit,
     )
+
+
+def _output_is_truncated(output: ToolOutput) -> bool:
+    if isinstance(output, ExecutionOutput):
+        return output.output_truncated
+    if isinstance(output, (TreeOutput, SearchOutput, FileOutput, DiffOutput)):
+        return output.truncated
+    return False
+
+
+def _failure_detail(error: Exception, fallback: str) -> str:
+    return (str(error).strip() or fallback)[:500]

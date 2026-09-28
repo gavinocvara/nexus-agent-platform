@@ -3,9 +3,11 @@
 ## Checkpoint
 
 - Branch: `main`
-- Latest validated durable commit before this checkpoint: `72c34c67843703b1da70339e80ecf2a71dde7cdb`
-- Checkpoint commit: the commit containing this file; resolve with `git rev-parse HEAD`
-- Remote at checkpoint start: `origin/main` = `72c34c67843703b1da70339e80ecf2a71dde7cdb`
+- ToolGateway foundation commit: `03b9e5d8ecb545ab6207ed7a83d44e071743225d`
+- Current hardening checkpoint: the commit containing the latest version of this file;
+  resolve with `git rev-parse HEAD`
+- Verified remote foundation: `origin/main` =
+  `03b9e5d8ecb545ab6207ed7a83d44e071743225d`
 - NEXUS version: `0.12.0`
 - Active milestone: PatchForge Milestone D - ToolGateway, **in progress**
 
@@ -24,6 +26,11 @@
 - Added sandbox validation for operator-selected repository working directories.
 - Confirmed the reported policy fixture regression is already fixed: the valid fixture's
   command limits fit its sandbox policy, and explicit timeout/output violation tests pass.
+- Normalized expected workspace, sandbox, OS, and Unicode failures into typed failed
+  call evidence while leaving programming defects visible to the runtime.
+- Propagated bounded tree, search, file, diff, and sandbox-output truncation into the
+  runtime-owned `ToolCallRecord`; oversized phase output is replaced by a bounded typed
+  failure.
 
 ## Files Changed
 
@@ -38,7 +45,9 @@
 
 ## Validation
 
-- `pytest tests/unit/test_patchforge_gateway.py tests/unit/test_patchforge_policy.py tests/unit/test_patchforge_sandbox.py -q`: **45 passed**
+- Foundation focused gate: **45 passed** across gateway, policy, and sandbox unit tests.
+- Latest gateway hardening gate: `pytest tests/unit/test_patchforge_gateway.py -q`:
+  **26 passed**
 - `ruff check` on PatchForge sources and the three focused test files: **passed**
 - `ruff format --check` on the same files: **10 files already formatted**
 - `mypy src/nexus/patchforge`: **passed, 7 source files**
@@ -51,11 +60,9 @@
 - No focused test is failing.
 - The full repository suite, real Docker integration, secret scan, frozen-artifact diff,
   and GitHub Actions have not yet run for the Milestone D foundation.
-- Expected `WorkspaceError`, `SandboxError`, and local I/O failures are not yet uniformly
-  converted into typed failed call evidence.
-- Truncation accounting should be checked for tree/search/file/diff outputs, not only
-  sandbox execution output.
 - Formatter, linter, and typecheck command mappings need explicit focused coverage.
+- Constructor identity, source, profile, task-hash, and verified-workspace bindings need
+  explicit negative coverage and any resulting implementation hardening.
 - Milestone D docs, changelog, version bump, and final CI are intentionally deferred.
 
 ## Uncommitted Work
@@ -66,13 +73,12 @@
 
 ## Exact Next Step
 
-Continue Milestone D only. Harden `ToolGateway.invoke` so expected workspace, sandbox,
-Unicode, and OS failures produce typed failed evidence without swallowing programming
-errors. Correctly attest truncation for every bounded output type. Add explicit tests for
-all fixed execution-tool mappings and constructor identity/profile/source binding. Then
-run the focused gate, full deterministic suite, frozen-boundary checks, and real Docker
-tests. Only after those pass, update version/docs, commit Milestone D complete, push, and
-wait for both CI jobs. Do not start Milestone E in the same checkpoint.
+Continue Milestone D only. Add explicit tests for every fixed execution-tool mapping and
+for constructor identity, source, profile, task-hash, and workspace binding. Harden only
+the failures those tests expose. Commit that unit before running the full deterministic
+suite, frozen-boundary checks, and real Docker tests. Only after those pass, update
+version/docs, commit Milestone D complete, push, and wait for both CI jobs. Do not start
+Milestone E in the same checkpoint.
 
 ## Recommended Commands
 

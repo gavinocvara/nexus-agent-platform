@@ -204,7 +204,8 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
   gateway boundary. `advance_phase` and `submit_report` emit typed requests only and do
   not mutate lifecycle state; Milestone E remains responsible for transitions.
 - This is a resumable foundation checkpoint, not Milestone D completion. Expected
-  workspace/sandbox I/O error normalization, exhaustive execution-tool mapping coverage,
+  operational failures now produce typed evidence and all bounded output types propagate
+  truncation. Exhaustive execution-tool mapping and constructor-binding coverage,
   repository-wide validation, documentation/version finalization, and CI remain required.
 
 ## Experimental Design
@@ -280,6 +281,11 @@ py -m pytest -m integration tests/integration
 
 ## Latest Validation
 
+- PatchForge Milestone D error/truncation hardening on 2026-09-28: all 26 gateway unit
+  tests pass; strict mypy remains clean across 7 PatchForge source files; focused Ruff
+  formatting and lint pass. Coverage confirms typed workspace/sandbox failure evidence,
+  unsuppressed programming defects, truncation attestation for every bounded repository
+  output, and bounded suppression when a phase output envelope is exhausted.
 - PatchForge Milestone D foundation validation on 2026-09-27: all 45 focused gateway,
   policy, and sandbox unit tests pass; Ruff formatting and lint pass for the affected
   files; strict mypy reports no issues in all 7 PatchForge source files. The previously
@@ -488,8 +494,7 @@ requirement is incompatible with the architecture.
 
 ## Next Step
 
-Continue PatchForge Milestone D from the typed gateway foundation. Normalize expected
-workspace/sandbox I/O failures into typed call evidence, verify truncation accounting,
-cover every fixed execution-tool mapping and constructor binding, then run the complete
-deterministic suite. Finalize Milestone D documentation/version and CI only after those
-checks pass. Do not begin the Milestone E runtime state machine yet.
+Continue PatchForge Milestone D from the typed gateway foundation. Cover every fixed
+execution-tool mapping plus constructor identity/source/profile/task/workspace binding,
+then run the complete deterministic suite. Finalize Milestone D documentation/version
+and CI only after those checks pass. Do not begin the Milestone E runtime state machine.
