@@ -61,6 +61,12 @@ py -m nexus.brain snapshot .nexus/brain/snapshots/aegisops-brain-v1.sqlite3
 The command writes a read-only SQLite candidate plus a canonical JSONL evidence stream.
 Record the SQLite file hash, canonical logical hash, and memory-type counts.
 
+The authorized snapshot was frozen with logical SHA-256
+`9e7d36376c6b0c8c77d5a3f94cafcea22cb2a53a313986a2a3fe6aed4f0fd3b6` and physical
+SQLite SHA-256
+`eeb6e6604f032ac925a981ab249f189418bd92a0005801f513faeb3fd5636bb5`. It contains one
+active episodic and one active procedural memory.
+
 ## Frozen Smoke
 
 ```powershell
@@ -75,6 +81,15 @@ Every frozen run must have identical pre/post snapshot hashes and zero writes. A
 attempt, unavailable/corrupt store, timeout, or hash change produces `brain_failure`; it
 never silently continues as memoryless behavior.
 
+The one authorized smoke completed as session
+`4776dc1c-6f7a-41d1-b75b-e6c70856923c` at repository
+`f77313e7e624b68750578b2b25b90ba8123fab62`, NEXUS `0.8.1`. Do not rerun it. It produced
+0/5 completions and 5/5 `tool_budget_exceeded` outcomes, with 12 diagnostic calls and
+two turns per run. Every run retrieved procedural memory
+`8eef2c33-9acb-52b3-8329-11345784890c`, added 420 estimated Brain-attributable input
+tokens, wrote no memory, and preserved the expected pre/post logical hash. No backend or
+Brain failure occurred.
+
 ## Interpretation
 
 The one generic incident prompt gives retrieval no incident-specific live observation.
@@ -87,6 +102,13 @@ With identical lexical overlap, ranking favors newer records before stable recor
 tie-breaking. The generic prompt may retrieve a procedural record while failing to match
 an episodic record's incident-specific terms. Because unverified self-reports may anchor
 later output, future fold learning order must use its fixed pre-registered seed.
+
+Frozen calibration observed 0/5 completion with the same unverified procedural memory
+retrieved in all five scenarios and 100% diagnostic tool-budget exhaustion. This is
+consistent with procedural-memory anchoring but is not a causal comparison because no
+contemporaneous memoryless or placebo arm was run. The read-only forensic measurements
+and evidentiary classification are in
+`docs/experiments/brain-v1-calibration-report.md`.
 
 The deferred official protocol uses a contemporaneous memoryless control,
 length-matched placebo, five leave-one-scenario-out frozen snapshots, an evaluator-only

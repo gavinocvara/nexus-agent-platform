@@ -14,9 +14,16 @@ The diagnosis identified the component but reported the wrong failure class at 0
 confidence. That claim remains `self_reported/unverified`; it is not corrected, promoted,
 or removed based on evaluator knowledge.
 
-Snapshot export and one five-scenario `frozen_eval` smoke remain pending. They validate
+Snapshot export and the one five-scenario `frozen_eval` smoke are complete. They validate
 mechanics, storage isolation, budgets, failure handling, and auditability. They are not
 an official evaluation and cannot support a claim that Brain improves diagnosis.
+
+Frozen smoke session `4776dc1c-6f7a-41d1-b75b-e6c70856923c` observed 0/5 completion,
+5/5 `tool_budget_exceeded`, and the same unverified procedural memory retrieved in all
+five scenarios. Every run used 12 diagnostic calls in two turns, wrote no memory, and
+preserved the frozen logical snapshot hash. This negative result is consistent with
+procedural-memory anchoring but is not causal because no contemporaneous memoryless or
+placebo arm was run. See `brain-v1-calibration-report.md` for the read-only postmortem.
 
 The incident prompt is identical for all five scenarios. Pre-run Brain retrieval is
 therefore primarily a test of reusable procedural context, similar to a learned prompt

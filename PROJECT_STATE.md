@@ -2,9 +2,10 @@
 
 ## Current Milestone
 
-Phase 7 - Agent-Private Brain v1. The single authorized targeted learn calibration is
-complete. Post-calibration compatibility and entry-point hardening are under validation.
-No further live call, snapshot freeze, frozen smoke, or Phase 8 work has begun.
+Phase 7 - Agent-Private Brain v1 is complete with a documented negative behavioral
+calibration and known retrieval limitation. The single targeted learn run and single
+authorized five-scenario frozen smoke are complete. No further live Phase 7 call,
+official controlled study, behavior tuning, or Phase 8 work is authorized.
 
 The frozen Phase 5 investigator and official Phase 6 memoryless baseline remain the
 comparison control. Phase 7 does not change the model, investigator instructions,
@@ -22,6 +23,7 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - Phase 7 implementation checkpoint: `a7b6f5c1fbfc1e218cfabb1d78ad8d830e2bc17c`
 - Phase 7 validation handoff: the commit containing this document
 - Post-calibration hardening: `15eff373cd92bcfd37611c3c7d9dd59f4c9e5efc`
+- Frozen-smoke implementation identity: `f77313e7e624b68750578b2b25b90ba8123fab62`
 
 ## Locked Phase 6 Baseline
 
@@ -89,7 +91,9 @@ authorized calibration and a deferred leave-one-scenario-out study. The generic 
 makes pre-run Brain v1 a reusable procedural prefix, not incident-specific recall. The
 targeted learn run and five-scenario frozen smoke are mechanism/security calibration;
 they cannot support a causal improvement claim. Brain calibration cannot be locked as
-an official baseline. Current protocol SHA-256:
+an official baseline. The smoke is complete with a negative behavioral result; the
+official contemporaneous memoryless/placebo study remains deferred. Current protocol
+SHA-256:
 `c6c3cff80da44c6fbc486a57b4eaf1ea6215c1ba923c1afed75d6717f94368ed`.
 
 ## Targeted Brain Calibration
@@ -107,6 +111,30 @@ an official baseline. Current protocol SHA-256:
   removed, or used to tune retrieval.
 - The live store remains only in the ignored canonical checkout and has not been opened
   writable during post-calibration implementation.
+
+## Frozen Brain Smoke
+
+- Session: `4776dc1c-6f7a-41d1-b75b-e6c70856923c`
+- Repository: `f77313e7e624b68750578b2b25b90ba8123fab62`; NEXUS `0.8.1`;
+  model `gpt-5.6-sol`
+- Five planned runs completed at the benchmark-session level, but all five investigations
+  ended `tool_budget_exceeded`: zero investigation completions, 12 successful diagnostic
+  calls and two turns in every run, zero backend failures, and zero Brain failures.
+- Every run retrieved the same active, unverified candidate procedural memory,
+  `8eef2c33-9acb-52b3-8329-11345784890c`. The active episodic memory was not retrieved.
+  Retrieval was 5/5, memory hit rate was 100%, and each run added 420 estimated
+  Brain-attributable input tokens.
+- Every run wrote zero memories and recorded identical pre/post logical SHA-256
+  `9e7d36376c6b0c8c77d5a3f94cafcea22cb2a53a313986a2a3fe6aed4f0fd3b6`.
+  The frozen SQLite file SHA-256 is
+  `eeb6e6604f032ac925a981ab249f189418bd92a0005801f513faeb3fd5636bb5`.
+- Frozen calibration observed 0/5 completion with the same unverified procedural memory
+  retrieved in all five scenarios and 100% diagnostic tool-budget exhaustion. This is
+  consistent with procedural-memory anchoring but is not a causal comparison because no
+  contemporaneous memoryless or placebo arm was run.
+- The full safe memory payload, deterministic lexical scoring, sequence-overlap analysis,
+  evidentiary classification, and artifact hashes are recorded in
+  `docs/experiments/brain-v1-calibration-report.md`.
 
 ## Validation Commands
 
@@ -129,6 +157,10 @@ py -m pytest -m integration tests/integration
 
 ## Latest Validation
 
+- Read-only Phase 7 postmortem on 2026-09-27 parsed the frozen canonical snapshot and all
+  five durable smoke run records. The procedural record scored 22 from two lexical
+  overlaps plus its type bonus; the episodic record had zero overlap and was excluded.
+  Snapshot and smoke artifacts retained their recorded hashes after inspection.
 - Post-calibration 0.8.1 validation on 2026-09-25: `pip check` passes; all 121 files
   pass Ruff formatting; Ruff lint passes; strict mypy reports no issues in 69 source
   files; all 149 non-integration tests pass; the 68 focused Brain/runtime/benchmark/
@@ -189,18 +221,24 @@ Complete in this checkpoint:
 - All independent review constraints applicable before a Brain-enabled live run have
   an implementation and deterministic test path. No requirement was discarded, and
   no large or official evaluation was run.
+- The authorized frozen snapshot and five-scenario smoke are complete. The result is
+  negative: 0/5 investigation completion with 5/5 tool-budget exhaustion. Frozen-store
+  integrity, read-only behavior, retrieval audit, and zero-write guarantees held.
+- The postmortem documents the exact record, retrieval mechanism, tool-sequence overlap,
+  and the boundary between observation, deterministic inference, and causal hypothesis.
 
-Incomplete and still required:
+Deferred and still requiring separate authorization:
 
-- Finish full deterministic, Compose, and CI validation of the post-calibration fixes.
-- After owner review, freeze and hash the existing calibration store without modifying
-  it, configure `frozen_eval`, and run preflight before any further live call.
-- The five-scenario frozen smoke remains the only next live sequence. Stop and report
-  afterward. Do not run another learn investigation, official Brain baseline, or the
-  deferred 100-plus-run study.
+- No further Phase 7 live investigation or smoke is authorized. Do not tune retrieval,
+  rewrite memory, change budgets/prompts/tools, or delete the historical 0.97-confidence
+  unverified self-report from this result.
+- Any causal test of procedural anchoring requires the already designed, pre-registered
+  contemporaneous memoryless and length-matched placebo arms. The official 100-plus-run
+  study remains deferred.
+- Phase 8 requires explicit owner authorization after acceptance of this disposition.
 
-Exact continuation point: complete and commit the post-calibration deterministic fixes.
-Do not alter the Phase 6 lock, calibration database, protocol JSON, or frozen behavior.
+Exact continuation point: owner review of the Phase 7 negative-calibration disposition.
+Do not alter the Phase 6 lock, frozen Brain snapshot, protocol JSON, or frozen behavior.
 
 ## Independent Review Disposition
 
@@ -241,21 +279,24 @@ requirement is incompatible with the architecture.
 
 ## Known Limitations
 
-- Lexical retrieval can be empty for the intentionally generic benchmark prompt; v1
-  fails closed instead of injecting unrelated history. Procedural records act mainly as
-  a reusable context prefix, lexical ties favor recency, and episodic records may not
-  match the generic prompt.
+- The intentionally generic prompt matched `diagnostic` and `investigate` in the frozen
+  procedural record but no retrieval tokens in its source episodic record. The same
+  procedural payload therefore acted as a reusable context prefix in all five smoke
+  runs; lexical ties would favor recency, though no tie occurred in this snapshot.
 - Procedural extraction is deterministic and conservative; it is never evaluator-
   validated truth. Unverified self-reports may anchor later runs; directly contradictory
   self-reports are disputed and not retrieved. Future fold learning order must use its
   fixed pre-registered seed.
+- The candidate procedure recorded three redundant patterns but no budget-risk sequence.
+  The frozen smoke reproduced most recorded repetition counts and added three repeated
+  `get_recent_errors` calls in every run, but no causal attribution is supported without
+  memoryless and placebo controls.
 - SQLite supports this one-agent local experiment; PostgreSQL/Engram migration is deferred.
 - No semantic, reflective, shared, vector, or graph memory exists in Brain v1.
 - Five scenarios are insufficient for independent learning-effect estimates.
 
 ## Next Step
 
-Finish validation and CI for the post-calibration fixes, then report whether the existing
-logical snapshot is compatible and safe to freeze. Do not freeze it or run the
-five-scenario smoke in this work item. No additional learn run, official Brain benchmark,
-large held-out study, or Phase 8 work is authorized.
+Present the Phase 7 disposition and negative-calibration report for owner acceptance. No
+additional learn run, smoke, official Brain benchmark, large held-out study, Brain
+behavior change, or Phase 8 work is authorized.

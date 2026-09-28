@@ -57,7 +57,7 @@
 - Clean-stack-per-run contamination control and deterministic non-scenario warm-up
 - Immutable 15-run `aegisops-memoryless-v1` baseline accepted at `52bd5f4`
 
-## Phase 7 — Agent-Private Brain v1 (Frozen Smoke Pending)
+## Phase 7 — Agent-Private Brain v1 (Complete: Negative Calibration)
 
 - Private `aegisops.investigator` episodic and procedural memory namespace
 - Durable typed SQLite persistence with provenance, lifecycle state, and frozen snapshots
@@ -66,8 +66,9 @@
 - Brain retrieval/write audit metadata and benchmark comparison metrics
 - Structural evaluator isolation, explicit learn/frozen modes, fail-closed execution,
   pre-registered experiment identity, and cross-process deterministic replay
-- Single targeted learn calibration complete; post-calibration hardening and frozen
-  smoke approval remain
+- Single targeted learn calibration and immutable five-scenario frozen smoke complete
+- Frozen smoke recorded 0/5 completion and 5/5 tool-budget exhaustion with the same
+  unverified procedural record retrieved; no causal improvement claim is supported
 
 ## Later Phases
 
