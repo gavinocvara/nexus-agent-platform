@@ -118,9 +118,10 @@ Engram records the validated history.
 - **C. SandboxExecutor (Complete):** Docker isolation plus deterministic `FakeSandbox`
 - **D. ToolGateway (Complete):** narrow typed read, compare-and-swap write, runtime-owned
   Git inspection, fixed-profile execution, and explicit control-request tools
-- **E. Runtime (Next):** closed phased workflow with bounded implementation loops and reserved
-  finalization capacity
-- **F. Attestor:** reproduction, regression, diff, validation, scope, and basic tamper checks
+- **E. Runtime (Complete):** closed phased workflow, bounded implementation loops,
+  reserved finalization, lease refresh, typed failure outcomes, and deterministic cleanup
+- **F. Attestor (Next):** reproduction, regression, diff, validation, scope, and basic
+  tamper checks
 - **G. Deterministic E2E:** scripted happy path and all required failure/partial paths
 - **H. Benchmark v0:** small synthetic defect corpus and reproducible harness
 - **I. Live engine:** explicit opt-in, one targeted task, artifact inspection, then stop

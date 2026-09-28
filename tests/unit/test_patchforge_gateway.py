@@ -1,5 +1,6 @@
 """PatchForge typed tool gateway policy and evidence tests."""
 
+import os
 import subprocess
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
@@ -850,6 +851,7 @@ def test_ignored_paths_cannot_be_written_and_ignore_tampering_fails_closed(
         assert "ignore" in result.output.detail
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows cannot create colon-containing filenames")
 def test_unrepresentable_filenames_do_not_crash_repository_tools(tmp_path: Path) -> None:
     gateway, handle, _ = _gateway(tmp_path)
     (handle.worktree / "a:b.py").write_text("return a + b\n", encoding="utf-8")

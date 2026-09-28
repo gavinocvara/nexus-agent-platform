@@ -99,8 +99,8 @@ commands. The gateway binds every call to the Atlas job, agent, engineering task
 revision, profile, and verified workspace; enforces phase, capability, path, budget, and
 finalization-reserve policy; and records append-only canonical evidence. Shell execution
 is rejected. `advance_phase` and `submit_report` return typed control requests and cannot
-silently mutate runtime state. The closed phase machine and model adapter remain
-Milestone E work.
+silently mutate runtime state. The closed phase machine is implemented by Milestone E
+below; a live model adapter remains deferred.
 
 Milestone D hardening (0.13.1) closes findings from an independent adversarial review:
 
@@ -122,6 +122,19 @@ Milestone D hardening (0.13.1) closes findings from an independent adversarial r
 - A budget overrun after sandbox execution returns a typed budget failure and keeps the
   execution evidence.
 
+Milestone E (0.14.0) implements the closed Runtime lifecycle and a single-action engine
+protocol over ToolGateway. Runtime owns every transition, accepts only typed gateway
+phase/report requests, bounds implementation retries, renews workspace leases with an
+immediate gateway refresh, preserves phase and total budget evidence, and guarantees a
+cleanup attempt on normal, typed-failure, and unexpected-defect paths. Unexpected
+programming defects propagate after cleanup rather than being mislabeled as agent
+failures. There is no live engine implementation.
+
+Runtime completion preserves the narrative report and runtime-owned gateway, sandbox,
+transition, lease, and budget evidence. It deliberately does not claim
+`patch_proposed`; Milestone F must attest reproduction, checks, diff, scope, and tamper
+conditions before constructing that outcome.
+
 ## Budgets And Runtime
 
 PatchForge uses the closed phases:
@@ -135,7 +148,9 @@ created -> provisioning -> recon -> hypothesis -> reproduce -> implement
 Only bounded `implement <-> targeted_validate` loops are permitted. Every operational
 phase has a visible call, duration, and output budget. Finalization capacity is a
 structurally separate reserve so exhaustion in an earlier phase still yields a typed
-partial result. Parallel tool calls are disabled in v1.
+partial result. Parallel tool calls are disabled in v1. The deterministic Runtime also
+models cancellation, policy, sandbox, workspace, validation, attestation, engine,
+budget, finalization, and cleanup failures without giving the engine evidence authority.
 
 ## Deferred Work
 

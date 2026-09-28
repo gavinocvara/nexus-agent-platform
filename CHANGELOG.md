@@ -8,6 +8,28 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
+## 0.14.0 — PatchForge Milestone E: Runtime (release commit)
+
+- Closed deterministic lifecycle from `created` through `closed`, with explicit
+  runtime-owned transition records and only the bounded
+  `implement <-> targeted_validate` retry edge.
+- Single-action typed engine protocol and coordinator over ToolGateway. Phase/report
+  requests remain request-only until Runtime accepts them; no parallel action shape or
+  live engine exists.
+- Deterministic partial, cancellation, policy, sandbox, workspace, validation,
+  attestation, engine, budget-exhaustion, finalization, and cleanup-failure paths.
+- Runtime renews leases only for workspace-bound tools and immediately refreshes
+  ToolGateway after every renewal. The gateway and Runtime expose cross-checked
+  runtime-attested phase and total budget usage.
+- Cleanup runs on success, typed failure, and unexpected-defect paths. Verified workspace
+  removal safely handles read-only Git objects on Windows without relaxing managed-path
+  checks.
+- A real deterministic ToolGateway/WorkspaceManager/FakeSandbox path proves reproduction,
+  editing, targeted/full validation, diff inspection, reserved finalization, report
+  submission, evidence retention, lease refresh, and cleanup.
+- Successful patch attestation remains deferred to Milestone F. Runtime produces no
+  merge, approval, GitHub mutation, network, secret, memory, or live-model behavior.
+
 ## 0.13.1 — PatchForge Milestone D hardening (`16a58f3`)
 
 ### Security

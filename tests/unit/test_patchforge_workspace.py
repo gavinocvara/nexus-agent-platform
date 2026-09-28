@@ -1,5 +1,6 @@
 """Disposable PatchForge workspace and hardened Git authority tests."""
 
+import os
 import stat
 import subprocess
 from datetime import UTC, datetime, timedelta
@@ -386,6 +387,7 @@ def test_changed_tracked_ignore_rules_fail_closed(tmp_path: Path, change: str) -
         manager.status_porcelain(handle)
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows cannot create colon-containing filenames")
 def test_diff_rejects_paths_that_are_not_portable(tmp_path: Path) -> None:
     source, source_sha = _repository(tmp_path / "source")
     manager = WorkspaceManager(tmp_path / "workspaces", clock=lambda: NOW)

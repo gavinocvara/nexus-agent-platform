@@ -6,12 +6,12 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 ## Checkpoint
 
 - Branch: `main`
-- NEXUS: `0.13.1`
-- Baseline: Milestones A-D plus all seven Milestone D review fixes are complete.
+- NEXUS: `0.14.0`
+- Baseline: Milestones A-E plus all seven Milestone D review fixes are complete.
 - Milestone D release: `16a58f338267237c261233764e167433b3cb28c3`;
   GitHub Actions run `36399394926` passed both jobs.
-- Active milestone: PatchForge Milestone E - Runtime, in progress.
-- Current Runtime checkpoint: the commit containing this file; resolve with
+- Completed milestone: PatchForge Milestone E - Runtime.
+- Runtime release: the commit containing this file; resolve with
   `git rev-parse HEAD`.
 
 ## Completed In Milestone E
@@ -63,6 +63,9 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 - `tests/unit/test_patchforge_runtime.py` (new exhaustive lifecycle coverage)
 - `tests/unit/test_patchforge_runtime_coordinator.py` (new)
 - `tests/unit/test_patchforge_workspace.py`
+- `tests/unit/test_patchforge_gateway.py`
+- `CHANGELOG.md`, `README.md`, `ROADMAP.md`, and ADR 0010
+- `pyproject.toml` and `src/nexus/_version.py`
 - `CODEX_HANDOFF.md`
 
 ## Validation
@@ -74,16 +77,27 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
   **307 passed, 2 deselected in 45.22s**.
 - Focused Ruff over PatchForge and Runtime tests: **passed**.
 - Strict mypy over `src/nexus/patchforge`: **passed, 8 source files**.
-- The two deselections are pre-existing Milestone D hardening fixtures that create
-  `a:b.py`, which Windows cannot represent. The same tests pass in the validated Linux
-  CI baseline. Do not weaken the production path rule to accommodate those fixtures.
+- Full release gate:
+  - `pip check`: **passed**.
+  - Ruff format: **154 files already formatted**.
+  - Ruff lint: **passed**.
+  - mypy: **passed, 85 source files**.
+  - pytest: **575 passed, 2 skipped, 23 deselected in 103.08s**.
+  - scenario validation: **5 scenarios validated**.
+  - Compose configuration: **passed**.
+  - Compose integration: **23 passed in 183.34s**.
+- The two full-suite skips are Milestone D hardening fixtures that create `a:b.py`,
+  which Windows cannot represent. They remain active on Linux CI. The production path
+  rule was not weakened.
+- Local release-gate recovery removed only generated `.mypy_cache`, stale Visual Studio
+  installer scratch data under `%TEMP%`, and unused Docker build cache. No project,
+  evidence, image, container, or volume data was removed.
 
 ## Exact Next Step
 
-Milestone E's deterministic implementation requirements are satisfied. Advance the
-package for the Milestone E release, update only CHANGELOG, README, ADR 0010, ROADMAP,
-and this handoff, then run the one-time full release gate. Push and require both GitHub
-Actions jobs green. Leave Milestone F - Attestor as the exact next task.
+Push the NEXUS 0.14.0 Milestone E release and require both GitHub Actions jobs green.
+After release verification, the exact next task is Milestone F - Attestor. Do not begin
+it in the Milestone E release session.
 
 ## Critical Constraints
 
