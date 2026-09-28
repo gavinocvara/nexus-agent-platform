@@ -19,9 +19,11 @@ from nexus.patchforge.policy import (
     SandboxPolicy,
 )
 from nexus.patchforge.workspace import (
+    GitCommandError,
     GitOutputLimitError,
     GitRunner,
     WorkspaceError,
+    WorkspaceHandle,
     WorkspaceIntegrityError,
     WorkspaceManager,
 )
@@ -420,3 +422,71 @@ def test_active_verification_rejects_an_expired_lease(tmp_path: Path) -> None:
     clock[0] = NOW + timedelta(minutes=5)
     with pytest.raises(WorkspaceError, match="lease has expired"):
         manager.verify_active(handle)
+
+
+def _provisioned(
+    tmp_path: Path, name: str, run: int
+) -> tuple[WorkspaceManager, WorkspaceHandle, str]:
+    source, source_sha = _repository(tmp_path / f"{name}-source")
+    manager = WorkspaceManager(tmp_path / f"{name}-workspaces", clock=lambda: NOW)
+    profile = _profile()
+    handle = manager.provision(
+        _task(source_sha, profile),
+        profile,
+        UUID(int=run),
+        source,
+        lease_duration=timedelta(minutes=5),
+    )
+    return manager, handle, source_sha
+
+
+def _mutate(worktree: Path) -> None:
+    (worktree / "calculator.py").write_bytes(b"def add(a, b):\n    return b + a\n")
+    (worktree / "asset.bin").write_bytes(b"\x00\x01\x02")
+    (worktree / "notes.txt").write_bytes(b"new\n")
+
+
+def test_proposal_commit_is_deterministic_and_matches_the_worktree_diff(
+    tmp_path: Path,
+) -> None:
+    commits = []
+    for name in ("first", "second"):
+        manager, handle, source_sha = _provisioned(tmp_path, name, 21)
+        _mutate(handle.worktree)
+        proposal = manager.propose_commit(handle, message="PatchForge proposal", committed_at=NOW)
+        assert proposal.diff == manager.inspect_diff(handle)
+        assert proposal.diff.base_sha == source_sha
+        assert proposal.diff.changed_files == ("asset.bin", "calculator.py", "notes.txt")
+        parent = _git(handle.git_directory, "rev-parse", f"{proposal.commit_sha}^")
+        assert parent == source_sha
+        author = _git(
+            handle.git_directory, "log", "-1", "--format=%an <%ae> %at", proposal.commit_sha
+        )
+        assert (
+            author
+            == f"PatchForge Runtime <patchforge-runtime@nexus.invalid> {int(NOW.timestamp())}"
+        )
+        assert not (handle.root / "control" / "proposal.index").exists()
+        commits.append(proposal.commit_sha)
+    assert commits[0] == commits[1]
+
+
+def test_proposal_requires_changes_and_an_aware_timestamp(tmp_path: Path) -> None:
+    manager, handle, _ = _provisioned(tmp_path, "empty", 22)
+    assert isinstance(handle, WorkspaceHandle)
+    with pytest.raises(WorkspaceError, match="no changes"):
+        manager.propose_commit(handle, message="PatchForge proposal", committed_at=NOW)
+    _mutate(handle.worktree)
+    with pytest.raises(WorkspaceError, match="timezone-aware"):
+        manager.propose_commit(
+            handle, message="PatchForge proposal", committed_at=NOW.replace(tzinfo=None)
+        )
+
+
+def test_git_runner_rejects_unlisted_environment_overrides(tmp_path: Path) -> None:
+    runner = GitRunner(tmp_path / "runtime")
+    with pytest.raises(GitCommandError, match="overrides"):
+        runner.run(["--version"], environment_overrides={"GIT_DIR": "/elsewhere"})
+    assert runner.run(
+        ["--version"], environment_overrides={"GIT_AUTHOR_NAME": "PatchForge Runtime"}
+    ).stdout.startswith(b"git version")

@@ -5,7 +5,7 @@ import shutil
 import stat
 import subprocess
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -28,6 +28,20 @@ _CONTROL_FILE_PATHSPECS = tuple(f":(top,glob)**/{name}" for name in sorted(GIT_C
 # Tools write a self-ignoring .gitignore into these caches. Such a file only affects its own
 # directory, which is neither importable nor collected by pytest, so it cannot hide changes.
 TOOL_CACHE_DIRECTORIES = frozenset({".pytest_cache", ".mypy_cache", ".ruff_cache"})
+# Only runtime-owned commit identity and a private index may be injected into Git.
+_GIT_ENVIRONMENT_OVERRIDES = frozenset(
+    {
+        "GIT_INDEX_FILE",
+        "GIT_AUTHOR_NAME",
+        "GIT_AUTHOR_EMAIL",
+        "GIT_AUTHOR_DATE",
+        "GIT_COMMITTER_NAME",
+        "GIT_COMMITTER_EMAIL",
+        "GIT_COMMITTER_DATE",
+    }
+)
+PROPOSAL_AUTHOR_NAME = "PatchForge Runtime"
+PROPOSAL_AUTHOR_EMAIL = "patchforge-runtime@nexus.invalid"
 _REPOSITORY_PATHS: TypeAdapter[list[RepositoryPath]] = TypeAdapter(list[RepositoryPath])
 
 
@@ -84,6 +98,15 @@ class WorkspaceDiff:
     additions: int
     deletions: int
     binary_files: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ProposedCommit:
+    """A runtime-owned commit whose tree diff is byte-identical to the worktree diff."""
+
+    commit_sha: str
+    committed_at: datetime
+    diff: WorkspaceDiff
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,14 +174,21 @@ class GitRunner:
         timeout_seconds: int | None = None,
         output_limit: int | None = None,
         allowed_exit_codes: frozenset[int] = frozenset({0}),
+        environment_overrides: Mapping[str, str] | None = None,
     ) -> GitCommandResult:
         if not arguments or any("\x00" in value for value in arguments):
             raise GitCommandError("Git command arguments are invalid")
+        overrides = dict(environment_overrides or {})
+        if not set(overrides).issubset(_GIT_ENVIRONMENT_OVERRIDES) or any(
+            "\x00" in value for value in overrides.values()
+        ):
+            raise GitCommandError("Git environment overrides are not allowed")
         timeout = self.default_timeout_seconds if timeout_seconds is None else timeout_seconds
         limit = self.default_output_limit if output_limit is None else output_limit
         if timeout < 1 or limit < 1:
             raise GitCommandError("Git command bounds must be positive")
         environment = self._environment()
+        environment.update(overrides)
         command = [self.executable, *arguments]
         creation_flags = (
             getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0
@@ -395,6 +425,76 @@ class WorkspaceManager:
             binary_files=binary_files,
         )
 
+    def propose_commit(
+        self,
+        handle: WorkspaceHandle,
+        *,
+        message: str,
+        committed_at: datetime,
+    ) -> ProposedCommit:
+        """Commit the worktree in the control repository with a fixed runtime identity.
+
+        A private index keeps the commit independent of status/diff bookkeeping. The commit's
+        diff must equal the attested worktree diff byte for byte.
+        """
+        if committed_at.utcoffset() is None:
+            raise WorkspaceError("Proposal commit time must be timezone-aware")
+        current = self._verify_handle(handle)
+        diff = self.inspect_diff(current)
+        if not diff.changed_files:
+            raise WorkspaceError("Workspace has no changes to propose")
+        index_file = current.root / "control" / "proposal.index"
+        timestamp = f"@{int(committed_at.timestamp())} +0000"
+        environment = {
+            "GIT_INDEX_FILE": str(index_file),
+            "GIT_AUTHOR_NAME": PROPOSAL_AUTHOR_NAME,
+            "GIT_AUTHOR_EMAIL": PROPOSAL_AUTHOR_EMAIL,
+            "GIT_AUTHOR_DATE": timestamp,
+            "GIT_COMMITTER_NAME": PROPOSAL_AUTHOR_NAME,
+            "GIT_COMMITTER_EMAIL": PROPOSAL_AUTHOR_EMAIL,
+            "GIT_COMMITTER_DATE": timestamp,
+        }
+        index_file.unlink(missing_ok=True)
+        try:
+            for arguments in (["read-tree", "HEAD"], ["add", "--all", "--", "."]):
+                self._git(
+                    current.git_directory,
+                    current.worktree,
+                    arguments,
+                    environment_overrides=environment,
+                )
+            tree = (
+                self._git(
+                    current.git_directory,
+                    current.worktree,
+                    ["write-tree"],
+                    environment_overrides=environment,
+                )
+                .stdout_text()
+                .strip()
+            )
+            commit = (
+                self._git(
+                    current.git_directory,
+                    current.worktree,
+                    ["commit-tree", tree, "-p", "HEAD", "-m", message],
+                    environment_overrides=environment,
+                )
+                .stdout_text()
+                .strip()
+            )
+        finally:
+            index_file.unlink(missing_ok=True)
+        committed_patch = self._git(
+            current.git_directory,
+            current.worktree,
+            ["diff", "--binary", "--no-ext-diff", "--full-index", "HEAD", commit, "--"],
+            output_limit=self.max_diff_bytes,
+        ).stdout
+        if committed_patch != diff.patch:
+            raise WorkspaceIntegrityError("Proposal commit does not match the worktree diff")
+        return ProposedCommit(commit_sha=commit, committed_at=committed_at, diff=diff)
+
     def status_porcelain(self, handle: WorkspaceHandle) -> bytes:
         current = self._verify_handle(handle)
         self._verify_ignore_rules(current)
@@ -517,6 +617,7 @@ class WorkspaceManager:
         *,
         output_limit: int | None = None,
         allowed_exit_codes: frozenset[int] = frozenset({0}),
+        environment_overrides: Mapping[str, str] | None = None,
     ) -> GitCommandResult:
         return self.git.run(
             [
@@ -530,6 +631,7 @@ class WorkspaceManager:
             ],
             output_limit=output_limit,
             allowed_exit_codes=allowed_exit_codes,
+            environment_overrides=environment_overrides,
         )
 
     def _workspace_path(self, workspace_id: UUID) -> Path:
