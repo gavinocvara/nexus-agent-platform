@@ -3,10 +3,10 @@
 ## Current Milestone
 
 The accelerated PatchForge v1 track is active. Milestones A - Contracts, B -
-WorkspaceManager, and C - SandboxExecutor are complete. Milestone D - ToolGateway is in
-progress at a typed foundation checkpoint. Atlas-min remains the outer job, policy,
-review, approval, persistence, and audit boundary. No PatchForge runtime, model call,
-GitHub action, or memory behavior is claimed yet.
+WorkspaceManager, C - SandboxExecutor, and D - ToolGateway are complete. Milestone E -
+Runtime is the exact next task and has not begun. Atlas-min remains the outer job,
+policy, review, approval, persistence, and audit boundary. No PatchForge runtime, model
+call, GitHub action, or memory behavior is claimed yet.
 
 Phase 7 Brain v1 remains accepted complete with its documented negative behavioral
 calibration and preserved frozen evidence. Phase 8 Atlas remains complete and unchanged.
@@ -22,7 +22,7 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - Remote: `https://github.com/gavinocvara/nexus-agent-platform.git`
 - Branch: `main`
 - Phase 7 starting point: `52bd5f47dfbf5591e5263911b1c64dab66158d90`
-- Package version: `0.12.0`
+- Package version: `0.13.0`
 - Accepted Phase 6 baseline-record checkpoint: `5c0200d`
 - Phase 7 implementation checkpoint: `a7b6f5c1fbfc1e218cfabb1d78ad8d830e2bc17c`
 - Phase 7 validation handoff: the commit containing this document
@@ -33,7 +33,7 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - PatchForge v1 contracts checkpoint: the commit containing this document
 - PatchForge v1 workspace checkpoint: the commit containing this document
 - PatchForge v1 sandbox checkpoint: the commit containing this document
-- PatchForge v1 ToolGateway foundation: the commit containing this document
+- PatchForge v1 ToolGateway completion: the commit containing this document
 
 ## Locked Phase 6 Baseline
 
@@ -186,10 +186,11 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
   metadata rejection. Real Docker tests verify non-root execution, blocked networking,
   absent host secrets and Git metadata, read-only root, writable worktree, termination,
   and container cleanup.
-- The sandbox trusts the operator-selected content-addressed image itself. No model-facing
-  tool gateway, runtime phase loop, target-repository commit, or remote operation exists.
+- The sandbox trusts the operator-selected content-addressed image itself. The typed
+  ToolGateway is implemented separately; no runtime phase loop, target-repository commit,
+  model adapter, or remote operation exists.
 
-## PatchForge v1 ToolGateway (In Progress)
+## PatchForge v1 ToolGateway
 
 - The typed gateway foundation validates strict arguments and emits runtime-owned IDs,
   contiguous call records, typed outputs, canonical argument hashes, and append-only
@@ -203,11 +204,10 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - Capability, phase, call, duration, output, and finalization-reserve checks exist at the
   gateway boundary. `advance_phase` and `submit_report` emit typed requests only and do
   not mutate lifecycle state; Milestone E remains responsible for transitions.
-- This is a resumable foundation checkpoint, not Milestone D completion. Expected
-  operational failures now produce typed evidence and all bounded output types propagate
-  truncation. All fixed execution-command routes and constructor trust bindings now have
-  explicit coverage. Repository-wide validation, documentation/version finalization,
-  and CI remain required.
+- Expected operational failures produce typed evidence and all bounded output types
+  propagate truncation. Every fixed execution-command route and constructor trust
+  binding has explicit deterministic coverage. Milestone D is complete at version
+  `0.13.0`; lifecycle transitions and model invocation remain deferred to Milestone E.
 
 ## Experimental Design
 
@@ -282,12 +282,13 @@ py -m pytest -m integration tests/integration
 
 ## Latest Validation
 
-- PatchForge Milestone D pre-release validation on 2026-09-28: the complete local gate
-  passes with 351 non-integration tests and 23 deselected, 60 focused gateway/policy/
-  sandbox tests, all 152 files formatted, Ruff clean, strict mypy clean across 84 source
-  files, dependency health clean, five scenarios validated, and Compose configuration
-  valid. All three real Docker isolation tests pass. Secret scanning found no matches;
-  governing specifications and frozen Phase 7 protocol/report files are unchanged.
+- PatchForge Milestone D version 0.13.0 release validation on 2026-09-28: the editable
+  package installs at 0.13.0 and `pip check` passes; the complete local gate passes with
+  351 non-integration tests and 23 deselected, 60 focused gateway/policy/sandbox tests,
+  all 152 files formatted, Ruff clean, and strict mypy clean across 84 source files.
+  All five scenarios validate, Compose configuration is valid, and all three explicitly
+  enabled real Docker isolation tests pass. Secret scanning found no matches; governing
+  specifications and frozen Phase 7 protocol/report files are unchanged.
 - PatchForge Milestone D command/binding hardening on 2026-09-28: all 37 gateway unit
   tests pass; strict mypy remains clean across 7 PatchForge source files and focused Ruff
   lint passes. Reproduction and targeted validation select distinct operator commands;
@@ -499,13 +500,14 @@ requirement is incompatible with the architecture.
 - Five scenarios are insufficient for independent learning-effect estimates.
 - Atlas v1 is deliberately single-node. It has no remote API, scheduler, worker heartbeat,
   distributed claim protocol, credential broker, or PostgreSQL control-plane backend.
-- PatchForge's ToolGateway is in progress and has no model adapter or runtime yet.
+- PatchForge's ToolGateway is complete but has no model adapter or runtime yet.
   `DockerSandbox` enforces the Milestone C boundary, but only for operator-selected
   content-addressed images and operator-profile commands; image provenance/signing is
   outside v1.
 
 ## Next Step
 
-Finalize PatchForge Milestone D documentation and version `0.13.0`, rerun the release
-gate, commit and push, then require successful `validate` and `compose-integration` CI
-jobs. Do not begin the Milestone E runtime state machine in that checkpoint.
+Begin PatchForge Milestone E - Runtime in a new checkpoint: implement the closed phased
+workflow with bounded implementation loops and structurally reserved finalization
+capacity over the existing ToolGateway. Do not begin Milestone F or make live model
+calls without their separate authorization and deterministic prerequisites.

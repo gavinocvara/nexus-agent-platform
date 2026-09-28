@@ -9,8 +9,8 @@ Phase 4 adds bounded read-only diagnostics, Phase 5 adds one evidence-grounded
 AegisOps investigator, and Phase 6 adds reproducible benchmark history and comparison
 without changing that investigator's behavior. Phase 7 adds private Brain v1 memory and
 its frozen negative calibration. Phase 8 adds the Atlas thin control-plane foundation
-for deterministic reviewed agent jobs. The accelerated PatchForge track now has its
-strict task, policy, runtime-evidence, and patch-result contracts.
+for deterministic reviewed agent jobs. The accelerated PatchForge track now has strict
+contracts, disposable workspaces, sandboxed execution, and a typed ToolGateway.
 
 The governing specifications are `NEXUS_PROJECT_INSTRUCTIONS.md`,
 `NEXUS_MASTER_BUILD_PROMPT.md`, and `BRAIN.md`.
@@ -331,8 +331,9 @@ usage are runtime-attested and cross-checked by `PatchResult`. A successful resu
 only `patch_proposed`; PatchForge cannot approve, merge, deploy, or push to `main`.
 
 The repository profile defines argument-vector commands and a mandatory digest-pinned,
-networkless, secretless, non-root, resource-bounded sandbox policy. Workspace isolation
-and Docker execution are implemented below; model-facing tool exposure remains deferred.
+networkless, secretless, non-root, resource-bounded sandbox policy. Workspace isolation,
+Docker execution, and narrow typed tool exposure are implemented below. The closed
+PatchForge runtime and model adapter remain deferred to Milestone E.
 See
 `docs/adr/0010-patchforge-v1-trustworthy-engineering-agent.md`.
 
@@ -362,5 +363,18 @@ exhaustion kill the Docker client and force-remove the named container.
 cannot fabricate output exhaustion without actually exceeding the configured bound.
 Real Docker integration tests verify non-root execution, blocked networking, absent host
 secrets and Git metadata, read-only root, writable worktree, termination, and cleanup.
-The tool gateway that will expose selected operations to PatchForge is not implemented
-yet.
+
+### Typed Tool Gateway
+
+`ToolGateway` exposes only strict typed operations for bounded reads, compare-and-swap
+writes, runtime-owned Git status/diff, immutable repository-profile commands, phase
+advancement requests, and report-submission requests. Construction binds the gateway to
+the Atlas job and agent, engineering task and source SHA, canonical repository profile,
+and runtime-verified workspace handle.
+
+The gateway enforces phase and capability policy, path and symlink confinement,
+protected-file and test-change rules, call/duration/output budgets, and a separate
+finalization reserve. It rejects shell executables and never exposes arbitrary command
+execution. Every call produces append-only typed evidence with runtime-owned identity,
+canonical hashes, bounded output, and explicit truncation or failure status. Control
+operations emit requests only; lifecycle transitions belong to the Milestone E runtime.

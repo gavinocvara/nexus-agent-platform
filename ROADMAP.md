@@ -91,8 +91,9 @@
 - **B. WorkspaceManager (Complete):** disposable source-SHA workspaces, runtime-owned Git,
   hardened commands, diff, cleanup, and orphan reaping over synthetic repositories
 - **C. SandboxExecutor (Complete):** Docker isolation plus deterministic `FakeSandbox`
-- **D. ToolGateway (Next):** narrow read, write, execution, and control tools
-- **E. Runtime:** closed phased workflow with bounded implementation loops and reserved
+- **D. ToolGateway (Complete):** narrow typed read, compare-and-swap write, runtime-owned
+  Git inspection, fixed-profile execution, and explicit control-request tools
+- **E. Runtime (Next):** closed phased workflow with bounded implementation loops and reserved
   finalization capacity
 - **F. Attestor:** reproduction, regression, diff, validation, scope, and basic tamper checks
 - **G. Deterministic E2E:** scripted happy path and all required failure/partial paths

@@ -6,6 +6,17 @@ All meaningful changes to NEXUS are recorded here.
 
 ### Added
 
+- PatchForge v1 Milestone D `ToolGateway` with strict typed read, compare-and-swap
+  write, runtime-owned Git inspection, fixed-profile execution, and control-request
+  operations bound to the Atlas job, engineering task, source revision, repository
+  profile, agent identity, and verified workspace.
+- Append-only runtime evidence with canonical argument and result hashes, contiguous
+  call IDs, typed operational failures, bounded output/truncation attestation, and
+  explicit phase, capability, call, duration, output, and finalization-reserve checks.
+- Deterministic coverage for path and symlink confinement, protected/test-file policy,
+  command routing, shell rejection, budget exhaustion, operational failure conversion,
+  trust bindings, and every ToolGateway operation.
+
 - PatchForge v1 Milestone C `DockerSandbox` and `FakeSandbox` behind one typed executor
   protocol, with runtime-attested command/policy hashes and typed success, failure,
   timeout, output-limit, and sandbox-error results.
@@ -134,6 +145,11 @@ All meaningful changes to NEXUS are recorded here.
   and integration tests.
 
 ### Changed
+
+- Advanced the package to version 0.13.0 for the completed PatchForge ToolGateway
+  milestone. Reproduction and targeted validation now select distinct immutable
+  operator-profile commands; phase advancement and report submission remain typed
+  requests for the deferred runtime rather than silent state transitions.
 
 - Advanced the package to version 0.12.0 for the PatchForge sandbox milestone.
 - Repository commands must fit within their operator-owned sandbox timeout and output

@@ -91,7 +91,16 @@ Docker executor uses a content-addressed local image with pulls disabled, passes
 environment, mounts only the `.git`-free worktree, drops all capabilities, enables
 no-new-privileges, and force-removes named containers after success or interruption.
 Real integration tests verify the isolation boundary plus timeout and output-limit
-termination. Tool exposure remains deferred to Milestone D.
+termination.
+
+Milestone D implements a narrow typed `ToolGateway` over bounded repository reads,
+compare-and-swap writes, runtime-owned Git status/diff, and immutable operator-profile
+commands. The gateway binds every call to the Atlas job, agent, engineering task, source
+revision, profile, and verified workspace; enforces phase, capability, path, budget, and
+finalization-reserve policy; and records append-only canonical evidence. Shell execution
+is rejected. `advance_phase` and `submit_report` return typed control requests and cannot
+silently mutate runtime state. The closed phase machine and model adapter remain
+Milestone E work.
 
 ## Budgets And Runtime
 
