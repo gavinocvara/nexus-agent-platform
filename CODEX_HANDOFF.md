@@ -5,35 +5,66 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 ## Checkpoint
 
-- Branch `main`. Resolve the current head with `git rev-parse HEAD`.
-- NEXUS `0.13.1`: PatchForge Milestones A (contracts), B (workspaces), C (sandbox), and
-  D (ToolGateway) are complete, plus the Milestone D hardening release.
-- Hardening fixed all seven findings from the independent adversarial review of
-  Milestone D, with one deterministic regression test each (ADR 0010, CHANGELOG 0.13.1).
-- Release commit `16a58f338267237c261233764e167433b3cb28c3`. GitHub Actions run
-  `36399394926` passed `validate` and `compose-integration` on the first attempt.
-  Locally: 372 passed (23 integration deselected), Ruff and strict mypy clean.
+- Branch: `main`
+- NEXUS: `0.13.1`
+- Baseline: Milestones A-D plus all seven Milestone D review fixes are complete.
+- Milestone D release: `16a58f338267237c261233764e167433b3cb28c3`;
+  GitHub Actions run `36399394926` passed both jobs.
+- Active milestone: PatchForge Milestone E - Runtime, in progress.
+- Current Runtime checkpoint: the commit containing this file; resolve with
+  `git rev-parse HEAD`.
 
-## Active Issues
+## Completed In Milestone E
 
-- No known failing tests.
+- Added the exact closed Runtime lifecycle graph from `created` through `closed`,
+  including only the bounded `targeted_validate -> implement` retry edge.
+- Added strict runtime-owned transition records and a replay-validatable snapshot bound
+  to the PatchForge run ID. Every phase change is explicit and sequenced.
+- Enforced `RunBudgets.max_implementation_loops` deterministically.
+- Added deterministic mappings for partial, cancellation, policy, sandbox, validation,
+  workspace, engine, attestation, and budget-exhaustion outcomes.
+- Routed active failures to finalization and finalization failures to cleanup. Cleanup
+  failure always closes the lifecycle while preserving an earlier primary failure.
+- Kept the unit pure: no workspace provisioning, tool invocation, model adapter, Git
+  authority, network, secrets, memory, GitHub mutation, or live model calls.
+
+## Files Changed
+
+- `src/nexus/patchforge/runtime.py` (new lifecycle core)
+- `src/nexus/patchforge/__init__.py`
+- `tests/unit/test_patchforge_runtime.py` (new exhaustive lifecycle coverage)
+- `CODEX_HANDOFF.md`
+
+## Validation
+
+- Runtime lifecycle suite: **188 passed**.
+- PatchForge contracts plus Runtime lifecycle: **202 passed in 0.38s**.
+- Focused Ruff over PatchForge and Runtime tests: **passed**.
+- Strict mypy over `src/nexus/patchforge`: **passed, 8 source files**.
+- A broader local gateway selection reached one pre-existing Windows-only fixture
+  failure: the Milestone D hardening test attempts to create `a:b.py`, which Windows
+  cannot represent. Runtime tests are unaffected; the validated Linux CI baseline is
+  green. Do not weaken the production path rule to accommodate that fixture.
 
 ## Exact Next Step
 
-Begin PatchForge Milestone E (Runtime): a closed phased
-workflow over the existing ToolGateway, with bounded implement ⇄ validate loops and a
-structurally reserved finalization capacity. The runtime must call
-`ToolGateway.refresh_workspace` after every lease renewal.
-
-Do not start Milestone F or make live model calls.
+Implement the Runtime coordinator over the existing lifecycle and `ToolGateway`.
+Introduce a deterministic engine protocol with no live implementation, accept only
+typed ToolGateway phase/report requests, renew workspace leases at explicit boundaries,
+call `ToolGateway.refresh_workspace` immediately after every successful renewal, and
+guarantee cleanup on success and failure paths. Add scripted tests before expanding
+result assembly.
 
 ## Critical Constraints
 
-- Atlas remains the outer job, policy, review, approval, and audit boundary.
-- Keep Git authority and `.git` outside the sandbox. Use only operator-profile commands.
-  No shell, network, or secrets.
-- Model output is narrative only; all evidence is runtime-attested.
-- `patch_proposed` is not approval, merge, deployment, or a push to `main`.
-- Git ignore/attribute rules are pinned to the source commit; do not relax that check.
-- Phase 5/6/7 frozen behavior and evidence hashes are unchanged (see `AGENTS.md`).
-- Keep one coherent unit per checkpoint, and update this file at each checkpoint.
+- Atlas remains the outer job, policy, review, approval, persistence, and audit boundary.
+- ToolGateway is the only engineering capability boundary.
+- Keep Git authority and `.git` outside the sandbox; use only operator-profile commands.
+- No unrestricted shell, network, secrets, memory/Brain, GitHub mutation, or live model
+  calls.
+- Model output is narrative only; runtime-attested evidence is authoritative.
+- Preserve phase budgets, finalization reserve, disabled parallel calls, and bounded
+  implementation loops.
+- Cleanup must run on terminal and failure paths.
+- Do not start Milestone F.
+- Keep one coherent validated, committed, pushed unit per checkpoint.
