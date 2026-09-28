@@ -12,6 +12,39 @@ The key design rule is:
 
 Each agent owns a private memory namespace. Agents do not casually read or rewrite one another’s memories. Useful knowledge crosses agent boundaries only through an auditable promotion and retrieval layer.
 
+## Implementation Status
+
+The rest of this document is the target architecture. Brain v1 (Phase 7, ADR 0008) built
+the following:
+
+- **Implemented:**
+  - one private namespace, `aegisops.investigator`, with typed episodic and unverified
+    candidate-procedural records carrying provenance, validity intervals, lifecycle and
+    dispute state, and versions;
+  - a local SQLite store under ignored `.nexus/brain/`;
+  - a writer that accepts only the allowlisted `AgentObservableRun` projection;
+  - three modes: `disabled` (the default), `learn` (only through the guarded benchmark
+    `targeted` command), and `frozen_eval` (read-only, with the snapshot hash checked
+    before and after each run). Brain failures fail closed as `brain_failure`.
+- **Not implemented:** working, semantic, reflective, and identity memory classes;
+  exchange, promotion, and consolidation; vectors or graphs; cross-agent access.
+- **Demonstrated behavior (negative calibration):**
+  - Retrieval `bounded-lexical-v1` matches one generic incident prompt. That prompt
+    always matched the procedural record through its hard-coded trigger terms and never
+    matched the episodic record, so retrieval acted as a fixed context prefix, not
+    incident-specific recall.
+  - The frozen five-scenario smoke completed 0/5 investigations.
+  - No contemporaneous memoryless or placebo arm was run, so no causal benefit or harm
+    is claimed.
+  - Evidence and hashes: `docs/experiments/brain-v1-calibration-report.md`.
+- **Binding for future agents:**
+  - Every agent gets its own namespace; no reuse of AegisOps records.
+  - Retrieval is keyed on concrete task signals at defined points, so
+    `bounded-lexical-v1` must not be copied as-is.
+  - Verified outcomes outrank self-reports.
+  - Memory-behavior claims need a contemporaneous control, a placebo when context is
+    added, and pre-registration.
+
 ## Why Not One Giant Shared Brain?
 
 A single mutable shared memory store is easy to build but creates serious problems:
@@ -386,7 +419,8 @@ For procedural memory, compare task success before and after a proposed lesson.
 ## Storage Evolution
 
 ### Brain v1
-Use PostgreSQL tables with strong schemas.
+Original plan: PostgreSQL tables with strong schemas. As built: a local typed SQLite
+store behind a replaceable boundary. PostgreSQL or Engram storage is deferred.
 
 Add pgvector only when semantic retrieval is useful.
 

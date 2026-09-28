@@ -49,6 +49,8 @@ calls, three turns, complete accounting, no backend or Brain failure, empty init
 retrieval, and two writes. The resulting active store contains one episodic and one
 procedural memory at logical SHA-256
 `9e7d36376c6b0c8c77d5a3f94cafcea22cb2a53a313986a2a3fe6aed4f0fd3b6`.
+The live calibration store's physical SQLite SHA-256 is
+`41cee12dd35c38c62fcecaf38e8b2aad3f19231029d356142621c3d5254de38c`.
 Its component was correct but failure class was wrong at 0.97 confidence. Preserve that
 diagnosis as unverified historical self-report; do not tune retrieval or rewrite memory.
 

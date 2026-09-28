@@ -68,7 +68,7 @@ def _profile() -> RepositoryProfile:
                 max_output_bytes=1_000_000,
             ),
         },
-        protected_paths=["NEXUS_PROJECT_INSTRUCTIONS.md", "BRAIN.md"],
+        protected_paths=["AGENTS.md", "BRAIN.md"],
         test_path_prefixes=["tests"],
     )
 

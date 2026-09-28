@@ -1,122 +1,54 @@
 # Codex Handoff
 
+Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules live in
+`AGENTS.md`.
+
 ## Checkpoint
 
-- Branch: `main`
-- Milestone D implementation checkpoint:
-  `cbb65ce9eb9bf8d437d9d62ac57f2c4aeb6b3edd`
-- Milestone D release commit: `bbb093e37421050bf2d31ea8a912c3e7a634ac9f`
-- Verified release CI: GitHub Actions run `36390696248`; `validate` and
-  `compose-integration` both passed on the first attempt
-- Final handoff checkpoint: the commit containing this file; resolve with
-  `git rev-parse HEAD`
-- NEXUS version: `0.13.0`
-- Completed milestone: PatchForge Milestone D - ToolGateway
-- Exact next milestone: PatchForge Milestone E - Runtime
-
-## Completed
-
-- Preserved the completed Milestone A contracts, Milestone B workspace authority, and
-  Milestone C Docker/Fake sandbox boundary.
-- Completed a strict typed ToolGateway for bounded reads, compare-and-swap writes,
-  runtime-owned Git status/diff, fixed operator-profile execution, and explicit control
-  requests.
-- Bound gateway construction and every call to the Atlas job, agent identity,
-  engineering task/hash, source revision, canonical repository profile, and verified
-  workspace.
-- Enforced capability, phase, path/symlink, protected-file, test-change, call, duration,
-  output, and finalization-reserve policy. Shell executables and arbitrary commands are
-  rejected.
-- Added append-only runtime evidence with contiguous call IDs, canonical hashes, bounded
-  output/truncation, and typed operational failures.
-- Kept `advance_phase` and `submit_report` request-only. Milestone D introduces no
-  lifecycle transition, model adapter, live call, GitHub mutation, approval, merge,
-  deployment, or memory.
-- Advanced NEXUS to `0.13.0` and aligned CHANGELOG, README, ADR 0010, ROADMAP, project
-  state, and this handoff. ToolGateway is no longer documented as future work.
-
-## Files Changed
-
-- `src/nexus/patchforge/gateway.py`
-- `src/nexus/patchforge/policy.py`
-- `src/nexus/patchforge/sandbox.py`
-- `src/nexus/patchforge/__init__.py`
-- `tests/unit/test_patchforge_gateway.py`
-- `tests/unit/test_patchforge_policy.py`
-- `tests/unit/test_patchforge_sandbox.py`
-- `pyproject.toml`
-- `src/nexus/_version.py`
-- `CHANGELOG.md`
-- `README.md`
-- `docs/adr/0010-patchforge-v1-trustworthy-engineering-agent.md`
-- `ROADMAP.md`
-- `PROJECT_STATE.md`
-- `CODEX_HANDOFF.md`
-
-## Validation
-
-- Policy regression verification: **12 passed**. The valid profile remains within its
-  sandbox limits, and explicit timeout/output-limit violations remain rejected.
-- Release focused gateway/policy/sandbox gate: **60 passed**.
-- Release full non-integration suite: **351 passed, 23 deselected**.
-- Release formatting: **152 files already formatted**; Ruff lint: **passed**.
-- Release strict mypy: **84 source files passed**; `pip check`: **passed**.
-- Editable install and imported package both report NEXUS **0.13.0**.
-- Five scenarios validate; Compose configuration passes with only expected warnings for
-  absent local PostgreSQL variables.
-- Real Docker sandbox integration: **3 passed**.
-- Secret-pattern scan: **no matches**. Governing specifications and frozen Phase 7
-  protocol/report files remain unchanged.
-- GitHub Actions run `36390696248` passed both required jobs for release commit
+- Branch `main`; latest verified commit `2909c7139a0cac0364af1f7122fe8daf1e5eb3ce`
+  (Milestone D release verification). Resolve the current head with
+  `git rev-parse HEAD`.
+- NEXUS `0.13.0`.
+- Completed: PatchForge Milestones A (contracts), B (workspaces), C (sandbox), and
+  D (ToolGateway). Release commit
   `bbb093e37421050bf2d31ea8a912c3e7a634ac9f`.
+- Last validated gate: GitHub Actions run `36390696248`, where `validate` and
+  `compose-integration` both passed. Locally: 351 unit tests passed (23 integration
+  deselected), Ruff and strict mypy clean, 3 real Docker sandbox tests passed.
 
-## Current State
+## Active Issues
 
-- No known Milestone D test failure remains.
-- Expected uncommitted work after the release commit: none. Verify with
-  `git status --short`.
-- Milestone D release commit `bbb093e` is on `origin/main`, and both required GitHub
-  Actions jobs passed. Milestone D is complete.
-- No live model calls were performed.
+- No failing tests.
+- Open for the owner to decide: an independent read-only adversarial review of Milestone D
+  (2026-09-28) reported reproducible gateway defects and recommends fixing them before
+  Milestone E. The fixes are in `src/nexus/patchforge/gateway.py` and `workspace.py`:
+  - a budget overrun after an execution raises an unhandled ValidationError;
+  - read tools in FINALIZE can consume the finalization reserve before `submit_report`;
+  - creating a `.gitignore` hides the agent's own files from diff and status;
+  - filenames such as `a:b.py` crash tree, search, and diff;
+  - file tools do not re-verify the workspace handle or lease on each call;
+  - `submit_report` accepts unknown evidence IDs;
+  - test-infrastructure files (`conftest.py`, `pytest.ini`, `sitecustomize.py`, `*.pth`)
+    bypass the test-change policy.
 
 ## Exact Next Step
 
-Begin Milestone E - PatchForge Runtime in a new resumable checkpoint. Implement the
-closed phase state machine over the existing ToolGateway, with bounded
-`implement <-> targeted_validate` loops, explicit transition evidence, failure and
-cleanup paths, and structurally reserved finalization capacity. Do not revise the
-ToolGateway boundary unless a deterministic Runtime requirement demonstrates the need.
+Wait for the owner's decision on the review findings above. Then either:
 
-## Recommended Commands
+1. fix them as a Milestone D hardening checkpoint (0.13.x) with one deterministic
+   regression test each, run the full gate, and wait for green CI; or
+2. begin PatchForge Milestone E (Runtime): a closed phased workflow over the existing
+   ToolGateway, with bounded implement ⇄ validate loops and a structurally reserved
+   finalization capacity.
 
-```powershell
-Set-Location C:\Users\arman\Downloads\nexus-agent-platform\phase7-worktree
-Get-Content CODEX_HANDOFF.md
-Get-Content PROJECT_STATE.md -TotalCount 40
-git status --short --branch
-git log -5 --oneline
-git rev-parse HEAD
-git rev-parse origin/main
-& 'C:\Users\arman\AppData\Local\Programs\Python\Python312\python.exe' -m pytest tests/unit/test_patchforge_gateway.py tests/unit/test_patchforge_policy.py tests/unit/test_patchforge_sandbox.py -q
-```
+Do not start Milestone F or make live model calls.
 
-## Constraints
+## Critical Constraints
 
-- Atlas-min remains the outer job, policy, review, approval, persistence, and audit
-  boundary.
-- Keep Git authority and `.git` outside the sandbox. Never expose unrestricted shell.
-- Commands come only from the operator-owned `RepositoryProfile`; no network or
-  secrets.
-- Model-authored content is narrative only. Runtime-owned records are the exclusive
-  source of execution, reproduction, validation, diff, and budget evidence.
-- Preserve phase-scoped budgets, disabled parallel calls, and finalization reserve.
-- `PATCH_PROPOSED` is not approval, merge, deployment, or a push to `main`.
-- Preserve all Phase 5/6/7 frozen behavior and evidence hashes.
-- Work in small validated, committed, pushed, documented checkpoints.
-
-## Deferred; Do Not Start Accidentally
-
-- Milestone F Attestor and later deterministic E2E/benchmark work
-- Live model calls or a live PatchForge task
-- SentinelQA-lite and GitHub issue/branch/draft-PR integration
-- PatchForge memory, Brain reuse, automatic adoption, Kubernetes, or Engram
+- Atlas remains the outer job, policy, review, approval, and audit boundary.
+- Keep Git authority and `.git` outside the sandbox. Use only operator-profile commands.
+  No shell, network, or secrets.
+- Model output is narrative only; all evidence is runtime-attested.
+- `patch_proposed` is not approval, merge, deployment, or a push to `main`.
+- Phase 5/6/7 frozen behavior and evidence hashes are unchanged (see `AGENTS.md`).
+- Keep one coherent unit per checkpoint, and update this file at each checkpoint.

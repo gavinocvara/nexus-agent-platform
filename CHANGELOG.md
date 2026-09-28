@@ -4,6 +4,17 @@ All meaningful changes to NEXUS are recorded here.
 
 ## Unreleased
 
+### Changed
+
+- Slimmed default agent context:
+  - Added a short `AGENTS.md` router, with `CLAUDE.md` importing it.
+  - Retired `NEXUS_MASTER_BUILD_PROMPT.md`, `NEXUS_PROJECT_INSTRUCTIONS.md`, and
+    `PROJECT_STATE.md`. Their still-current requirements now live in `AGENTS.md`,
+    `ROADMAP.md` (execution order and target systems), `BRAIN.md` (a Brain v1
+    implementation status), the ADRs, and the Brain runbook.
+  - Compacted `CODEX_HANDOFF.md` to current state only.
+- No runtime behavior, test semantics, or frozen evidence changed.
+
 ### Added
 
 - PatchForge v1 Milestone D `ToolGateway` with strict typed read, compare-and-swap
