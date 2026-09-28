@@ -8,7 +8,8 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 - Branch `main`; latest verified commit `2909c7139a0cac0364af1f7122fe8daf1e5eb3ce`
   (Milestone D release verification). Resolve the current head with
   `git rev-parse HEAD`.
-- NEXUS `0.13.0`.
+- NEXUS `0.13.0`. Since `2909c71`, `main` has only documentation maintenance (context
+  slimming, README and CHANGELOG cleanup); no runtime change.
 - Completed: PatchForge Milestones A (contracts), B (workspaces), C (sandbox), and
   D (ToolGateway). Release commit
   `bbb093e37421050bf2d31ea8a912c3e7a634ac9f`.

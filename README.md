@@ -1,381 +1,121 @@
 # NEXUS Agent Platform
 
-NEXUS is a local-first engineering platform for auditable agent workflows. Phase 1
-provides the AegisOps distributed-systems lab that later diagnostic agents will
-observe, disrupt, repair, and evaluate. Phase 2 turns it into a deterministic
-incident laboratory with isolated evaluator ground truth. Phase 3 adds operational
-metrics, logs, and distributed traces without exposing those answers.
-Phase 4 adds bounded read-only diagnostics, Phase 5 adds one evidence-grounded
-AegisOps investigator, and Phase 6 adds reproducible benchmark history and comparison
-without changing that investigator's behavior. Phase 7 adds private Brain v1 memory and
-its frozen negative calibration. Phase 8 adds the Atlas thin control-plane foundation
-for deterministic reviewed agent jobs. The accelerated PatchForge track now has strict
-contracts, disposable workspaces, sandboxed execution, and a typed ToolGateway.
+NEXUS is a reusable, local-first platform for building, governing, evaluating, and
+observing bounded AI agents. Agents act only through narrow typed tools, every
+significant action leaves runtime-owned evidence, and improvements must be measured
+against a baseline before adoption.
 
-Coding agents start at `AGENTS.md`. Execution order is in `ROADMAP.md`, accepted
-decisions are in `docs/adr/`, memory architecture is in `BRAIN.md`, and the current
-checkpoint is in `CODEX_HANDOFF.md`.
+## Components
 
-## AegisOps Lab
+| Component | Status | What it is | Read more |
+| --- | --- | --- | --- |
+| AegisOps lab | Built | Gateway/Users/Orders FastAPI services, PostgreSQL, Docker Compose | ADR 0002 |
+| Incident scenarios | Built | Five deterministic failures with isolated evaluator ground truth | ADR 0003, `docs/runbooks/deterministic-incidents.md` |
+| Observability | Built | Prometheus, Loki (via Alloy), Tempo (via OTel Collector), Grafana | ADR 0004, `docs/runbooks/observability.md` |
+| Diagnostics | Built | Eleven bounded read-only diagnostic tools and CLI | ADR 0005, `docs/runbooks/diagnostics.md` |
+| AegisOps investigator | Built | One evidence-grounded agent over the diagnostic tools | ADR 0006, `docs/runbooks/aegisops-investigator.md` |
+| Benchmarking | Built | Reproducible sessions, comparison, immutable baseline locks | ADR 0007, `docs/runbooks/aegisops-benchmarking.md` |
+| Brain v1 | Built (negative calibration) | Private per-agent memory, default off | `BRAIN.md`, ADR 0008, `docs/runbooks/aegisops-brain-v1.md` |
+| Atlas | Thin v1 | Local control plane: typed jobs, policy, review, approval, audit | ADR 0009 |
+| PatchForge | In progress | Issue-to-tested-patch agent: contracts, workspaces, sandbox, ToolGateway | ADR 0010 |
+| SentinelQA, Engram | Planned | Independent validation; shared validated knowledge | `ROADMAP.md` |
 
-The current request path is:
+Lab request path:
 
 ```text
 Client -> Gateway -> Users
                   -> Orders -> PostgreSQL
 ```
 
-The Gateway exposes the external API and uses typed HTTP calls for all downstream
-work. Users owns deterministic user data. Orders exclusively owns the PostgreSQL
-schema and applies Alembic migrations before it starts. Shared code is limited to
-HTTP contracts, typed configuration, correlation IDs, error envelopes, and JSON
-logging conventions.
+Code lives under `src/nexus/` (`services`, `lab`, `observability`, `diagnostics`,
+`aegisops`, `evaluation`, `brain`, `atlas`, `patchforge`).
 
-## Install and Validate
+## Install
 
 Python 3.12 or newer is required.
 
-```powershell
-py -m pip install -e ".[dev]"
-py -m ruff check .
-py -m mypy
-py -m pytest
+```bash
+python -m pip install -e ".[dev]"
 ```
 
-The default pytest command runs fast unit and service tests. Compose integration
-tests are selected explicitly because they require the running environment.
+On Windows, `py` can replace `python` in every command below.
 
-## Run with Docker
+## Quick Validation
 
-Create an untracked local environment file, choose a local-only PostgreSQL
-password, and start the complete stack:
+```bash
+python -m ruff format --check .
+python -m ruff check .
+python -m mypy
+python -m pytest                        # unit and service tests; integration is opt-in
+python -m nexus.lab.scenarios validate
+```
 
-```powershell
-Copy-Item .env.example .env
-docker compose config
+This mirrors the `validate` job in `.github/workflows/ci.yml`.
+
+## Local Stack
+
+Create an untracked `.env` from `.env.example`, set a local-only PostgreSQL password, and
+start everything:
+
+```bash
+cp .env.example .env
 docker compose up --build --detach --wait
 ```
 
-The endpoints are available at:
+| Service | URL |
+| --- | --- |
+| Gateway / Users / Orders | `http://localhost:8000` / `8001` / `8002` |
+| Grafana | `http://localhost:3000` |
+| Prometheus / Loki / Tempo | `http://localhost:9090` / `3100` / `3200` |
 
-- Gateway: `http://localhost:8000`
-- Users: `http://localhost:8001`
-- Orders: `http://localhost:8002`
-- Grafana: `http://localhost:3000`
-- Prometheus: `http://localhost:9090`
-- Loki: `http://localhost:3100`
-- Tempo: `http://localhost:3200`
+Run the integration suite against the running stack, then stop it:
 
-Run the genuine PostgreSQL integration paths after startup:
-
-```powershell
-$env:RUN_INTEGRATION = "1"
-py -m pytest -m integration tests/integration
-Remove-Item Env:RUN_INTEGRATION
+```bash
+RUN_INTEGRATION=1 python -m pytest -m integration tests/integration
+docker compose down            # add --volumes to also drop PostgreSQL data
 ```
 
-Stop the environment while preserving order data with `docker compose down`.
-Stop it and remove the PostgreSQL volume with `docker compose down --volumes`.
-
-## Configuration
-
-All runtime configuration is environment driven through the shared typed settings
-models. Compose uses Docker service names for internal HTTP and database traffic.
-`.env` is ignored and must never contain committed credentials.
-
-Important variables are:
-
-- `NEXUS_LOG_LEVEL`
-- `NEXUS_USERS_SERVICE_URL`
-- `NEXUS_ORDERS_SERVICE_URL`
-- `NEXUS_DATABASE_URL`
-- `NEXUS_METRICS_ENABLED`
-- `NEXUS_OTEL_ENABLED`
-- `NEXUS_OTEL_EXPORTER_ENDPOINT`
-- `NEXUS_ATLAS_DATABASE_PATH`
-- `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` for Compose substitution
-
-## Operations Foundation
-
-Every service exposes `GET /health`. Orders reports PostgreSQL health separately
-and returns HTTP 503 when the database is unavailable. Requests accept or generate
-`X-Correlation-ID`; the Gateway forwards it downstream and every response returns
-it. Logs are JSON objects containing timestamp, level, service, message, and
-correlation ID.
-
-## Deterministic Incident Lab
-
-Phase 2 adds five versioned scenarios under `lab/scenarios/v1`. Each scenario has
-typed evaluator ground truth, deterministic symptoms, and a mandatory reset. The
-service runtime receives only its operational fault type; ordinary APIs never
-return scenario IDs, injected configuration, or expected root cause.
-
-Lab controls are disabled by default. The Compose lab explicitly enables them on
-Users and Orders with `NEXUS_LAB_FAILURES_ENABLED=true`. The Gateway never exposes
-or proxies control routes. Do not enable this setting in a normal deployment: the
-control plane is intentionally privileged and has no production authentication.
-
-With Compose running, evaluator commands are:
-
-```powershell
-py -m nexus.lab.scenarios validate
-py -m nexus.lab.scenarios list
-py -m nexus.lab.scenarios status
-py -m nexus.lab.scenarios activate users_latency
-py -m nexus.lab.scenarios reset
-py -m nexus.lab.scenarios run orders_database_unavailable
-```
-
-`run` verifies a healthy baseline, activates and checks expected symptoms, resets
-in a `finally` path, and verifies recovery. Ground-truth files and evaluator output
-must not be exposed to future investigator agents or diagnostic tools.
-
-## Operational Observability
-
-Phase 3 preserves JSON stdout logs and adds Prometheus metrics plus OpenTelemetry
-traces. Grafana Alloy discovers Compose containers and forwards their logs to Loki.
-Services send OTLP/gRPC spans to the OpenTelemetry Collector, which forwards them
-to Tempo. Grafana provisions all three data sources and the **AegisOps Overview**
-dashboard automatically.
-
-Each service exposes `/metrics` when `NEXUS_METRICS_ENABLED=true`. HTTP metrics use
-route templates such as `/users/{user_id}`, status classes, and fixed service names;
-request IDs, correlation IDs, user IDs, order IDs, and scenario data are never metric
-labels. Active request logs contain real `trace_id` and `span_id` fields, while logs
-outside a span omit them. HTTPX and SQLAlchemy spans connect the Gateway, services,
-and PostgreSQL work into one trace.
-
-Metrics and tracing are disabled by default and enabled explicitly by Compose. An
-unavailable trace collector does not make request handling fail. The local lab uses
-anonymous Grafana access and mounts the Docker socket read-only into Alloy; these
-choices are convenient for local development and are not production defaults.
-
-See `docs/runbooks/observability.md` for queries, incident demonstrations, and
-cross-signal correlation steps. The detailed architecture decision is recorded in
-`docs/adr/0004-operational-observability.md`.
-
-## Read-Only Diagnostics
-
-Phase 4 exposes operational evidence through a typed Python service and developer
-CLI. It is intentionally not a generic HTTP, PromQL, LogQL, SQL, filesystem, shell,
-Docker, Grafana, or Tempo-search interface. Backend URLs are operator configuration;
-tool callers choose only registered services, dependency edges, structured filters,
-exact correlation/trace identifiers, and `1m`, `5m`, `15m`, or `30m` windows.
-
-The tool catalog is:
-
-| Tool | Evidence | Backend |
-| --- | --- | --- |
-| `list_services` | Registered topology and dependencies | Static topology |
-| `get_service_health` | One service/dependency health snapshot | `/health` |
-| `get_system_health` | Complete bounded health snapshot | `/health` |
-| `get_request_summary` | Counts, rates, percentiles, in-flight requests | Prometheus |
-| `get_dependency_summary` | Counts, failures, rates, percentiles | Prometheus |
-| `get_database_health` | Orders PostgreSQL health gauge | Prometheus |
-| `search_logs` | Approved structured fields and filters | Loki |
-| `get_request_evidence` | Chronological correlation-scoped events | Loki |
-| `find_traces` | Bounded trace IDs from correlation-scoped logs | Loki |
-| `get_trace` | Normalized spans and allowlisted attributes | Tempo |
-| `get_recent_errors` | Bounded structured 5xx events | Loki |
-
-Every call produces safe audit metadata and increments a diagnostic-session tool
-count. Log messages and trace content are returned as untrusted data, never executed
-or treated as policy. The investigator policy explicitly denies lab controls,
-scenario ground truth, arbitrary URLs and queries, environment secrets, direct SQL,
-write actions, and ambient platform access.
-
-Start with:
-
-```powershell
-py -m nexus.diagnostics services
-py -m nexus.diagnostics system-health
-py -m nexus.diagnostics requests gateway --window 5m
-py -m nexus.diagnostics dependency gateway users --window 5m
-py -m nexus.diagnostics logs orders --window 5m --limit 20
-```
-
-See `docs/runbooks/diagnostics.md` for every command and
-`docs/adr/0005-typed-diagnostic-boundary.md` for the security architecture.
-
-## AegisOps Investigator
-
-Phase 5 implements exactly one `aegisops.investigator` through the OpenAI Agents SDK.
-It receives only the eleven registered diagnostic tools and returns a strict diagnosis
-covering status, component, failure class, hypotheses, evidence references,
-alternatives, confidence, and the next read-only diagnostic action. Every evidence
-claim names a recorded tool call and an exact result value. There are no handoffs,
-sessions, write/remediation tools, or ambient machine capabilities. Phase 7 Brain v1
-memory is implemented behind a separate toggle that is off by default. Enabling it does
-not change the investigator's tools, permissions, model, or execution budgets.
-
-Live execution is opt-in and requires `NEXUS_AGENT_ENABLED=true` plus an
-`OPENAI_API_KEY` in the untracked environment. Run one generic investigation with:
-
-```powershell
-py -m nexus.aegisops investigate
-```
-
-With the Compose lab running, first verify all live boundaries without making a model
-request:
-
-```powershell
-py -m nexus.evaluation.aegisops preflight
-```
-
-Then explicitly authorize one paid smoke investigation per scenario:
-
-```powershell
-py -m nexus.evaluation.aegisops smoke --confirm-live
-```
-
-It passes only the generic prompt to the agent and scores against ground truth outside
-agent context. No live model benchmark is claimed by the deterministic test suite. See
-`docs/runbooks/aegisops-investigator.md` and
-`docs/adr/0006-single-aegisops-investigator.md`.
-
-## Reproducible Benchmarking
-
-Phase 6 freezes Phase 5 behavior as `aegisops-memoryless-v1`. Every session records a
-clean Git identity, model and runtime versions, behavior hashes, limits, deterministic
-run order, and schema versions. Each attempted run is written atomically below ignored
-`.nexus/benchmarks/aegisops/`; summaries preserve aggregate, calibration, scenario,
-tool-use, evidence-quality, latency, and optional token metrics.
-
-Official runs recreate the full Compose stack and volumes before every investigation,
-perform deterministic healthy warm-up traffic, and verify reset/recovery afterward.
-Model failures remain in history. A recovery failure quarantines the session. Resume,
-comparison, and immutable baseline-lock commands are available:
-
-```powershell
-py -m nexus.evaluation.aegisops baseline --runs 3 --confirm-live
-py -m nexus.evaluation.aegisops resume <session-id> --confirm-live
-py -m nexus.evaluation.aegisops compare <baseline-session> <candidate-session>
-py -m nexus.evaluation.aegisops lock <session-id> --name aegisops-memoryless-v1
-```
-
-Dirty-tree runs require `--allow-dirty`, are marked non-reproducible, and cannot be
-locked. Comparisons report factual deltas, configurable threshold crossings, and
-identity warnings; they never declare a winner. See
-`docs/runbooks/aegisops-benchmarking.md` and
-`docs/adr/0007-reproducible-aegisops-benchmarking.md`.
-
-## Agent-Private Brain
-
-Phase 7 adds a private `aegisops.investigator` Brain backed by a local typed SQLite
-boundary. It stores compact episodic and procedural records derived only from the
-agent's diagnosis and observable diagnostic audit metadata. Evaluator labels, scenario
-IDs, scores, transcripts, evidence payloads, and secrets never enter memory.
-
-Brain remains disabled by default. Its explicit modes are `disabled`, `learn`, and
-`frozen_eval`. A writable calibration run, inspection, and frozen snapshot workflow is:
-
-```powershell
-$env:NEXUS_BRAIN_MODE = "learn"
-py -m nexus.evaluation.aegisops targeted orders_database_unavailable --confirm-live
-py -m nexus.brain inspect
-py -m nexus.brain snapshot .nexus/brain/snapshots/aegisops-brain-v1.sqlite3
-```
-
-Writable Brain configuration is accepted only through the guarded benchmark targeted
-path. The ad-hoc investigator and legacy evaluation harness cannot silently inherit
-`learn` from the environment.
-
-For a Brain smoke, point `NEXUS_BRAIN_PATH` at that snapshot, set
-`NEXUS_BRAIN_MODE=frozen_eval`, and set the expected logical SHA-256 printed by the
-snapshot command. Frozen runs verify equal pre/post hashes and fail explicitly as
-`brain_failure`; they never silently fall back to memoryless execution. Retrieved memory
-is bounded, provenance-bearing, and delimiter-escaped inside an explicitly untrusted
-historical-data block. The committed protocol hash is part of benchmark identity. See
-`docs/runbooks/aegisops-brain-v1.md` and `docs/adr/0008-agent-private-brain-v1.md`.
-
-Legacy analysis-version-1 summaries expose Phase 7-only aggregate metrics as unavailable,
-not zero. In particular, the historical Phase 6 `abstention_rate` combines genuine
-abstentions with tool-budget failures and must be interpreted alongside the separately
-recorded `tool_budget_failure_rate`.
-
-## Atlas Thin Control Plane
-
-Phase 8 provides a library-first `nexus.atlas` control plane. It does not run models,
-schedule workers, expose a network API, or grant tools. Atlas defines strict jobs,
-source revisions, budgets, capabilities, structured results, reviews, approvals,
-failures, leases, and typed audit events around this deterministic path:
-
-```text
-created -> validated -> queued -> running -> awaiting_review
-        -> approved -> completed
-        -> rejected -> failed
-```
-
-Every successful command atomically updates a canonical job snapshot, appends one typed
-audit event, and stores an idempotent command response in local SQLite. Exact command
-replay returns the original response; conflicting reuse and stale revisions fail. A
-running job can return to `queued` only through an explicit system command after its
-durable lease expires.
-
-Agent policies allow only named capabilities. Atlas v1 includes source read, worktree
-write, bounded test execution, patch creation, and review capabilities; it has no
-unrestricted shell, merge, deployment, production remediation, Kubernetes, or memory
-permission. `AgentRuntime`, `JobDispatch`, `PatchResult`, and `ReviewResult` form the
-future PatchForge/SentinelQA integration boundary. See
-`docs/adr/0009-atlas-thin-control-plane-foundation.md`.
-
-## PatchForge Contracts
-
-PatchForge v1 begins with a memoryless, single-agent contract boundary under
-`nexus.patchforge`. An `EngineeringTask` binds an Atlas job to an immutable source SHA
-and operator-owned repository-profile hash. Run budgets are phase-scoped and reserve
-finalization capacity. Parallel model tool calls are disabled.
-
-The model authors only an `AgentReport` narrative. Tool calls, test executions,
-reproduction status, validation checks, diff summaries, policy findings, and budget
-usage are runtime-attested and cross-checked by `PatchResult`. A successful result is
-only `patch_proposed`; PatchForge cannot approve, merge, deploy, or push to `main`.
-
-The repository profile defines argument-vector commands and a mandatory digest-pinned,
-networkless, secretless, non-root, resource-bounded sandbox policy. Workspace isolation,
-Docker execution, and narrow typed tool exposure are implemented below. The closed
-PatchForge runtime and model adapter remain deferred to Milestone E.
-See
-`docs/adr/0010-patchforge-v1-trustworthy-engineering-agent.md`.
-
-### Disposable Workspaces
-
-`WorkspaceManager` provisions a fresh local worktree at the task's exact source SHA and
-binds it to the canonical operator-owned repository profile. Git metadata lives in a
-separate bare control directory, so the execution worktree has no `.git` file or
-directory to expose to the future sandbox.
-
-All Git operations use fixed argument vectors, sanitized noninteractive configuration,
-disabled hooks and automatic line-ending conversion, explicit time/output bounds, and
-no shell. The manager derives deterministic binary diffs, stores a durable expiring
-lease, cleans up idempotently, and reaps only UUID-named expired workspaces with valid
-matching markers. Current coverage uses generated synthetic repositories.
-
-### Sandboxed Execution
-
-`DockerSandbox` runs only an operator-profile command in a disposable container using a
-content-addressed local image and `--pull=never`. It disables networking, passes no host
-environment or secrets, uses a non-root UID/GID and read-only root, drops every Linux
-capability, enables no-new-privileges, and bounds CPU, memory, PIDs, duration, and
-combined output. The only bind mount is the `.git`-free worktree. Timeouts and output
-exhaustion kill the Docker client and force-remove the named container.
-
-`FakeSandbox` implements the same typed executor protocol for deterministic tests and
-cannot fabricate output exhaustion without actually exceeding the configured bound.
-Real Docker integration tests verify non-root execution, blocked networking, absent host
-secrets and Git metadata, read-only root, writable worktree, termination, and cleanup.
-
-### Typed Tool Gateway
-
-`ToolGateway` exposes only strict typed operations for bounded reads, compare-and-swap
-writes, runtime-owned Git status/diff, immutable repository-profile commands, phase
-advancement requests, and report-submission requests. Construction binds the gateway to
-the Atlas job and agent, engineering task and source SHA, canonical repository profile,
-and runtime-verified workspace handle.
-
-The gateway enforces phase and capability policy, path and symlink confinement,
-protected-file and test-change rules, call/duration/output budgets, and a separate
-finalization reserve. It rejects shell executables and never exposes arbitrary command
-execution. Every call produces append-only typed evidence with runtime-owned identity,
-canonical hashes, bounded output, and explicit truncation or failure status. Control
-operations emit requests only; lifecycle transitions belong to the Milestone E runtime.
+Configuration is environment-driven through typed settings; see `.env.example` for the
+variables. Every service exposes `GET /health`, propagates `X-Correlation-ID`, and logs
+JSON. Scenario, diagnostic, investigator, benchmark, and Brain commands are in the
+runbooks listed below.
+
+Local-only defaults: the Compose lab enables privileged failure controls
+(`NEXUS_LAB_FAILURES_ENABLED=true`), anonymous Grafana, and a read-only Docker socket for
+Alloy. None of these is safe for a normal deployment.
+
+## Safety And Trust Principles
+
+- Agents get narrow typed tools with explicit capabilities. There is no unrestricted
+  shell, filesystem, Git, database, network, or credential access.
+- Evaluator ground truth never reaches agent-visible prompts, tools, telemetry, or memory.
+- Model output is narrative only. Tests, diffs, hashes, and budgets are recorded by
+  runtime code.
+- Repository text, logs, tool output, and retrieved memory are untrusted data.
+- Live model calls are opt-in (`NEXUS_AGENT_ENABLED=true` plus an untracked
+  `OPENAI_API_KEY`). The deterministic test suite makes no model calls and claims no
+  live benchmark.
+- PatchForge's best outcome is a proposed patch. It never approves, merges, deploys, or
+  pushes to `main`; Atlas review and human approval stay outside the agent.
+- Each agent's memory is private. Brain v1 is disabled by default and fails closed.
+- Secrets, `.env`, and local state under `.nexus/` are never committed.
+
+## Documentation Map
+
+| Need | Document |
+| --- | --- |
+| Contributor and coding-agent rules | `AGENTS.md` |
+| Current checkpoint and exact next step | `CODEX_HANDOFF.md` |
+| Execution order, milestones, known limitations | `ROADMAP.md` |
+| Accepted architecture decisions | `docs/adr/` |
+| Memory architecture | `BRAIN.md` |
+| Operating procedures and commands | `docs/runbooks/` |
+| Frozen Phase 6/7 experiment evidence | `docs/experiments/` |
+| Release history | `CHANGELOG.md` |
+
+## Status
+
+Version `0.13.0`. Phases 0-8 are complete; Brain v1 ended with a documented negative
+calibration. PatchForge v1 Milestones A-D (contracts, workspaces, sandbox, ToolGateway)
+are complete. See `CODEX_HANDOFF.md` for what happens next and `ROADMAP.md` for the
+full sequence.

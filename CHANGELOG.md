@@ -1,226 +1,155 @@
 # Changelog
 
-All meaningful changes to NEXUS are recorded here.
+Meaningful changes to NEXUS, newest first. Versions are the `pyproject.toml` package
+versions. The repository has no release tags; each heading names the commit that set
+that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 ## Unreleased
 
 ### Changed
 
-- Slimmed default agent context:
-  - Added a short `AGENTS.md` router, with `CLAUDE.md` importing it.
-  - Retired `NEXUS_MASTER_BUILD_PROMPT.md`, `NEXUS_PROJECT_INSTRUCTIONS.md`, and
-    `PROJECT_STATE.md`. Their still-current requirements now live in `AGENTS.md`,
-    `ROADMAP.md` (execution order and target systems), `BRAIN.md` (a Brain v1
-    implementation status), the ADRs, and the Brain runbook.
-  - Compacted `CODEX_HANDOFF.md` to current state only.
+- Slimmed default agent context: a short `AGENTS.md` router (imported by `CLAUDE.md`)
+  and a current-state-only `CODEX_HANDOFF.md`. Retired `NEXUS_MASTER_BUILD_PROMPT.md`,
+  `NEXUS_PROJECT_INSTRUCTIONS.md`, and `PROJECT_STATE.md`; their still-current content
+  moved to `AGENTS.md`, `ROADMAP.md`, `BRAIN.md`, the ADRs, and the Brain runbook.
+- Trimmed `README.md` to a concise entry point and reorganized this changelog by version.
+- The PatchForge policy test fixture protects `AGENTS.md` instead of the retired file.
 - No runtime behavior, test semantics, or frozen evidence changed.
 
-### Added
+## 0.13.0 — PatchForge Milestone D: ToolGateway (`bbb093e`)
 
-- PatchForge v1 Milestone D `ToolGateway` with strict typed read, compare-and-swap
-  write, runtime-owned Git inspection, fixed-profile execution, and control-request
-  operations bound to the Atlas job, engineering task, source revision, repository
-  profile, agent identity, and verified workspace.
-- Append-only runtime evidence with canonical argument and result hashes, contiguous
-  call IDs, typed operational failures, bounded output/truncation attestation, and
-  explicit phase, capability, call, duration, output, and finalization-reserve checks.
-- Deterministic coverage for path and symlink confinement, protected/test-file policy,
-  command routing, shell rejection, budget exhaustion, operational failure conversion,
-  trust bindings, and every ToolGateway operation.
+- `ToolGateway`: strict typed read, compare-and-swap write, runtime-owned Git status/diff,
+  fixed operator-profile execution, and request-only `advance_phase`/`submit_report`,
+  bound to the Atlas job, agent, task, source SHA, repository profile, and workspace.
+- Enforces capability, phase, path/symlink, protected-file, test-change, call, duration,
+  output, and finalization-reserve policy. Shell executables are rejected.
+- Append-only runtime evidence with contiguous call IDs, canonical hashes, typed
+  operational failures, and bounded-output truncation attestation.
+- Reproduction and targeted validation select distinct immutable profile commands.
 
-- PatchForge v1 Milestone C `DockerSandbox` and `FakeSandbox` behind one typed executor
-  protocol, with runtime-attested command/policy hashes and typed success, failure,
-  timeout, output-limit, and sandbox-error results.
-- Real Docker enforcement for immutable local images, no pull/network/host environment,
-  non-root execution, read-only root, dropped capabilities, no-new-privileges, bounded
-  CPU/memory/PIDs/time/output, one `.git`-free worktree mount, and forced cleanup.
-- Deterministic fake-executor tests and real Docker integration proofs for secret/network/
-  Git isolation, writable workspace, read-only root, output exhaustion, and timeout.
+## 0.12.0 — PatchForge Milestone C: SandboxExecutor (`72c34c6`)
 
-- PatchForge v1 Milestone B `WorkspaceManager` with exact-SHA disposable worktrees,
-  runtime-owned bare Git metadata outside the execution tree, deterministic bounded
-  diffs, durable leases, idempotent cleanup, and marker-verified orphan reaping.
-- A no-shell Git runner with sanitized noninteractive configuration, disabled hooks and
-  automatic line-ending conversion, bounded time/output, and synthetic-repository tests.
+- `DockerSandbox` and deterministic `FakeSandbox` behind one typed executor protocol with
+  runtime-attested command/policy hashes and typed outcomes.
+- Docker isolation: content-addressed local image, no pull/network/host environment,
+  non-root, read-only root, dropped capabilities, no-new-privileges, bounded
+  CPU/memory/PIDs/time/output, one `.git`-free worktree mount, forced cleanup.
+- Profile commands must fit sandbox timeout/output ceilings; images accept only
+  content-addressed IDs or repository digests.
 
-- PatchForge v1 Milestone A contracts for engineering tasks, run identity, visible
-  phase budgets, runtime-attested tool/test/reproduction/check/diff evidence, narrative-
-  only agent reports, typed patch outcomes, and deterministic canonical hashes.
-- Operator-owned repository profiles with argument-vector commands and mandatory
+## 0.11.0 — PatchForge Milestone B: WorkspaceManager (`c0bcc9b`)
+
+- Exact-SHA disposable worktrees with runtime-owned bare Git metadata outside the
+  execution tree, deterministic bounded diffs, durable leases, idempotent cleanup, and
+  marker-verified orphan reaping.
+- No-shell Git runner with sanitized configuration, disabled hooks and line-ending
+  conversion, and bounded time/output.
+
+## 0.10.0 — PatchForge Milestone A: Contracts (`dd91aba`)
+
+- Contracts for engineering tasks, run identity, phase budgets with a finalization
+  reserve, runtime-attested evidence, narrative-only agent reports, typed patch outcomes,
+  and canonical hashes.
+- Operator-owned repository profiles with argument-vector commands and a mandatory
   digest-pinned, networkless, secretless, non-root, resource-bounded sandbox policy.
-- ADR 0010 records the accelerated trustworthy PatchForge sequence and keeps Atlas,
-  Git authority, execution isolation, runtime evidence, and human approval separate.
+- ADR 0010 records the accelerated PatchForge sequence.
 
-- Atlas v1 thin control-plane contracts for typed jobs, source revisions, budgets,
-  capabilities, structured generic/patch results, SentinelQA-compatible reviews, human
-  approval, typed failure, execution leases, and runtime dispatch adapters.
-- A closed deterministic job state machine, explicit agent policy registry, transactional
-  SQLite persistence, optimistic revisions, command replay/conflict protection, explicit
-  expired-lease recovery, and append-only typed audit events protected by database
-  triggers.
-- Exhaustive transition-pair tests plus deterministic policy, idempotency, durability,
-  recovery, approval, audit, PatchForge-interface, and frozen-behavior isolation coverage.
+## 0.9.0 — Phase 8: Atlas thin control plane (`c28fe5c`)
 
-- Brain v1 private episodic and procedural memory for `aegisops.investigator`, with
-  strict provenance, namespace isolation, lifecycle state, deterministic retrieval,
-  prompt-injection framing, secret rejection, and durable SQLite storage.
-- Default-off Brain configuration, safe per-run retrieval/write audit metadata, logical
-  memory identity, frozen snapshot tooling, and a one-scenario targeted benchmark command.
-- Brain-specific aggregate/comparison metrics and deterministic coverage for persistence,
-  relevance, bounds, corruption, evaluator isolation, policy immutability, and snapshots.
-- A committed Brain v1 pre-registration, strict observable-run writer projection,
-  three execution modes, fail-closed Brain status, portable canonical snapshots,
-  evaluator-only held-out contamination guard, and adversarial leakage/replay tests.
-- Portable baseline lock schema 2 with storage-root-relative POSIX paths and digests for
-  the manifest, summary, and every run; legacy locks resolve by session ID without
-  trusting their historical absolute path.
+- Typed jobs, source revisions, budgets, capabilities, results, reviews, human approval,
+  failures, leases, and runtime dispatch adapters (ADR 0009).
+- Closed deterministic lifecycle, explicit agent policy registry, transactional SQLite
+  persistence, optimistic revisions, idempotent command replay, explicit expired-lease
+  recovery, and append-only audit events protected by database triggers.
+- Local library only: no service, model call, scheduler, shell, deployment, or remediation.
 
-- Locale-independent Docker Compose subprocess regression coverage for arbitrary byte
-  output, UTF-8 output, nonzero exits, timeouts, and executable failures.
+## 0.8.1 — Phase 7 post-calibration hardening (`15eff37`)
 
-- Payload-free SDK validation diagnostics recording phase, Pydantic error type/location,
-  tool identity, function-call position, and invocation/output lifecycle state.
-- Direct SDK-wrapper regression coverage for all eleven tools, legitimate empty and
-  non-empty results, invalid enums and filters, and pending-call run-data inspection.
+- Legacy analysis-version-1 summaries report unavailable Phase 7 metrics as `null`, so
+  comparisons cannot manufacture historical zeros or deltas.
+- Brain configuration is explicit: constructors default to disabled, the legacy
+  evaluation harness rejects writable mode, and the ad-hoc investigator refuses ambient
+  writable Brain settings.
+- Evaluator score/canary invariance covered end to end; lock-schema-2 artifact digests
+  must match `run_count`.
 
-- Concurrency-safe diagnostic call permits, in-flight drain tracking, sanitized runtime
-  failure classification, partial failed-run accounting, and safe diagnostic backend
-  error codes/statuses.
-- Regression coverage for parallel hard-budget enforcement, wrapped budget errors,
-  final-output validation classification, failed-run accounting, SDK teardown races,
-  and every supported structured evidence value/status shape.
+## 0.8.0 — Phase 7: Brain v1 (`a7b6f5c`)
 
-- A strict `DiagnosisOutputSchema` adapter for the Responses API that preserves the
-  existing Pydantic diagnosis model while replacing its unconstrained `JsonValue`
-  transport node with a supported recursive schema.
-- Regression tests for the exact no-tools Agents SDK response format, closed required
-  objects, diagnosed and insufficient-evidence parsing, compound evidence values, and
-  malformed-output rejection.
+- Private episodic and procedural memory for `aegisops.investigator` with provenance,
+  namespace isolation, lifecycle state, deterministic retrieval, untrusted-context
+  framing, secret rejection, and SQLite storage (ADR 0008).
+- Default-off `disabled`/`learn`/`frozen_eval` modes, fail-closed `brain_failure`,
+  per-run audit metadata, frozen snapshots, a targeted benchmark command, and a committed
+  pre-registration protocol.
+- Portable baseline lock schema 2 (storage-relative paths, per-artifact digests); legacy
+  locks resolve by session ID. Benchmark schema 3 is unchanged and backward compatible.
+- SQLAlchemy restricted to `<2.1` for OpenTelemetry instrumentor support.
 
-- A versioned `aegisops-memoryless-v1` identity covering Git state, behavior hashes,
-  execution limits, scenario catalog, evaluator schemas, and runtime versions.
-- Secret-safe live preflight plus explicit smoke, repeated baseline, resume, compare,
-  and immutable baseline-lock commands.
-- Atomic per-run benchmark history with recovery verification, partial-run survival,
-  deterministic ordering, clean-stack isolation, and healthy telemetry warm-up.
-- Aggregate, confidence-calibration, per-scenario, tool-use, evidence-quality, usage,
-  latency, and diagnostic-efficiency analysis.
-- Deterministic benchmark fixtures and tests for persistence, resume, comparisons,
-  thresholds, clean-tree policy, secret safety, and sequential contamination.
-- A reproducible-benchmarking ADR and live benchmark operator runbook.
+## 0.7.4 — Evaluator portability repair (`52bd5f4`)
 
-- A single `aegisops.investigator` using the OpenAI Agents SDK with exactly the
-  eleven Phase 4 read-only diagnostic tools and no handoffs, memory, or write access.
-- Structured diagnoses, stable tool-call provenance, a separate evidence ledger,
-  hard tool/turn/time limits, typed run failures, and auditable run records.
-- A five-scenario evaluation harness with generic agent input, deterministic scoring,
-  mandatory reset/recovery, reproducibility metadata, and ignored local reports.
-- Scripted no-key tests for policy intersection, schemas, provenance, limits,
-  evaluator isolation, prompt injection, unsafe requests, scoring, and recovery.
-- A single-investigator ADR and operator/evaluation runbook.
+- Clean-stack subprocess capture is byte-based and locale-independent; failures
+  distinguish timeout, launch failure, and nonzero exit without persisting output.
 
-- A typed read-only diagnostics package with fixed health, Prometheus, Loki, and
-  Tempo adapters.
-- High-level service inventory, health, request/dependency summaries, database
-  health, structured log search, correlation evidence, trace lookup, and recent
-  error tools.
-- A deterministic tool registry, explicit investigator allow/deny policy,
-  diagnostic session call counting, and evidence-free audit records.
-- Strict service, dependency, time-window, result-limit, correlation-ID, and trace-ID
-  input contracts with no raw-query or arbitrary-URL fields.
-- Diagnostic CLI, adapter/security unit tests, real-stack integration tests, and a
-  five-scenario evidence sufficiency evaluation.
-- A typed diagnostic boundary ADR and operator runbook.
-- Prometheus request, dependency, latency, in-flight, and database-health metrics
-  with bounded labels and normalized route templates.
-- OpenTelemetry request, HTTPX, and SQLAlchemy tracing through an OpenTelemetry
-  Collector to Tempo.
-- Loki log aggregation through Grafana Alloy and a provisioned Grafana overview
-  dashboard with Prometheus, Loki, and Tempo data sources.
-- Telemetry isolation, cardinality, correlation, graceful-failure, and incident
-  integration tests.
-- An operational observability ADR and local runbook.
-- Versioned, typed ground-truth definitions for five deterministic failure scenarios.
-- Ephemeral concurrency-safe failure controllers for Users and Orders.
-- Disabled-by-default lab control APIs with bounded activation and idempotent reset.
-- Evaluator CLI and lifecycle runner for baseline, activation, symptom, reset, and
-  recovery verification.
-- Unit, service, and Compose incident-lifecycle tests.
-- Three independently runnable FastAPI services for Gateway, Users, and Orders.
-- PostgreSQL order persistence with SQLAlchemy and an explicit Alembic migration.
-- Docker Compose runtime with service and dependency health checks.
-- Typed shared HTTP contracts, correlation ID propagation, structured JSON logging,
-  and consistent error envelopes.
-- Unit/service tests and genuine PostgreSQL integration paths through the Gateway.
-- CI validation for static checks, unit tests, Docker builds, healthy Compose startup,
-  and integration tests.
+## 0.7.3 — SDK tool validation repair (`5a2939e`)
 
-### Changed
+- SDK-facing tool schemas match inner Pydantic constraints; Agents SDK pinned to
+  `0.22.3`; the tool identity hash covers SDK parameter/output schemas.
+- Payload-free SDK validation diagnostics. Benchmark schema advanced to 3.
 
-- Advanced the package to version 0.13.0 for the completed PatchForge ToolGateway
-  milestone. Reproduction and targeted validation now select distinct immutable
-  operator-profile commands; phase advancement and report submission remain typed
-  requests for the deferred runtime rather than silent state transitions.
+## 0.7.2 — Live runtime accounting repair (`2c2603a`)
 
-- Advanced the package to version 0.12.0 for the PatchForge sandbox milestone.
-- Repository commands must fit within their operator-owned sandbox timeout and output
-  ceilings; sandbox images accept only content-addressed image IDs or repository digests.
+- Concurrency-safe diagnostic call permits, in-flight drain tracking, sanitized failure
+  classification, and partial failed-run accounting.
+- Benchmark schema 2: failed-run turns distinguish unknown from zero; runs carry
+  accounting completeness and typed failures.
 
-- Advanced the package to version 0.11.0 for the PatchForge workspace milestone.
+## 0.7.1 — Structured output repair (`e014a87`)
 
-- Advanced the package to version 0.10.0 for the PatchForge v1 contract milestone.
+- Strict `DiagnosisOutputSchema` Responses API adapter; diagnosis identity hashes both
+  the domain and provider-facing schemas.
 
-- Advanced the package to version 0.9.0 for the Phase 8 Atlas thin control-plane
-  foundation. Atlas remains a local library and introduces no service, model call,
-  scheduler, unrestricted shell, deployment, remediation, or agent business logic.
+## 0.7.0 — Phase 6: Reproducible benchmarking (`0c75809`)
 
-- Advanced the package to version 0.8.1 after the targeted Brain calibration. Legacy
-  analysis-version-1 summaries now preserve unavailable Phase 7 metrics as `null`, so
-  comparisons cannot manufacture historical zero values or deltas.
-- Made Brain configuration explicit outside the guarded benchmark CLI. Generic runtime
-  and benchmark constructors default to disabled, the legacy evaluation harness rejects
-  writable mode, and the ad-hoc investigator refuses ambient writable Brain settings.
-- Strengthened evaluator score/canary invariance through the complete scripted
-  benchmark/runtime path and require lock-schema-2 artifact digests to match `run_count`.
-- Advanced the package to version 0.8.0 for Phase 7 Brain v1. Benchmark schema 3 remains
-  unchanged because Brain fields are backward-compatible additions with memoryless defaults;
-  the locked Phase 6 baseline remains parseable and comparable.
-- Restricted SQLAlchemy to the OpenTelemetry instrumentor's supported `<2.1` range so
-  Orders database spans remain present in Compose traces.
+- Versioned `aegisops-memoryless-v1` identity; secret-safe preflight; explicit smoke,
+  baseline, resume, compare, and immutable lock commands (ADR 0007).
+- Atomic per-run history with recovery verification, clean-stack isolation, and warm-up;
+  aggregate, calibration, scenario, tool-use, evidence, usage, and latency analysis.
+- Normalized model usage includes cached, cache-write, and reasoning-token detail.
 
-- Advanced the package to version 0.7.4 for the Phase 6 Windows evaluator portability
-  repair. Clean-stack commands now capture bytes so output decoding cannot change command
-  success, and failures distinguish timeout, launch failure, and nonzero exit without
-  persisting subprocess output.
+## 0.6.0 — Phase 5: AegisOps investigator (`d6132bd`)
 
-- Advanced the package to version 0.7.3 and durable benchmark schema to version 3 for
-  Phase 6 SDK validation repair metadata.
-- Aligned every SDK-facing function-tool schema with its inner Pydantic constraints,
-  restricted tools to direct callers, pinned Agents SDK 0.22.3 exactly, and extended
-  the tool identity hash to cover the actual SDK parameter/output schemas.
+- One `aegisops.investigator` (OpenAI Agents SDK) with exactly the eleven read-only
+  diagnostic tools, structured diagnoses, evidence provenance, hard tool/turn/time
+  limits, and a ground-truth-isolated five-scenario evaluation harness (ADR 0006).
+- Diagnostic results and audit events share a stable `tool_call_id`.
 
-- Advanced the package to version 0.7.2 for the Phase 6 live-runtime correctness repair.
-- Advanced the durable benchmark schema to version 2 so failed-run turns distinguish
-  unknown from zero and persisted runs carry accounting completeness and typed failures.
+## 0.5.0 — Phase 4: Read-only diagnostics (`6d99c3d`)
 
-- Advanced the package to version 0.7.1 for the pre-baseline structured-output repair.
-- Baseline diagnosis identity now hashes both the unchanged domain schema and the
-  provider-facing structured-output schema.
+- Typed diagnostics over fixed health, Prometheus, Loki, and Tempo adapters with strict
+  inputs and no raw-query or arbitrary-URL fields (ADR 0005).
+- Deterministic tool registry, investigator allow/deny policy, per-session call counting,
+  evidence-free audit records, and a diagnostic CLI.
+- Trace normalization redacts SQL-shaped operation names and non-allowlisted attributes.
 
-- Advanced the package to version 0.7.0 for Phase 6 benchmark infrastructure.
-- Extended normalized model usage with request, cached-input, cache-write, and
-  reasoning-token details when the pinned Agents SDK supplies them.
+## 0.4.0 — Phase 3: Operational observability (`88425d4`)
 
-- Advanced the package to version 0.6.0 for the Phase 5 investigator baseline.
-- Diagnostic results and audit events now share a stable `tool_call_id`; complete
-  evidence remains separate from audit metadata.
+- Bounded-label Prometheus metrics, OpenTelemetry tracing via the Collector to Tempo,
+  Loki logs via Grafana Alloy, and a provisioned Grafana dashboard (ADR 0004).
+- Request logs include duration and real trace/span IDs inside active spans.
 
-- Advanced the package to version 0.5.0 for Phase 4 read-only diagnostics.
-- Service error codes are recorded as ordinary `error.type` trace evidence; trace
-  normalization redacts SQL-shaped operation names and non-allowlisted attributes.
-- Advanced the package to version 0.4.0 for Phase 3 operational observability.
-- Structured request logs include request duration and real OpenTelemetry trace and
-  span identifiers when an active span exists.
-- Advanced the package to version 0.3.0 for the Phase 2 controlled incident lab.
-- Structured request logs now include method, path, and status code fields already
-  supplied by the request middleware.
+## 0.3.0 — Phase 2: Deterministic incident lab (`1e23b3a`)
+
+- Five versioned scenarios with typed, isolated ground truth; disabled-by-default,
+  concurrency-safe failure controls with idempotent reset; evaluator lifecycle CLI
+  (ADR 0003).
+
+## 0.2.0 — Phase 1: AegisOps lab (`f377535`)
+
+- Gateway, Users, and Orders FastAPI services; PostgreSQL orders with Alembic; Docker
+  Compose with health checks; correlation IDs, structured JSON logs, and error envelopes
+  (ADR 0002).
+- CI for static checks, unit tests, Docker builds, Compose startup, and integration tests.
+
+## 0.1.0 — Phase 0: Foundation (`66ef536`)
+
+- Repository bootstrap, packaging, and quality tooling.
