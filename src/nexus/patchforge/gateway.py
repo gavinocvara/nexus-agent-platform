@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Annotated, Literal, cast
 from uuid import UUID, uuid4
 
-from pydantic import Field, StringConstraints, model_validator
+from pydantic import Field, StringConstraints, TypeAdapter, ValidationError, model_validator
 
 from nexus.atlas.models import Identifier, Sha256, StrictModel
 from nexus.patchforge.canonical import canonical_json, canonical_sha256
@@ -32,7 +32,12 @@ from nexus.patchforge.sandbox import (
     SandboxRequest,
     SandboxStatus,
 )
-from nexus.patchforge.workspace import WorkspaceError, WorkspaceHandle, WorkspaceManager
+from nexus.patchforge.workspace import (
+    GIT_CONTROL_FILES,
+    WorkspaceError,
+    WorkspaceHandle,
+    WorkspaceManager,
+)
 
 Clock = Callable[[], datetime]
 IdFactory = Callable[[], UUID]
@@ -40,6 +45,20 @@ type RootPath = Literal["."] | RepositoryPath
 Query = Annotated[str, StringConstraints(min_length=1, max_length=500)]
 FileContent = Annotated[str, StringConstraints(max_length=1_000_000)]
 MIN_RESULT_ENVELOPE_BYTES = 512
+BUDGET_FAILURE_CODES = frozenset({"output_budget_exceeded", "duration_budget_exceeded"})
+# Files that change how tests are collected or how Python starts, wherever they live.
+TEST_INFRASTRUCTURE_NAMES = frozenset(
+    {
+        "conftest.py",
+        "pytest.ini",
+        "tox.ini",
+        "setup.cfg",
+        "sitecustomize.py",
+        "usercustomize.py",
+    }
+)
+TEST_INFRASTRUCTURE_SUFFIXES = frozenset({".pth"})
+_REPOSITORY_PATH: TypeAdapter[RepositoryPath] = TypeAdapter(RepositoryPath)
 
 
 class GatewayError(RuntimeError):
@@ -148,6 +167,7 @@ class TreeOutput(StrictModel):
     kind: Literal["tree"] = "tree"
     entries: list[TreeEntry]
     truncated: bool
+    omitted_unrepresentable: int = Field(default=0, ge=0)
     omitted_sensitive: int = Field(ge=0)
     attested_by: Literal["patchforge.runtime"] = "patchforge.runtime"
 
@@ -292,8 +312,11 @@ class GatewayResult(StrictModel):
         if execution is not None:
             if execution.call_id != self.record.call_id or execution.run_id != self.record.run_id:
                 raise ValueError("Sandbox evidence does not match the tool call")
-            if not isinstance(self.output, ExecutionOutput):
-                raise ValueError("Sandbox evidence requires an execution output")
+            budget_failure = (
+                isinstance(self.output, FailureOutput) and self.output.code in BUDGET_FAILURE_CODES
+            )
+            if not isinstance(self.output, ExecutionOutput) and not budget_failure:
+                raise ValueError("Sandbox evidence requires an execution or budget-failure output")
         return self
 
 
@@ -365,6 +388,10 @@ _PHASES_BY_TOOL: dict[ToolName, set[PatchForgePhase]] = {
     ToolName.SUBMIT_REPORT: {PatchForgePhase.FINALIZE},
 }
 
+_WORKSPACE_FREE_TOOLS = frozenset(
+    {ToolName.INSPECT_TEST_FAILURE, ToolName.ADVANCE_PHASE, ToolName.SUBMIT_REPORT}
+)
+
 _COMMAND_BY_TOOL = {
     ToolName.RUN_TARGETED_TESTS: CommandPurpose.TARGETED_TESTS,
     ToolName.RUN_TEST_SUITE: CommandPurpose.FULL_TEST_SUITE,
@@ -415,7 +442,7 @@ class ToolGateway:
         if identity.task_sha256 != canonical_sha256(task):
             raise GatewayRequestError("Run identity task hash does not match")
         try:
-            workspace_manager.status_porcelain(workspace)
+            workspace = workspace_manager.verify_active(workspace)
         except WorkspaceError as exc:
             raise GatewayRequestError("Workspace handle failed runtime verification") from exc
         self.identity = identity
@@ -452,13 +479,15 @@ class ToolGateway:
             parsed = argument_type.model_validate(dict(arguments))
         except Exception as exc:
             raise GatewayRequestError("Tool arguments failed strict validation") from exc
-        self._check_budget(phase)
+        self._check_budget(tool_name, phase)
         call_id = self._id_factory()
         started_at = self._now()
         argument_hash = canonical_sha256(parsed)
         execution: SandboxExecution | None = None
         try:
             self._authorize(tool_name, phase)
+            if tool_name not in _WORKSPACE_FREE_TOOLS:
+                self.workspace = self.workspace_manager.verify_active(self.workspace)
             output, execution = self._dispatch(tool_name, parsed, phase, call_id)
             status, error_code = self._status_for_execution(execution)
         except GatewayError as exc:
@@ -484,7 +513,8 @@ class ToolGateway:
         output_bytes = len(canonical_json(output).encode("utf-8"))
         output_truncated = _output_is_truncated(output)
         phase_budget = self.policy.budgets.for_phase(phase)
-        if self._phase_output.get(phase, 0) + output_bytes > phase_budget.max_output_bytes:
+        output_limit = phase_budget.max_output_bytes - self._report_output_reserve(tool_name, phase)
+        if self._phase_output.get(phase, 0) + output_bytes > output_limit:
             output = FailureOutput(
                 code="output_budget_exceeded",
                 detail="Tool output exceeded the remaining phase output budget.",
@@ -528,7 +558,31 @@ class ToolGateway:
         if phase not in _PHASES_BY_TOOL[tool_name]:
             raise GatewayError(f"Tool {tool_name} is not allowed during {phase}")
 
-    def _check_budget(self, phase: PatchForgePhase) -> None:
+    def refresh_workspace(self, workspace: WorkspaceHandle) -> None:
+        """Adopt a renewed handle for the same verified workspace, such as after lease renewal."""
+        current = self.workspace
+        if (
+            workspace.record.workspace_id != current.record.workspace_id
+            or workspace.record.run_id != current.record.run_id
+            or workspace.record.task_id != current.record.task_id
+            or workspace.record.source_sha != current.record.source_sha
+            or workspace.root != current.root
+            or workspace.worktree != current.worktree
+            or workspace.git_directory != current.git_directory
+        ):
+            raise GatewayRequestError("Refreshed handle does not identify the bound workspace")
+        try:
+            self.workspace = self.workspace_manager.verify_active(workspace)
+        except WorkspaceError as exc:
+            raise GatewayRequestError("Refreshed workspace failed runtime verification") from exc
+
+    @staticmethod
+    def _report_output_reserve(tool_name: ToolName, phase: PatchForgePhase) -> int:
+        if phase is PatchForgePhase.FINALIZE and tool_name is not ToolName.SUBMIT_REPORT:
+            return MIN_RESULT_ENVELOPE_BYTES
+        return 0
+
+    def _check_budget(self, tool_name: ToolName, phase: PatchForgePhase) -> None:
         try:
             budget = self.policy.budgets.for_phase(phase)
         except ValueError as exc:
@@ -536,8 +590,13 @@ class ToolGateway:
         phase_calls = sum(record.phase is phase for record in self._records)
         if phase_calls >= budget.max_tool_calls:
             raise GatewayBudgetError(f"Tool-call budget exhausted for {phase}")
+        report_reserve = self._report_output_reserve(tool_name, phase)
+        if report_reserve and phase_calls + 1 >= budget.max_tool_calls:
+            raise GatewayBudgetError("Final tool call is reserved for report submission")
         remaining_output = budget.max_output_bytes - self._phase_output.get(phase, 0)
-        if remaining_output < MIN_RESULT_ENVELOPE_BYTES:
+        if remaining_output - report_reserve < MIN_RESULT_ENVELOPE_BYTES:
+            if report_reserve:
+                raise GatewayBudgetError("Final output capacity is reserved for report submission")
             raise GatewayBudgetError(f"Tool output budget exhausted for {phase}")
         total_limit = self.policy.budgets.max_total_tool_calls
         if phase is not PatchForgePhase.FINALIZE:
@@ -594,6 +653,14 @@ class ToolGateway:
             )
         if tool_name is ToolName.SUBMIT_REPORT:
             report_request = cast(SubmitReportArguments, arguments)
+            known = {record.call_id for record in self._records} | {
+                execution.execution_id for execution in self._executions.values()
+            }
+            unknown = set(report_request.report.evidence_references) - known
+            if unknown:
+                raise GatewayError(
+                    f"Report references {len(unknown)} unknown runtime evidence identifiers"
+                )
             return ReportOutput(
                 report_sha256=canonical_sha256(report_request.report),
                 evidence_references=report_request.report.evidence_references,
@@ -606,10 +673,11 @@ class ToolGateway:
             raise GatewayError("Tree path is not a directory")
         entries: list[TreeEntry] = []
         omitted = 0
+        unrepresentable = 0
         truncated = False
 
         def visit(directory: Path, depth: int) -> None:
-            nonlocal omitted, truncated
+            nonlocal omitted, unrepresentable, truncated
             for child in sorted(directory.iterdir(), key=lambda item: item.name):
                 if len(entries) >= arguments.max_entries:
                     truncated = True
@@ -617,6 +685,9 @@ class ToolGateway:
                 relative = self._relative(child)
                 if self._is_sensitive(relative):
                     omitted += 1
+                    continue
+                if not self._is_representable(relative):
+                    unrepresentable += 1
                     continue
                 metadata = child.lstat()
                 if stat.S_ISLNK(metadata.st_mode):
@@ -634,6 +705,7 @@ class ToolGateway:
         return TreeOutput(
             entries=entries,
             truncated=truncated,
+            omitted_unrepresentable=unrepresentable,
             omitted_sensitive=omitted,
         )
 
@@ -651,7 +723,11 @@ class ToolGateway:
             if not candidate.is_file() or candidate.is_symlink():
                 continue
             relative = self._relative(candidate)
-            if self._is_sensitive(relative) or candidate.stat().st_size > 1_000_000:
+            if (
+                self._is_sensitive(relative)
+                or not self._is_representable(relative)
+                or candidate.stat().st_size > 1_000_000
+            ):
                 skipped += 1
                 continue
             try:
@@ -753,11 +829,7 @@ class ToolGateway:
             path for path in diff.changed_files if self._matches(path, self.profile.protected_paths)
         ]
         scope = [path for path in diff.changed_files if not self._in_scope(path)]
-        tests = [
-            path
-            for path in diff.changed_files
-            if self._matches(path, self.profile.test_path_prefixes)
-        ]
+        tests = [path for path in diff.changed_files if self._is_test_path(path)]
         return DiffInspectionOutput(
             base_sha=diff.base_sha,
             diff_sha256=diff.diff_sha256,
@@ -897,14 +969,31 @@ class ToolGateway:
     def _authorize_write(self, path: RepositoryPath) -> None:
         if self._is_sensitive(path):
             raise GatewayError("Sensitive paths cannot be modified")
+        if path.rsplit("/", 1)[-1] in GIT_CONTROL_FILES:
+            raise GatewayError("Git ignore and attribute files cannot be modified")
         if self._matches(path, self.profile.protected_paths):
             raise GatewayError("Protected paths cannot be modified")
         if not self._in_scope(path):
             raise GatewayError("Path is outside the engineering task scope")
-        if not self.policy.allow_test_file_changes and self._matches(
-            path, self.profile.test_path_prefixes
-        ):
+        if not self.policy.allow_test_file_changes and self._is_test_path(path):
             raise GatewayError("Test-file changes are disabled by policy")
+        if self.workspace_manager.is_ignored(self.workspace, path):
+            raise GatewayError("Git-ignored paths cannot be modified because diffs would hide them")
+
+    def _is_test_path(self, path: str) -> bool:
+        name = path.rsplit("/", 1)[-1]
+        return (
+            self._matches(path, self.profile.test_path_prefixes)
+            or name in TEST_INFRASTRUCTURE_NAMES
+            or Path(name).suffix in TEST_INFRASTRUCTURE_SUFFIXES
+        )
+
+    @staticmethod
+    def _is_representable(path: str) -> bool:
+        try:
+            return _REPOSITORY_PATH.validate_python(path) == path
+        except ValidationError:
+            return False
 
     def _in_scope(self, path: str) -> bool:
         return not self.task.scope_paths or self._matches(path, self.task.scope_paths)

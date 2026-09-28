@@ -115,7 +115,7 @@ Alloy. None of these is safe for a normal deployment.
 
 ## Status
 
-Version `0.13.0`. Phases 0-8 are complete; Brain v1 ended with a documented negative
+Version `0.13.1`. Phases 0-8 are complete; Brain v1 ended with a documented negative
 calibration. PatchForge v1 Milestones A-D (contracts, workspaces, sandbox, ToolGateway)
 are complete. See `CODEX_HANDOFF.md` for what happens next and `ROADMAP.md` for the
 full sequence.

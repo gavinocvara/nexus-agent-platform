@@ -764,3 +764,202 @@ def test_repository_profile_commands_cannot_invoke_a_shell(shell: str) -> None:
             timeout_seconds=10,
             max_output_bytes=1000,
         )
+
+
+# Milestone D hardening: one deterministic regression per adversarial-review finding.
+
+
+def test_budget_overrun_after_execution_keeps_sandbox_evidence(tmp_path: Path) -> None:
+    profile = _profile()
+    command = profile.commands[CommandPurpose.TARGETED_TESTS]
+    ticks = iter([NOW, NOW + timedelta(seconds=200)])
+    sandbox = FakeSandbox(
+        [
+            FakeSandboxPlan(
+                expected_command_sha256=canonical_sha256(command),
+                status=SandboxStatus.SUCCEEDED,
+                exit_code=0,
+            )
+        ],
+        clock=lambda: NOW,
+    )
+    gateway, _, _ = _gateway(tmp_path, sandbox=sandbox)
+    gateway._clock = lambda: next(ticks)
+    result = gateway.invoke(
+        ToolName.RUN_TARGETED_TESTS,
+        {},
+        phase=PatchForgePhase.TARGETED_VALIDATE,
+    )
+    assert result.record.status is ToolCallStatus.FAILED
+    assert result.record.error_code == "duration_budget_exceeded"
+    assert isinstance(result.output, FailureOutput)
+    assert result.sandbox_execution is not None
+    assert gateway.executions == (result.sandbox_execution,)
+
+
+def test_finalize_reads_cannot_consume_the_report_reserve(tmp_path: Path) -> None:
+    gateway, _, _ = _gateway(tmp_path)
+    first = gateway.invoke(ToolName.GIT_STATUS, {}, phase=PatchForgePhase.FINALIZE)
+    assert first.record.status is ToolCallStatus.SUCCEEDED
+    with pytest.raises(GatewayBudgetError, match="reserved for report submission"):
+        gateway.invoke(ToolName.GIT_DIFF, {}, phase=PatchForgePhase.FINALIZE)
+    report = gateway.invoke(
+        ToolName.SUBMIT_REPORT,
+        {
+            "report": AgentReport(
+                summary="Finalized.",
+                hypothesis="Fixture.",
+                implementation="None.",
+                evidence_references=[first.record.call_id],
+            ).model_dump(mode="python")
+        },
+        phase=PatchForgePhase.FINALIZE,
+    )
+    assert report.record.status is ToolCallStatus.SUCCEEDED
+
+
+@pytest.mark.parametrize("path", [".gitignore", "nested/.gitattributes"])
+def test_git_control_files_cannot_be_written(tmp_path: Path, path: str) -> None:
+    gateway, handle, _ = _gateway(tmp_path)
+    (handle.worktree / "nested").mkdir()
+    result = gateway.invoke(
+        ToolName.CREATE_FILE,
+        {"path": path, "content": "*\n"},
+        phase=PatchForgePhase.IMPLEMENT,
+    )
+    assert result.record.status is ToolCallStatus.DENIED
+    assert not (handle.worktree / path).exists()
+
+
+def test_ignored_paths_cannot_be_written_and_ignore_tampering_fails_closed(
+    tmp_path: Path,
+) -> None:
+    gateway, handle, _ = _gateway(tmp_path)
+    (handle.worktree / ".gitignore").write_text("*.log\nhidden.py\n", encoding="utf-8")
+    denied = gateway.invoke(
+        ToolName.CREATE_FILE,
+        {"path": "hidden.py", "content": "print('invisible')\n"},
+        phase=PatchForgePhase.IMPLEMENT,
+    )
+    assert denied.record.status is ToolCallStatus.DENIED
+    for tool in (ToolName.GIT_STATUS, ToolName.GIT_DIFF, ToolName.INSPECT_DIFF):
+        result = gateway.invoke(tool, {}, phase=PatchForgePhase.SELF_REVIEW)
+        assert result.record.status is ToolCallStatus.FAILED
+        assert result.record.error_code == "tool_error"
+        assert isinstance(result.output, FailureOutput)
+        assert "ignore" in result.output.detail
+
+
+def test_unrepresentable_filenames_do_not_crash_repository_tools(tmp_path: Path) -> None:
+    gateway, handle, _ = _gateway(tmp_path)
+    (handle.worktree / "a:b.py").write_text("return a + b\n", encoding="utf-8")
+    tree = gateway.invoke(ToolName.LIST_TREE, {}, phase=PatchForgePhase.RECON)
+    assert isinstance(tree.output, TreeOutput)
+    assert "a:b.py" not in {entry.path for entry in tree.output.entries}
+    assert tree.output.omitted_unrepresentable == 1
+    search = gateway.invoke(
+        ToolName.SEARCH_CODE,
+        {"query": "return a + b"},
+        phase=PatchForgePhase.RECON,
+    )
+    assert isinstance(search.output, SearchOutput)
+    assert [item.path for item in search.output.matches] == ["calculator.py"]
+    assert search.output.skipped_files >= 1
+    diff = gateway.invoke(ToolName.GIT_DIFF, {}, phase=PatchForgePhase.RECON)
+    assert diff.record.status is ToolCallStatus.FAILED
+    assert diff.record.error_code == "tool_error"
+
+
+def test_every_workspace_tool_reverifies_handle_and_lease(tmp_path: Path) -> None:
+    gateway, handle, _ = _gateway(tmp_path)
+    manager = gateway.workspace_manager
+    manager._clock = lambda: NOW + timedelta(minutes=10)
+    for tool, arguments in (
+        (ToolName.LIST_TREE, {}),
+        (ToolName.READ_FILE_RANGE, {"path": "calculator.py", "start_line": 1, "end_line": 1}),
+    ):
+        expired = gateway.invoke(tool, arguments, phase=PatchForgePhase.RECON)
+        assert expired.record.status is ToolCallStatus.FAILED
+        assert isinstance(expired.output, FailureOutput)
+        assert "lease" in expired.output.detail
+    manager._clock = lambda: NOW
+    renewed = manager.renew_lease(handle, timedelta(minutes=30))
+    stale = gateway.invoke(ToolName.LIST_TREE, {}, phase=PatchForgePhase.RECON)
+    assert stale.record.status is ToolCallStatus.FAILED
+    gateway.refresh_workspace(renewed)
+    fresh = gateway.invoke(ToolName.LIST_TREE, {}, phase=PatchForgePhase.RECON)
+    assert fresh.record.status is ToolCallStatus.SUCCEEDED
+    other = renewed.model_copy(update={"worktree": tmp_path})
+    with pytest.raises(GatewayRequestError, match="workspace"):
+        gateway.refresh_workspace(other)
+
+
+def test_report_evidence_must_reference_runtime_records(tmp_path: Path) -> None:
+    gateway, _, _ = _gateway(tmp_path)
+    read = gateway.invoke(ToolName.LIST_TREE, {}, phase=PatchForgePhase.RECON)
+    result = gateway.invoke(
+        ToolName.SUBMIT_REPORT,
+        {
+            "report": AgentReport(
+                summary="Finalized.",
+                hypothesis="Fixture.",
+                implementation="None.",
+                evidence_references=[read.record.call_id, UUID(int=999)],
+            ).model_dump(mode="python")
+        },
+        phase=PatchForgePhase.FINALIZE,
+    )
+    assert result.record.status is ToolCallStatus.DENIED
+    assert isinstance(result.output, FailureOutput)
+    assert "unknown" in result.output.detail
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "conftest.py",
+        "pkg/conftest.py",
+        "pytest.ini",
+        "tox.ini",
+        "setup.cfg",
+        "sitecustomize.py",
+        "usercustomize.py",
+        "coverage_hook.pth",
+    ],
+)
+def test_test_infrastructure_changes_follow_test_file_policy(tmp_path: Path, path: str) -> None:
+    gateway, handle, _ = _gateway(tmp_path, allow_test_file_changes=False)
+    (handle.worktree / "pkg").mkdir()
+    result = gateway.invoke(
+        ToolName.CREATE_FILE,
+        {"path": path, "content": "\n"},
+        phase=PatchForgePhase.IMPLEMENT,
+    )
+    assert result.record.status is ToolCallStatus.DENIED
+    assert not (handle.worktree / path).exists()
+    (handle.worktree / path).write_text("\n", encoding="utf-8")
+    inspection = gateway.invoke(ToolName.INSPECT_DIFF, {}, phase=PatchForgePhase.SELF_REVIEW)
+    assert isinstance(inspection.output, DiffInspectionOutput)
+    assert path in inspection.output.test_files_changed
+
+
+def test_tool_cache_ignore_files_are_tolerated_but_other_nested_rules_fail_closed(
+    tmp_path: Path,
+) -> None:
+    gateway, handle, _ = _gateway(tmp_path)
+    for cache in (".pytest_cache", "pkg/.mypy_cache", ".ruff_cache"):
+        (handle.worktree / cache).mkdir(parents=True)
+        (handle.worktree / cache / ".gitignore").write_text("*\n", encoding="utf-8")
+        (handle.worktree / cache / "state").write_text("cached\n", encoding="utf-8")
+    status = gateway.invoke(ToolName.GIT_STATUS, {}, phase=PatchForgePhase.RECON)
+    assert status.record.status is ToolCallStatus.SUCCEEDED
+    diff = gateway.invoke(ToolName.GIT_DIFF, {}, phase=PatchForgePhase.RECON)
+    assert diff.record.status is ToolCallStatus.SUCCEEDED
+
+    (handle.worktree / "pkg" / ".gitignore").write_text("*\n", encoding="utf-8")
+    hidden = gateway.invoke(ToolName.INSPECT_DIFF, {}, phase=PatchForgePhase.RECON)
+    assert hidden.record.status is ToolCallStatus.FAILED
+    (handle.worktree / "pkg" / ".gitignore").unlink()
+    (handle.worktree / ".pytest_cache" / ".gitattributes").write_text("* -diff\n")
+    attributes = gateway.invoke(ToolName.INSPECT_DIFF, {}, phase=PatchForgePhase.RECON)
+    assert attributes.record.status is ToolCallStatus.FAILED

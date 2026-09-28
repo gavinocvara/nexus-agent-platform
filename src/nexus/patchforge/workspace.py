@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import BinaryIO, Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, Field, ValidationError
+from pydantic import AwareDatetime, Field, TypeAdapter, ValidationError
 
 from nexus.atlas.models import CommitSha, StrictModel
 from nexus.patchforge.canonical import canonical_json, canonical_sha256
@@ -22,6 +22,12 @@ from nexus.patchforge.policy import RepositoryProfile
 
 Clock = Callable[[], datetime]
 WORKSPACE_MARKER = "workspace.json"
+GIT_CONTROL_FILES = frozenset({".gitignore", ".gitattributes"})
+_CONTROL_FILE_PATHSPECS = tuple(f":(top,glob)**/{name}" for name in sorted(GIT_CONTROL_FILES))
+# Tools write a self-ignoring .gitignore into these caches. Such a file only affects its own
+# directory, which is neither importable nor collected by pytest, so it cannot hide changes.
+TOOL_CACHE_DIRECTORIES = frozenset({".pytest_cache", ".mypy_cache", ".ruff_cache"})
+_REPOSITORY_PATHS: TypeAdapter[list[RepositoryPath]] = TypeAdapter(list[RepositoryPath])
 
 
 class WorkspaceError(RuntimeError):
@@ -38,6 +44,10 @@ class GitTimeoutError(GitCommandError):
 
 class GitOutputLimitError(GitCommandError):
     """A Git command exceeded its bounded captured output."""
+
+
+class WorkspaceIntegrityError(WorkspaceError):
+    """The workspace cannot be attested faithfully and must fail closed."""
 
 
 class WorkspaceState(StrEnum):
@@ -139,6 +149,7 @@ class GitRunner:
         cwd: Path | None = None,
         timeout_seconds: int | None = None,
         output_limit: int | None = None,
+        allowed_exit_codes: frozenset[int] = frozenset({0}),
     ) -> GitCommandResult:
         if not arguments or any("\x00" in value for value in arguments):
             raise GitCommandError("Git command arguments are invalid")
@@ -200,7 +211,7 @@ class GitRunner:
             raise GitTimeoutError(f"Git {operation} exceeded {timeout} seconds")
         if capture.truncated:
             raise GitOutputLimitError(f"Git {operation} exceeded {limit} output bytes")
-        if return_code != 0:
+        if return_code not in allowed_exit_codes:
             detail = stderr.decode("utf-8", errors="replace").strip()
             raise GitCommandError(f"Git {operation} failed with exit {return_code}: {detail}")
         return GitCommandResult(stdout=stdout, stderr=stderr)
@@ -345,6 +356,7 @@ class WorkspaceManager:
 
     def inspect_diff(self, handle: WorkspaceHandle) -> WorkspaceDiff:
         current = self._verify_handle(handle)
+        self._verify_ignore_rules(current)
         self._git(current.git_directory, current.worktree, ["add", "--intent-to-add", "--", "."])
         patch = self._git(
             current.git_directory,
@@ -384,11 +396,30 @@ class WorkspaceManager:
 
     def status_porcelain(self, handle: WorkspaceHandle) -> bytes:
         current = self._verify_handle(handle)
+        self._verify_ignore_rules(current)
         return self._git(
             current.git_directory,
             current.worktree,
             ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
         ).stdout
+
+    def verify_active(self, handle: WorkspaceHandle) -> WorkspaceHandle:
+        """Verify durable identity, managed layout, and an unexpired lease."""
+        current = self._verify_handle(handle)
+        if current.record.lease_expires_at <= self._now():
+            raise WorkspaceError("Workspace lease has expired")
+        return current
+
+    def is_ignored(self, handle: WorkspaceHandle, path: RepositoryPath) -> bool:
+        """Return whether Git ignore rules would hide an untracked file at this path."""
+        current = self._verify_handle(handle)
+        output = self._git(
+            current.git_directory,
+            current.worktree,
+            ["check-ignore", "--", path],
+            allowed_exit_codes=frozenset({0, 1}),
+        ).stdout
+        return bool(output)
 
     def renew_lease(self, handle: WorkspaceHandle, lease_duration: timedelta) -> WorkspaceHandle:
         current = self._verify_handle(handle)
@@ -441,6 +472,42 @@ class WorkspaceManager:
             raise WorkspaceError("Execution worktree contains forbidden Git metadata")
         return handle
 
+    def _verify_ignore_rules(self, handle: WorkspaceHandle) -> None:
+        """Fail closed when ignore or attribute rules differ from the source commit.
+
+        Status and diff honor these files, so changing them could hide worktree changes.
+        Untracked control files are listed with every ignore rule disabled. Only a tool
+        cache's own ``.gitignore`` is tolerated.
+        """
+        listed = self._git(
+            handle.git_directory,
+            handle.worktree,
+            ["ls-files", "-z", "--others", "--", *_CONTROL_FILE_PATHSPECS],
+        ).stdout
+        untracked = [
+            path
+            for path in listed.split(b"\0")
+            if path and not self._is_tool_cache_ignore_file(path)
+        ]
+        changed = self._git(
+            handle.git_directory,
+            handle.worktree,
+            ["diff", "--name-only", "-z", "HEAD", "--", *_CONTROL_FILE_PATHSPECS],
+        ).stdout
+        if untracked or changed:
+            raise WorkspaceIntegrityError(
+                "Workspace Git ignore or attribute rules differ from the source commit"
+            )
+
+    @staticmethod
+    def _is_tool_cache_ignore_file(path: bytes) -> bool:
+        parts = path.split(b"/")
+        return (
+            len(parts) >= 2
+            and parts[-1] == b".gitignore"
+            and parts[-2].decode("utf-8", errors="replace") in TOOL_CACHE_DIRECTORIES
+        )
+
     def _git(
         self,
         git_directory: Path,
@@ -448,6 +515,7 @@ class WorkspaceManager:
         arguments: Sequence[str],
         *,
         output_limit: int | None = None,
+        allowed_exit_codes: frozenset[int] = frozenset({0}),
     ) -> GitCommandResult:
         return self.git.run(
             [
@@ -460,6 +528,7 @@ class WorkspaceManager:
                 *arguments,
             ],
             output_limit=output_limit,
+            allowed_exit_codes=allowed_exit_codes,
         )
 
     def _workspace_path(self, workspace_id: UUID) -> Path:
@@ -498,10 +567,18 @@ class WorkspaceManager:
                 item.decode("utf-8", errors="strict") for item in payload.split(b"\0") if item
             ]
         except UnicodeDecodeError as exc:
-            raise WorkspaceError("Git returned a non-UTF-8 repository path") from exc
-        from pydantic import TypeAdapter
-
-        return TypeAdapter(list[RepositoryPath]).validate_python(values)
+            raise WorkspaceIntegrityError("Git returned a non-UTF-8 repository path") from exc
+        try:
+            paths = _REPOSITORY_PATHS.validate_python(values)
+        except ValidationError as exc:
+            raise WorkspaceIntegrityError(
+                "Git returned a path that is not a portable repository path"
+            ) from exc
+        if paths != values:
+            raise WorkspaceIntegrityError(
+                "Git returned a path that is not a portable repository path"
+            )
+        return paths
 
     @classmethod
     def _binary_paths(cls, payload: bytes) -> list[RepositoryPath]:

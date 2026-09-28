@@ -6,6 +6,32 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.13.1 — PatchForge Milestone D hardening
+
+### Security
+
+Fixes seven gateway defects from an independent adversarial review of Milestone D:
+
+- A budget overrun after a sandbox execution raised an unhandled `ValidationError`; it
+  now returns a typed budget failure and keeps the execution evidence.
+- Non-report tools in `finalize` could consume the reserve `submit_report` needs; the
+  last call and result envelope are now reserved for the report.
+- A new or changed `.gitignore`/`.gitattributes` could hide worktree changes from status
+  and diff. Those files and Git-ignored paths are no longer writable, and status/diff
+  fail closed when ignore or attribute rules differ from the source commit (tool-cache
+  `.gitignore` files excepted).
+- Non-portable filenames such as `a:b.py` crashed tree, search, and diff; reads now omit
+  them (counted in the additive `TreeOutput.omitted_unrepresentable` field) and diffs
+  fail closed.
+- File and execution tools did not re-verify the workspace handle or lease; every
+  workspace-touching call now does. `refresh_workspace` adopts a renewed handle.
+- `submit_report` accepted unknown evidence IDs; it now requires existing runtime records.
+- `conftest.py`, `pytest.ini`, `tox.ini`, `setup.cfg`, `sitecustomize.py`,
+  `usercustomize.py`, and `*.pth` bypassed the test-change policy; they now follow it
+  and are reported as test changes.
+
 ### Changed
 
 - Slimmed default agent context: a short `AGENTS.md` router (imported by `CLAUDE.md`)
@@ -14,7 +40,6 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
   moved to `AGENTS.md`, `ROADMAP.md`, `BRAIN.md`, the ADRs, and the Brain runbook.
 - Trimmed `README.md` to a concise entry point and reorganized this changelog by version.
 - The PatchForge policy test fixture protects `AGENTS.md` instead of the retired file.
-- No runtime behavior, test semantics, or frozen evidence changed.
 
 ## 0.13.0 — PatchForge Milestone D: ToolGateway (`bbb093e`)
 

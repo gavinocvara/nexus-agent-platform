@@ -102,6 +102,26 @@ is rejected. `advance_phase` and `submit_report` return typed control requests a
 silently mutate runtime state. The closed phase machine and model adapter remain
 Milestone E work.
 
+Milestone D hardening (0.13.1) closes findings from an independent adversarial review:
+
+- Every workspace-touching call re-verifies the durable handle and an unexpired lease;
+  a renewed handle is adopted only through `refresh_workspace` for the same workspace.
+- Git ignore and attribute rules are pinned to the source commit. The gateway never
+  writes `.gitignore`/`.gitattributes` or Git-ignored paths, and status/diff fail closed
+  if those rules change. The only exception is a tool cache's own `.gitignore`
+  (`.pytest_cache`, `.mypy_cache`, `.ruff_cache`).
+- Paths that are not portable `RepositoryPath` values are omitted from reads and make
+  diffs fail closed instead of being silently dropped or crashing.
+- Test-infrastructure files (`conftest.py`, `pytest.ini`, `tox.ini`, `setup.cfg`,
+  `sitecustomize.py`, `usercustomize.py`, `*.pth`) follow the test-change policy and are
+  reported as test changes. Operators protect other config, such as `pyproject.toml`,
+  through `protected_paths`.
+- In `finalize`, non-report tools cannot use the last call or last result envelope, so
+  `submit_report` always has capacity. Report evidence must reference existing
+  runtime tool-call or execution records.
+- A budget overrun after sandbox execution returns a typed budget failure and keeps the
+  execution evidence.
+
 ## Budgets And Runtime
 
 PatchForge uses the closed phases:

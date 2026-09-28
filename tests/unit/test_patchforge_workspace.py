@@ -20,6 +20,7 @@ from nexus.patchforge.workspace import (
     GitOutputLimitError,
     GitRunner,
     WorkspaceError,
+    WorkspaceIntegrityError,
     WorkspaceManager,
 )
 
@@ -333,3 +334,65 @@ def test_git_runner_enforces_combined_output_bound(tmp_path: Path) -> None:
         runner.run(["help", "-a"], output_limit=1)
     with pytest.raises(WorkspaceError, match="bounds must be positive"):
         runner.run(["--version"], output_limit=0)
+
+
+@pytest.mark.parametrize("change", ["modify", "delete"])
+def test_changed_tracked_ignore_rules_fail_closed(tmp_path: Path, change: str) -> None:
+    source, _ = _repository(tmp_path / "source")
+    (source / ".gitignore").write_text("*.log\n", encoding="utf-8")
+    _git(source, "add", ".gitignore")
+    _git(source, "commit", "-m", "fixture: ignore logs")
+    source_sha = _git(source, "rev-parse", "HEAD")
+    manager = WorkspaceManager(tmp_path / "workspaces", clock=lambda: NOW)
+    profile = _profile()
+    handle = manager.provision(
+        _task(source_sha, profile),
+        profile,
+        UUID(int=12),
+        source,
+        lease_duration=timedelta(minutes=5),
+    )
+    assert manager.inspect_diff(handle).changed_files == ()
+    ignore_file = handle.worktree / ".gitignore"
+    if change == "modify":
+        ignore_file.write_text("*.log\n*.py\n", encoding="utf-8")
+    else:
+        ignore_file.unlink()
+    with pytest.raises(WorkspaceIntegrityError, match="ignore or attribute rules"):
+        manager.inspect_diff(handle)
+    with pytest.raises(WorkspaceIntegrityError, match="ignore or attribute rules"):
+        manager.status_porcelain(handle)
+
+
+def test_diff_rejects_paths_that_are_not_portable(tmp_path: Path) -> None:
+    source, source_sha = _repository(tmp_path / "source")
+    manager = WorkspaceManager(tmp_path / "workspaces", clock=lambda: NOW)
+    profile = _profile()
+    handle = manager.provision(
+        _task(source_sha, profile),
+        profile,
+        UUID(int=13),
+        source,
+        lease_duration=timedelta(minutes=5),
+    )
+    (handle.worktree / "a:b.py").write_text("x = 1\n", encoding="utf-8")
+    with pytest.raises(WorkspaceIntegrityError, match="portable"):
+        manager.inspect_diff(handle)
+
+
+def test_active_verification_rejects_an_expired_lease(tmp_path: Path) -> None:
+    source, source_sha = _repository(tmp_path / "source")
+    clock = [NOW]
+    manager = WorkspaceManager(tmp_path / "workspaces", clock=lambda: clock[0])
+    profile = _profile()
+    handle = manager.provision(
+        _task(source_sha, profile),
+        profile,
+        UUID(int=14),
+        source,
+        lease_duration=timedelta(minutes=5),
+    )
+    assert manager.verify_active(handle) == handle
+    clock[0] = NOW + timedelta(minutes=5)
+    with pytest.raises(WorkspaceError, match="lease has expired"):
+        manager.verify_active(handle)
