@@ -467,6 +467,12 @@ class ToolGateway:
     def executions(self) -> tuple[SandboxExecution, ...]:
         return tuple(self._executions.values())
 
+    @staticmethod
+    def requires_workspace(tool_name: ToolName) -> bool:
+        """Return whether an invocation must hold a verified active workspace lease."""
+
+        return tool_name not in _WORKSPACE_FREE_TOOLS
+
     def invoke(
         self,
         tool_name: ToolName,

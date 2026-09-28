@@ -25,35 +25,46 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
   workspace, engine, attestation, and budget-exhaustion outcomes.
 - Routed active failures to finalization and finalization failures to cleanup. Cleanup
   failure always closes the lifecycle while preserving an earlier primary failure.
-- Kept the unit pure: no workspace provisioning, tool invocation, model adapter, Git
-  authority, network, secrets, memory, GitHub mutation, or live model calls.
+- Added a single-action `RuntimeEngine` protocol and `PatchForgeRuntime` coordinator.
+  There is no parallel-action shape or live engine implementation.
+- Runtime accepts phase and report requests only after ToolGateway validation, preserves
+  gateway records as authoritative evidence, and leaves successful patch attestation to
+  Milestone F.
+- Runtime renews leases only for workspace-bound tools and immediately calls
+  `ToolGateway.refresh_workspace` after every successful renewal. Refresh failures are
+  typed workspace failures.
+- Runtime always attempts cleanup and closes success, cancellation, budget, policy,
+  workspace, sandbox, engine, finalization, and cleanup-failure paths.
+- Kept the unit deterministic: no model adapter, direct Git authority, network, secrets,
+  memory, GitHub mutation, or live model calls.
 
 ## Files Changed
 
-- `src/nexus/patchforge/runtime.py` (new lifecycle core)
+- `src/nexus/patchforge/runtime.py` (lifecycle and coordinator)
+- `src/nexus/patchforge/gateway.py`
 - `src/nexus/patchforge/__init__.py`
 - `tests/unit/test_patchforge_runtime.py` (new exhaustive lifecycle coverage)
+- `tests/unit/test_patchforge_runtime_coordinator.py` (new)
 - `CODEX_HANDOFF.md`
 
 ## Validation
 
-- Runtime lifecycle suite: **188 passed**.
-- PatchForge contracts plus Runtime lifecycle: **202 passed in 0.38s**.
+- Runtime lifecycle and coordinator suites: **201 passed in 0.58s**.
+- Focused PatchForge contracts/policy/sandbox/workspace/gateway/Runtime suite:
+  **305 passed, 2 deselected in 44.29s**.
 - Focused Ruff over PatchForge and Runtime tests: **passed**.
 - Strict mypy over `src/nexus/patchforge`: **passed, 8 source files**.
-- A broader local gateway selection reached one pre-existing Windows-only fixture
-  failure: the Milestone D hardening test attempts to create `a:b.py`, which Windows
-  cannot represent. Runtime tests are unaffected; the validated Linux CI baseline is
-  green. Do not weaken the production path rule to accommodate that fixture.
+- The two deselections are pre-existing Milestone D hardening fixtures that create
+  `a:b.py`, which Windows cannot represent. The same tests pass in the validated Linux
+  CI baseline. Do not weaken the production path rule to accommodate those fixtures.
 
 ## Exact Next Step
 
-Implement the Runtime coordinator over the existing lifecycle and `ToolGateway`.
-Introduce a deterministic engine protocol with no live implementation, accept only
-typed ToolGateway phase/report requests, renew workspace leases at explicit boundaries,
-call `ToolGateway.refresh_workspace` immediately after every successful renewal, and
-guarantee cleanup on success and failure paths. Add scripted tests before expanding
-result assembly.
+Add a deterministic integration proof using the real `ToolGateway`,
+`WorkspaceManager`, and `FakeSandbox`. Cover a complete scripted phase path, bounded
+implementation retry, lease refresh, runtime-owned evidence preservation, finalization
+reserve, and workspace removal. Then assess whether any Milestone E edge remains before
+the one-time full release gate.
 
 ## Critical Constraints
 

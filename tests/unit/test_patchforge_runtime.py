@@ -149,7 +149,7 @@ def test_happy_path_records_every_transition_and_closes() -> None:
 
     snapshot = lifecycle.snapshot
     assert snapshot.phase is PatchForgePhase.CLOSED
-    assert snapshot.outcome is PatchOutcome.PATCH_PROPOSED
+    assert snapshot.outcome is None
     assert snapshot.failure is None
     assert [item.sequence for item in snapshot.transitions] == list(range(1, 13))
     assert snapshot.transitions[-3].kind is RuntimeTransitionKind.REPORT
@@ -211,6 +211,19 @@ def test_failure_during_finalization_routes_directly_to_cleanup() -> None:
     assert transition.target is PatchForgePhase.CLEANUP
     lifecycle.close()
     assert lifecycle.snapshot.phase is PatchForgePhase.CLOSED
+
+
+def test_finalization_failure_preserves_an_existing_primary_failure() -> None:
+    lifecycle = _lifecycle()
+    _advance_to(lifecycle, PatchForgePhase.REPRODUCE)
+    lifecycle.fail(PatchForgeFailure.BUDGET_EXHAUSTED)
+
+    transition = lifecycle.finalization_failed(PatchForgeFailure.ENGINE_ERROR)
+
+    assert transition.target is PatchForgePhase.CLEANUP
+    assert transition.failure is PatchForgeFailure.ENGINE_ERROR
+    assert lifecycle.snapshot.failure is PatchForgeFailure.BUDGET_EXHAUSTED
+    assert lifecycle.snapshot.outcome is PatchOutcome.PARTIAL
 
 
 def test_cleanup_failure_closes_and_overrides_success_outcome() -> None:

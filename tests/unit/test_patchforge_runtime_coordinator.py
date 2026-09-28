@@ -1,0 +1,488 @@
+"""Deterministic PatchForge Runtime coordinator tests."""
+
+from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from uuid import UUID
+
+import pytest
+from pydantic import ValidationError
+
+from nexus.atlas.models import SourceRevision
+from nexus.patchforge.canonical import canonical_sha256
+from nexus.patchforge.gateway import (
+    FailureOutput,
+    GatewayRequestError,
+    GatewayResult,
+    PhaseRequestOutput,
+    ReportOutput,
+    StatusOutput,
+    ToolGateway,
+)
+from nexus.patchforge.models import (
+    AgentReport,
+    EngineeringTask,
+    PatchForgeFailure,
+    PatchForgePhase,
+    PatchOutcome,
+    PhaseBudget,
+    RunBudgets,
+    RunIdentity,
+    ToolCallRecord,
+    ToolCallStatus,
+    ToolName,
+)
+from nexus.patchforge.policy import PatchForgePolicy
+from nexus.patchforge.runtime import (
+    PatchForgeRuntime,
+    RuntimeCancelledError,
+    RuntimeToolAction,
+    RuntimeTurn,
+)
+from nexus.patchforge.workspace import (
+    WorkspaceError,
+    WorkspaceHandle,
+    WorkspaceRecord,
+    WorkspaceState,
+)
+
+NOW = datetime(2026, 9, 28, 9, tzinfo=UTC)
+
+
+def _phase_budget(*, calls: int = 10) -> PhaseBudget:
+    return PhaseBudget(
+        max_tool_calls=calls,
+        max_duration_seconds=60,
+        max_output_bytes=100_000,
+    )
+
+
+def _budgets(*, loops: int = 1) -> RunBudgets:
+    budget = _phase_budget()
+    return RunBudgets(
+        provisioning=budget,
+        recon=budget,
+        hypothesis=budget,
+        reproduce=budget,
+        implement=budget,
+        targeted_validate=budget,
+        full_validate=budget,
+        self_review=budget,
+        finalization_reserve=_phase_budget(calls=2),
+        cleanup=budget,
+        max_implementation_loops=loops,
+        max_total_tool_calls=92,
+        max_total_duration_seconds=600,
+    )
+
+
+def _task() -> EngineeringTask:
+    return EngineeringTask(
+        task_id=UUID(int=2),
+        atlas_job_id=UUID(int=3),
+        title="Repair deterministic fixture",
+        instructions="Make the bounded fixture correct.",
+        acceptance_criteria=["The fixture behavior is correct."],
+        source=SourceRevision(
+            repository_url="https://example.invalid/repository",
+            commit_sha="a" * 40,
+        ),
+        repository_profile_id="fixture.python",
+        repository_profile_sha256="b" * 64,
+        created_at=NOW,
+    )
+
+
+def _identity(task: EngineeringTask) -> RunIdentity:
+    return RunIdentity(
+        run_id=UUID(int=1),
+        task_id=task.task_id,
+        atlas_job_id=task.atlas_job_id,
+        atlas_execution_id=UUID(int=4),
+        agent_id="patchforge.engineer",
+        source=task.source,
+        repository_profile_id=task.repository_profile_id,
+        repository_profile_sha256=task.repository_profile_sha256,
+        task_sha256=canonical_sha256(task),
+        engine_kind="scripted",
+        engine_version="v1",
+        created_at=NOW,
+    )
+
+
+def _workspace() -> WorkspaceHandle:
+    return WorkspaceHandle(
+        record=WorkspaceRecord(
+            workspace_id=UUID(int=1),
+            run_id=UUID(int=1),
+            task_id=UUID(int=2),
+            source_sha="a" * 40,
+            branch_name="nexus/patchforge/fixture",
+            state=WorkspaceState.ACTIVE,
+            created_at=NOW,
+            lease_expires_at=NOW + timedelta(minutes=5),
+        ),
+        root=Path("runtime-fixture"),
+        worktree=Path("runtime-fixture/worktree"),
+        git_directory=Path("runtime-fixture/control/repository.git"),
+    )
+
+
+class ScriptedEngine:
+    def __init__(self, steps: list[RuntimeToolAction | Exception]) -> None:
+        self.steps = list(steps)
+        self.turns: list[RuntimeTurn] = []
+
+    def next_action(self, turn: RuntimeTurn) -> RuntimeToolAction:
+        self.turns.append(turn)
+        if not self.steps:
+            raise AssertionError("Scripted engine exhausted")
+        step = self.steps.pop(0)
+        if isinstance(step, Exception):
+            raise step
+        return step
+
+
+class FakeWorkspaceManager:
+    def __init__(self, events: list[str], *, cleanup_error: bool = False) -> None:
+        self.events = events
+        self.cleanup_error = cleanup_error
+        self.renewals = 0
+        self.cleanup_calls = 0
+
+    def renew_lease(
+        self,
+        handle: WorkspaceHandle,
+        lease_duration: timedelta,
+    ) -> WorkspaceHandle:
+        self.events.append("renew")
+        self.renewals += 1
+        record = handle.record.model_copy(
+            update={"lease_expires_at": handle.record.lease_expires_at + lease_duration}
+        )
+        return handle.model_copy(update={"record": record})
+
+    def cleanup(self, workspace_id: UUID) -> bool:
+        assert workspace_id == UUID(int=1)
+        self.events.append("cleanup")
+        self.cleanup_calls += 1
+        if self.cleanup_error:
+            raise WorkspaceError("fixture cleanup failed")
+        return True
+
+
+class FakeGateway:
+    _WORKSPACE_FREE = frozenset(
+        {ToolName.ADVANCE_PHASE, ToolName.SUBMIT_REPORT, ToolName.INSPECT_TEST_FAILURE}
+    )
+
+    def __init__(
+        self,
+        *,
+        events: list[str],
+        budgets: RunBudgets | None = None,
+        failure_code: str | None = None,
+    ) -> None:
+        self.task = _task()
+        self.identity = _identity(self.task)
+        self.policy = PatchForgePolicy(
+            repository_profile_id=self.task.repository_profile_id,
+            repository_profile_sha256=self.task.repository_profile_sha256,
+            allowed_tools=list(ToolName),
+            budgets=budgets or _budgets(),
+            max_changed_files=20,
+            max_diff_bytes=100_000,
+            allow_test_file_changes=True,
+        )
+        self.workspace = _workspace()
+        self.events = events
+        self.failure_code = failure_code
+        self.refresh_calls = 0
+        self._records: list[ToolCallRecord] = []
+
+    @property
+    def records(self) -> tuple[ToolCallRecord, ...]:
+        return tuple(self._records)
+
+    @property
+    def executions(self) -> tuple[()]:
+        return ()
+
+    @staticmethod
+    def requires_workspace(tool_name: ToolName) -> bool:
+        return tool_name not in FakeGateway._WORKSPACE_FREE
+
+    def refresh_workspace(self, workspace: WorkspaceHandle) -> None:
+        self.events.append("refresh")
+        self.refresh_calls += 1
+        self.workspace = workspace
+
+    def invoke(
+        self,
+        tool_name: ToolName,
+        arguments: Mapping[str, object],
+        *,
+        phase: PatchForgePhase,
+    ) -> GatewayResult:
+        if self.failure_code is not None and tool_name is ToolName.GIT_STATUS:
+            output = FailureOutput(code=self.failure_code, detail="scripted failure")
+            status = ToolCallStatus.FAILED
+            error_code = self.failure_code
+        elif tool_name is ToolName.ADVANCE_PHASE:
+            output = PhaseRequestOutput(
+                current_phase=phase,
+                target_phase=PatchForgePhase(arguments["target_phase"]),
+            )
+            status = ToolCallStatus.SUCCEEDED
+            error_code = None
+        elif tool_name is ToolName.SUBMIT_REPORT:
+            report = AgentReport.model_validate(arguments["report"])
+            output = ReportOutput(
+                report_sha256=canonical_sha256(report),
+                evidence_references=report.evidence_references,
+            )
+            status = ToolCallStatus.SUCCEEDED
+            error_code = None
+        else:
+            output = StatusOutput(porcelain="", clean=True)
+            status = ToolCallStatus.SUCCEEDED
+            error_code = None
+        record = ToolCallRecord(
+            call_id=UUID(int=100 + len(self._records)),
+            run_id=self.identity.run_id,
+            sequence=len(self._records) + 1,
+            phase=phase,
+            tool_name=tool_name,
+            arguments_sha256=canonical_sha256(dict(arguments)),
+            status=status,
+            started_at=NOW,
+            completed_at=NOW,
+            output_bytes=len(output.model_dump_json().encode("utf-8")),
+            output_truncated=False,
+            error_code=error_code,
+        )
+        self._records.append(record)
+        return GatewayResult(record=record, output=output)
+
+
+def _advance(target: PatchForgePhase) -> RuntimeToolAction:
+    return RuntimeToolAction(
+        tool_name=ToolName.ADVANCE_PHASE,
+        arguments={"target_phase": target.value},
+    )
+
+
+def _report() -> RuntimeToolAction:
+    report = AgentReport(
+        summary="Completed the bounded scripted run.",
+        hypothesis="The scripted fixture had a deterministic defect.",
+        implementation="Applied the scripted bounded correction.",
+    )
+    return RuntimeToolAction(
+        tool_name=ToolName.SUBMIT_REPORT,
+        arguments={"report": report.model_dump(mode="json")},
+    )
+
+
+def _happy_actions() -> list[RuntimeToolAction | Exception]:
+    return [
+        RuntimeToolAction(tool_name=ToolName.GIT_STATUS),
+        _advance(PatchForgePhase.HYPOTHESIS),
+        _advance(PatchForgePhase.REPRODUCE),
+        _advance(PatchForgePhase.IMPLEMENT),
+        _advance(PatchForgePhase.TARGETED_VALIDATE),
+        _advance(PatchForgePhase.FULL_VALIDATE),
+        _advance(PatchForgePhase.SELF_REVIEW),
+        _advance(PatchForgePhase.FINALIZE),
+        _report(),
+    ]
+
+
+def _runtime(
+    *,
+    actions: list[RuntimeToolAction | Exception],
+    loops: int = 1,
+    failure_code: str | None = None,
+    cleanup_error: bool = False,
+) -> tuple[PatchForgeRuntime, FakeGateway, FakeWorkspaceManager, list[str]]:
+    events: list[str] = []
+    gateway = FakeGateway(
+        events=events,
+        budgets=_budgets(loops=loops),
+        failure_code=failure_code,
+    )
+    manager = FakeWorkspaceManager(events, cleanup_error=cleanup_error)
+    runtime = PatchForgeRuntime(
+        gateway=gateway,
+        workspace_manager=manager,
+        engine=ScriptedEngine(actions),
+        lease_duration=timedelta(minutes=5),
+        clock=lambda: NOW,
+    )
+    return runtime, gateway, manager, events
+
+
+def test_happy_path_uses_one_action_at_a_time_and_always_cleans_up() -> None:
+    runtime, gateway, manager, events = _runtime(actions=_happy_actions())
+
+    completion = runtime.execute()
+
+    assert completion.snapshot.phase is PatchForgePhase.CLOSED
+    assert completion.snapshot.outcome is None
+    assert completion.snapshot.failure is None
+    assert completion.report is not None
+    assert completion.workspace_cleaned is True
+    assert len(completion.lease_renewals) == 1
+    assert gateway.refresh_calls == manager.renewals == 1
+    assert events == ["renew", "refresh", "cleanup"]
+
+
+def test_every_lease_renewal_is_immediately_followed_by_gateway_refresh() -> None:
+    actions = [
+        RuntimeToolAction(tool_name=ToolName.GIT_STATUS),
+        RuntimeToolAction(tool_name=ToolName.GIT_DIFF),
+        *_happy_actions()[1:],
+    ]
+    runtime, gateway, manager, events = _runtime(actions=actions)
+
+    completion = runtime.execute()
+
+    assert len(completion.lease_renewals) == 2
+    assert gateway.refresh_calls == manager.renewals == 2
+    assert events == ["renew", "refresh", "renew", "refresh", "cleanup"]
+
+
+def test_real_gateway_workspace_requirement_is_closed_and_explicit() -> None:
+    workspace_free = {
+        ToolName.INSPECT_TEST_FAILURE,
+        ToolName.ADVANCE_PHASE,
+        ToolName.SUBMIT_REPORT,
+    }
+
+    assert {tool for tool in ToolName if not ToolGateway.requires_workspace(tool)} == workspace_free
+
+
+def test_failed_refresh_after_renewal_is_a_workspace_failure() -> None:
+    runtime, gateway, manager, events = _runtime(
+        actions=[RuntimeToolAction(tool_name=ToolName.GIT_STATUS), _report()]
+    )
+
+    def reject_refresh(workspace: WorkspaceHandle) -> None:
+        events.append("refresh")
+        gateway.refresh_calls += 1
+        raise GatewayRequestError("scripted refresh rejection")
+
+    gateway.refresh_workspace = reject_refresh  # type: ignore[method-assign]
+    completion = runtime.execute()
+
+    assert manager.renewals == gateway.refresh_calls == 1
+    assert events == ["renew", "refresh", "cleanup"]
+    assert completion.snapshot.failure is PatchForgeFailure.WORKSPACE_ERROR
+    assert completion.snapshot.outcome is PatchOutcome.ABORTED
+    assert completion.lease_renewals == []
+
+
+def test_invalid_phase_request_becomes_policy_failure_then_reports_and_cleans() -> None:
+    runtime, _, manager, _ = _runtime(actions=[_advance(PatchForgePhase.FULL_VALIDATE), _report()])
+
+    completion = runtime.execute()
+
+    assert completion.snapshot.failure is PatchForgeFailure.POLICY_DENIED
+    assert completion.snapshot.outcome is PatchOutcome.POLICY_VIOLATION
+    assert completion.report is not None
+    assert manager.cleanup_calls == 1
+
+
+def test_loop_exhaustion_becomes_partial_budget_failure() -> None:
+    actions = [
+        _advance(PatchForgePhase.HYPOTHESIS),
+        _advance(PatchForgePhase.REPRODUCE),
+        _advance(PatchForgePhase.IMPLEMENT),
+        _advance(PatchForgePhase.TARGETED_VALIDATE),
+        _advance(PatchForgePhase.IMPLEMENT),
+        _advance(PatchForgePhase.TARGETED_VALIDATE),
+        _advance(PatchForgePhase.IMPLEMENT),
+        _report(),
+    ]
+    runtime, _, _, _ = _runtime(actions=actions, loops=1)
+
+    completion = runtime.execute()
+
+    assert completion.snapshot.implementation_loops == 1
+    assert completion.snapshot.failure is PatchForgeFailure.BUDGET_EXHAUSTED
+    assert completion.snapshot.outcome is PatchOutcome.PARTIAL
+    assert completion.report is not None
+
+
+def test_gateway_budget_failure_preserves_final_report_reserve() -> None:
+    runtime, gateway, _, _ = _runtime(
+        actions=[RuntimeToolAction(tool_name=ToolName.GIT_STATUS), _report()],
+        failure_code="output_budget_exceeded",
+    )
+
+    completion = runtime.execute()
+
+    assert completion.snapshot.failure is PatchForgeFailure.BUDGET_EXHAUSTED
+    assert completion.snapshot.outcome is PatchOutcome.PARTIAL
+    assert completion.report is not None
+    assert [item.tool_name for item in gateway.records] == [
+        ToolName.GIT_STATUS,
+        ToolName.SUBMIT_REPORT,
+    ]
+
+
+def test_engine_failure_can_finalize_with_a_partial_report() -> None:
+    runtime, _, _, _ = _runtime(actions=[RuntimeError("engine failed"), _report()])
+
+    completion = runtime.execute()
+
+    assert completion.snapshot.failure is PatchForgeFailure.ENGINE_ERROR
+    assert completion.snapshot.outcome is PatchOutcome.ABORTED
+    assert completion.report is not None
+    assert completion.workspace_cleaned is True
+
+
+def test_repeated_engine_failure_in_finalization_still_cleans_up() -> None:
+    runtime, _, manager, _ = _runtime(
+        actions=[RuntimeError("engine failed"), RuntimeError("finalization failed")]
+    )
+
+    completion = runtime.execute()
+
+    assert completion.snapshot.failure is PatchForgeFailure.ENGINE_ERROR
+    assert completion.report is None
+    assert completion.snapshot.phase is PatchForgePhase.CLOSED
+    assert manager.cleanup_calls == 1
+
+
+def test_cancellation_is_explicit_and_can_be_reported() -> None:
+    runtime, _, _, _ = _runtime(actions=[RuntimeCancelledError("cancelled"), _report()])
+
+    completion = runtime.execute()
+
+    assert completion.snapshot.failure is PatchForgeFailure.CANCELLED
+    assert completion.snapshot.outcome is PatchOutcome.CANCELLED
+    assert completion.report is not None
+
+
+def test_cleanup_failure_is_typed_and_closes_the_runtime() -> None:
+    runtime, _, manager, _ = _runtime(actions=_happy_actions(), cleanup_error=True)
+
+    completion = runtime.execute()
+
+    assert completion.snapshot.phase is PatchForgePhase.CLOSED
+    assert completion.snapshot.failure is PatchForgeFailure.CLEANUP_FAILED
+    assert completion.snapshot.cleanup_failed is True
+    assert completion.workspace_cleaned is False
+    assert manager.cleanup_calls == 1
+
+
+def test_runtime_tool_action_is_strict_and_has_no_parallel_shape() -> None:
+    with pytest.raises(ValidationError):
+        RuntimeToolAction.model_validate(
+            {
+                "tool_name": "git_status",
+                "arguments": {},
+                "parallel_actions": [],
+            }
+        )
