@@ -100,6 +100,13 @@ _FAILURE_OUTCOMES: dict[PatchForgeFailure, PatchOutcome] = {
     PatchForgeFailure.CLEANUP_FAILED: PatchOutcome.ABORTED,
 }
 
+
+def outcome_for_failure(failure: PatchForgeFailure) -> PatchOutcome:
+    """Return the deterministic non-success outcome for a failure classification."""
+
+    return _FAILURE_OUTCOMES[failure]
+
+
 _FAILURE_TO_FINALIZE = frozenset(
     {
         PatchForgePhase.CREATED,
@@ -376,7 +383,9 @@ class RuntimeGateway(Protocol):
     task: EngineeringTask
     policy: PatchForgePolicy
     workspace: WorkspaceHandle
-    workspace_manager: RuntimeWorkspaceManager
+
+    @property
+    def workspace_manager(self) -> RuntimeWorkspaceManager: ...
 
     @property
     def records(self) -> tuple[ToolCallRecord, ...]: ...
@@ -729,10 +738,15 @@ class PatchForgeRuntime:
             )
         except WorkspaceNoChangesError:
             self._final_capture_error = FinalCaptureError.NO_CHANGES
+            return
         except (WorkspaceError, OSError):
             self._final_capture_error = FinalCaptureError.WORKSPACE_ERROR
-        else:
+            return
+        try:
             self._final_capture = FinalWorkspaceCapture.from_proposal(identity.run_id, proposal)
+        except ValueError:
+            # The worktree cannot be represented within the evidence contract's bounds.
+            self._final_capture_error = FinalCaptureError.WORKSPACE_ERROR
 
     def _renew_workspace(self) -> None:
         current = self.gateway.workspace

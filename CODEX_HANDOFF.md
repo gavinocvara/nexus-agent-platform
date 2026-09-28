@@ -22,26 +22,25 @@ Done (committed and pushed):
    patch bytes) at `reported`, before cleanup. Capture failures are typed
    (`WORKSPACE_ERROR` during the run; `FinalCaptureError` at the end).
 
+3. `PatchForgeAttestor` (`src/nexus/patchforge/attestor.py`): pure function from
+   `RuntimeCompletion` (plus task, profile, policy) to `PatchResult`, with a
+   content-addressed `LocalArtifactStore` for the patch. Checks count only when their
+   execution observed the exact final tree and left it unchanged. Blocking findings map
+   tamper -> `attestation_failed`, policy -> `policy_denied`, validation ->
+   `validation_failed`; only a clean attestation is `patch_proposed`.
+4. Real-path proof: `tests/unit/test_patchforge_attestor.py` drives WorkspaceManager +
+   ToolGateway + FakeSandbox + Runtime + Attestor through the happy path and stale-
+   validation, tamper, mutating-validation, reproduction, scope, protected/sensitive,
+   no-change, command-hash, and runtime-failure paths.
+
 Remaining:
 
-3. Attestor (`src/nexus/patchforge/attestor.py`): pure function from `RuntimeCompletion`
-   plus task, profile, and policy to `PatchResult`. Map sandbox executions to
-   `TestExecution` by command purpose; reproduction = the `reproduction` command failing
-   on the pristine tree, then targeted tests passing on the final tree; checks count only
-   executions whose before/after fingerprints equal the final diff; `DiffSummary` with
-   scope/protected/test findings; tamper checks (command hashes, execution/tool-call
-   linkage, fingerprint chain with no out-of-band changes, patch hash). Store the patch in
-   a content-addressed local artifact store. Only a clean attestation is
-   `patch_proposed`.
-4. Real integration proof (WorkspaceManager + ToolGateway + FakeSandbox + Runtime +
-   Attestor): happy path plus tamper, scope, stale-validation, and missing-reproduction
-   paths.
 5. Release 0.15.0: ADR 0010 section, ROADMAP, CHANGELOG, README status, full gate,
    green GitHub Actions, then hand off Milestone G.
 
 ## Active Issues
 
-- No known failing tests. Focused PatchForge suite: 320 passed.
+- No known failing tests. Focused PatchForge suite: 336 passed.
 - Remote branch `maintenance/repo-hygiene-claude` is unmerged and untouched; owner decides.
 
 ## Critical Constraints

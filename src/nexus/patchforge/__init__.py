@@ -1,5 +1,6 @@
 """PatchForge software-engineering agent contracts."""
 
+from nexus.patchforge.attestor import LocalArtifactStore, PatchForgeAttestor
 from nexus.patchforge.gateway import GatewayResult, ToolGateway
 from nexus.patchforge.models import EngineeringTask, PatchResult, RunIdentity
 from nexus.patchforge.runtime import (
@@ -17,6 +18,8 @@ __all__ = [
     "EngineeringTask",
     "FakeSandbox",
     "GatewayResult",
+    "LocalArtifactStore",
+    "PatchForgeAttestor",
     "PatchResult",
     "PatchForgeLifecycle",
     "PatchForgeRuntime",

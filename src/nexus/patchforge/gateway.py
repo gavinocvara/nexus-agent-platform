@@ -3,7 +3,7 @@
 import ast
 import os
 import stat
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
@@ -414,6 +414,46 @@ _COMMAND_BY_TOOL = {
     ToolName.RUN_LINTER: CommandPurpose.LINTER,
     ToolName.RUN_TYPECHECK: CommandPurpose.TYPECHECK,
 }
+EXECUTION_TOOLS = frozenset(_COMMAND_BY_TOOL)
+
+
+def command_purpose_for(tool_name: ToolName, phase: PatchForgePhase) -> CommandPurpose:
+    """Return the operator-profile command an execution tool runs in a phase."""
+
+    if tool_name not in _COMMAND_BY_TOOL:
+        raise ValueError(f"Tool does not execute a repository command: {tool_name}")
+    if tool_name is ToolName.RUN_TARGETED_TESTS and phase is PatchForgePhase.REPRODUCE:
+        return CommandPurpose.REPRODUCTION
+    return _COMMAND_BY_TOOL[tool_name]
+
+
+def path_matches(path: str, prefixes: Sequence[str]) -> bool:
+    return any(path == prefix or path.startswith(f"{prefix}/") for prefix in prefixes)
+
+
+def path_in_scope(path: str, scope_paths: Sequence[str]) -> bool:
+    return not scope_paths or path_matches(path, scope_paths)
+
+
+def is_test_path(path: str, profile: RepositoryProfile) -> bool:
+    name = path.rsplit("/", 1)[-1]
+    return (
+        path_matches(path, profile.test_path_prefixes)
+        or name in TEST_INFRASTRUCTURE_NAMES
+        or Path(name).suffix in TEST_INFRASTRUCTURE_SUFFIXES
+    )
+
+
+def is_sensitive_path(path: str) -> bool:
+    parts = path.casefold().split("/")
+    name = parts[-1]
+    if ".git" in parts:
+        return True
+    if name.startswith(".env") and name != ".env.example":
+        return True
+    if name in {"credentials", "credentials.json", "id_rsa", "id_ed25519"}:
+        return True
+    return Path(name).suffix in {".key", ".pem", ".p12", ".pfx"}
 
 
 class ToolGateway:
@@ -956,9 +996,7 @@ class ToolGateway:
 
     @staticmethod
     def _command_purpose(tool_name: ToolName, phase: PatchForgePhase) -> CommandPurpose:
-        if tool_name is ToolName.RUN_TARGETED_TESTS and phase is PatchForgePhase.REPRODUCE:
-            return CommandPurpose.REPRODUCTION
-        return _COMMAND_BY_TOOL[tool_name]
+        return command_purpose_for(tool_name, phase)
 
     @staticmethod
     def _execution_output(
@@ -1024,12 +1062,7 @@ class ToolGateway:
             raise GatewayError("Git-ignored paths cannot be modified because diffs would hide them")
 
     def _is_test_path(self, path: str) -> bool:
-        name = path.rsplit("/", 1)[-1]
-        return (
-            self._matches(path, self.profile.test_path_prefixes)
-            or name in TEST_INFRASTRUCTURE_NAMES
-            or Path(name).suffix in TEST_INFRASTRUCTURE_SUFFIXES
-        )
+        return is_test_path(path, self.profile)
 
     @staticmethod
     def _is_representable(path: str) -> bool:
@@ -1039,11 +1072,11 @@ class ToolGateway:
             return False
 
     def _in_scope(self, path: str) -> bool:
-        return not self.task.scope_paths or self._matches(path, self.task.scope_paths)
+        return path_in_scope(path, self.task.scope_paths)
 
     @staticmethod
     def _matches(path: str, prefixes: list[RepositoryPath]) -> bool:
-        return any(path == prefix or path.startswith(f"{prefix}/") for prefix in prefixes)
+        return path_matches(path, prefixes)
 
     def _readable_file(self, path: RepositoryPath) -> Path:
         if self._is_sensitive(path):
@@ -1077,15 +1110,7 @@ class ToolGateway:
 
     @staticmethod
     def _is_sensitive(path: str) -> bool:
-        parts = path.casefold().split("/")
-        name = parts[-1]
-        if ".git" in parts:
-            return True
-        if name.startswith(".env") and name != ".env.example":
-            return True
-        if name in {"credentials", "credentials.json", "id_rsa", "id_ed25519"}:
-            return True
-        return Path(name).suffix in {".key", ".pem", ".p12", ".pfx"}
+        return is_sensitive_path(path)
 
     def _atomic_write(self, path: Path, content: bytes, *, preserve_mode: bool) -> None:
         temporary = path.parent / f".nexus-write-{self._id_factory().hex}.tmp"
