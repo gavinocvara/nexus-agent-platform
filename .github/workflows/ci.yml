@@ -39,6 +39,9 @@ jobs:
       - name: Validate Atlas control plane
         run: python -m pytest tests/unit/test_atlas_*.py
 
+      - name: Validate PatchForge contracts
+        run: python -m pytest tests/unit/test_patchforge_*.py
+
       - name: Validate deterministic investigator boundary
         run: python -m pytest tests/unit/test_aegisops_contracts.py tests/unit/test_aegisops_runtime.py tests/unit/test_aegisops_evaluation.py
 

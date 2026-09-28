@@ -84,8 +84,28 @@
 - No scheduler, network service, deployment, remediation, merge, model call, shared
   memory, Engram, Kubernetes, or PatchForge business logic
 
+## Accelerated PatchForge v1
+
+- **A. Contracts (Complete):** strict tasks, identities, phase budgets, runtime evidence,
+  patch results, operator policy, sandbox requirements, and canonical hashes
+- **B. WorkspaceManager (Next):** disposable source-SHA workspaces, runtime-owned Git,
+  hardened commands, diff, cleanup, and orphan reaping over synthetic repositories
+- **C. SandboxExecutor:** Docker isolation plus deterministic `FakeSandbox`
+- **D. ToolGateway:** narrow read, write, execution, and control tools
+- **E. Runtime:** closed phased workflow with bounded implementation loops and reserved
+  finalization capacity
+- **F. Attestor:** reproduction, regression, diff, validation, scope, and basic tamper checks
+- **G. Deterministic E2E:** scripted happy path and all required failure/partial paths
+- **H. Benchmark v0:** small synthetic defect corpus and reproducible harness
+- **I. Live engine:** explicit opt-in, one targeted task, artifact inspection, then stop
+- **J. SentinelQA-lite:** independent fresh-sandbox patch and validation verification
+- **K. GitHub:** issue intake, reviewed branch push, and draft PR only; never merge
+
+PatchForge memory, large benchmarks, automatic improvement adoption, Kubernetes, Engram,
+and free-form multi-agent planning remain deferred.
+
 ## Later Phases
 
-The remaining sequence is governed by `NEXUS_MASTER_BUILD_PROMPT.md`: AegisOps
-remediation, Kubernetes, PatchForge, SentinelQA, Engram evolution, and integrated
-NEXUS workflows. No later phase begins without explicit project-owner authorization.
+The remaining sequence is governed by `NEXUS_MASTER_BUILD_PROMPT.md`, with the explicitly
+authorized accelerated PatchForge ordering recorded above. No unrelated phase begins
+while PatchForge v1 is being brought online.

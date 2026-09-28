@@ -2,12 +2,14 @@
 
 ## Current Milestone
 
-Phase 8 - Atlas Thin Control Plane Foundation is complete. Phase 7 Brain v1 is
-accepted complete with its documented negative behavioral calibration and preserved
-frozen evidence.
-Atlas v1 now provides the minimum deterministic job, policy, persistence, approval,
-recovery, and audit boundary needed for a future PatchForge runtime. Phase 9 and
-PatchForge business logic have not begun.
+The accelerated PatchForge v1 track is active. Milestone A - Contracts is complete in
+the current checkpoint; Milestone B - WorkspaceManager is next. Atlas-min remains the
+outer job, policy, review, approval, persistence, and audit boundary. No PatchForge
+workspace, sandbox, tool gateway, runtime, model call, GitHub action, or memory behavior
+is claimed yet.
+
+Phase 7 Brain v1 remains accepted complete with its documented negative behavioral
+calibration and preserved frozen evidence. Phase 8 Atlas remains complete and unchanged.
 
 The frozen Phase 5 investigator and official Phase 6 memoryless baseline remain the
 comparison control. Phase 7 does not change the model, investigator instructions,
@@ -20,7 +22,7 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - Remote: `https://github.com/gavinocvara/nexus-agent-platform.git`
 - Branch: `main`
 - Phase 7 starting point: `52bd5f47dfbf5591e5263911b1c64dab66158d90`
-- Package version: `0.9.0`
+- Package version: `0.10.0`
 - Accepted Phase 6 baseline-record checkpoint: `5c0200d`
 - Phase 7 implementation checkpoint: `a7b6f5c1fbfc1e218cfabb1d78ad8d830e2bc17c`
 - Phase 7 validation handoff: the commit containing this document
@@ -28,6 +30,7 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - Frozen-smoke implementation identity: `f77313e7e624b68750578b2b25b90ba8123fab62`
 - Phase 7 postmortem checkpoint: `71de1de99985a52c9cbb59a0b6e1950c83229500`
 - Phase 8 validation checkpoint: the commit containing this document
+- PatchForge v1 contracts checkpoint: the commit containing this document
 
 ## Locked Phase 6 Baseline
 
@@ -120,6 +123,29 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
   tool execution, repository mutation, merging, deployment, shared-memory access, or
   free-form multi-agent planning.
 
+## PatchForge v1 Contracts
+
+- `nexus.patchforge` defines strict schema-version-1 `EngineeringTask`, `RunIdentity`,
+  phase budgets, tool-call records, test executions, reproduction evidence, check
+  results, diff summaries, narrative agent reports, budget usage, policy findings, and
+  `PatchResult` contracts.
+- `AgentReport` has no test, lint, typecheck, reproduction, approval, or merge status
+  fields. Those claims exist only in runtime-attested records. `PatchResult` cross-checks
+  run identity, call order, execution/check references, evidence status, budget count,
+  source SHA, blocking findings, and required targeted/full-suite passes.
+- `patch_proposed` is the only successful PatchForge outcome and is the only outcome
+  convertible to Atlas' patch contract. Partial, aborted, cancelled, sandbox-failed, and
+  policy-violation results require explicit failure classification.
+- Visible phase budgets cover provisioning through cleanup. Finalization has a separate
+  reserved envelope, and parallel model tool calls are fixed off.
+- Operator-owned `RepositoryProfile` commands are typed argument vectors. `SandboxPolicy`
+  requires a digest-pinned image, no network, no secrets, non-root UID/GID, a read-only
+  root, no `.git` mount, and bounded CPU, memory, PIDs, time, and output.
+- Canonical NFC-normalized JSON and SHA-256 identify typed tasks, profiles, commands,
+  diffs, and results independent of dictionary order.
+- ADR 0010 records the complete accelerated A-through-K design. Milestone A does not
+  execute Git, Docker, tools, tests from target repositories, or a model.
+
 ## Experimental Design
 
 The byte-hashed protocol in `docs/experiments/brain-v1-protocol.json` pre-registers the
@@ -193,6 +219,18 @@ py -m pytest -m integration tests/integration
 
 ## Latest Validation
 
+- PatchForge Milestone A version 0.10.0 validation on 2026-09-27: the editable package
+  installs and `pip check` passes; all 144 files pass Ruff formatting; Ruff lint passes;
+  strict mypy reports no issues in 81 source files; all 291 non-integration tests pass
+  with 20 integration tests deselected. The focused PatchForge suite passes all 25 tests.
+- Contract coverage includes strict/coercion rejection, repository-relative paths,
+  canonical hash stability, phase totals and finalization reserve, narrative/evidence
+  separation, rejection of fabricated evidence references, execution/check consistency,
+  required targeted/full validation, source-SHA binding, complete partial results, Atlas
+  conversion, sandbox invariants, URL credential rejection, disabled memory/parallel
+  calls, and argument-vector commands.
+- All five scenario documents and Compose configuration validate. No target-repository
+  command, Docker sandbox, model call, live evaluation, or benchmark was run.
 - Phase 8 version 0.9.0 validation on 2026-09-27: the editable package installs and
   `pip check` passes; all 137 files pass Ruff formatting; Ruff lint passes; strict mypy
   reports no issues in 77 source files; all 266 non-integration tests pass with 20
@@ -348,11 +386,14 @@ requirement is incompatible with the architecture.
 - Five scenarios are insufficient for independent learning-effect estimates.
 - Atlas v1 is deliberately single-node. It has no remote API, scheduler, worker heartbeat,
   distributed claim protocol, credential broker, or PostgreSQL control-plane backend.
+- PatchForge Milestone A is contracts only. Runtime ownership prevents model-authored
+  evidence by interface design, but WorkspaceManager, Docker enforcement, ToolGateway,
+  state transitions, and attestation issuance remain to be implemented and tested.
 
 ## Next Step
 
-Register a future PatchForge implementation behind `AgentRuntime`, accept only
-`JobDispatch` from a running leased Atlas job, and return the existing typed
-`PatchResult`. SentinelQA review and human approval must remain separate later steps.
-Do not implement PatchForge, begin Phase 9, add unrestricted execution, or alter frozen
-Brain behavior without explicit authorization.
+Implement PatchForge Milestone B `WorkspaceManager` against synthetic fixture
+repositories: create a fresh disposable workspace at an exact source SHA, keep Git
+authority outside the future sandbox, create a runtime-owned branch, derive a canonical
+diff, clean up idempotently, and reap only verifiable orphan workspaces. Do not begin
+Docker execution or expose model tools in this milestone.

@@ -9,7 +9,8 @@ Phase 4 adds bounded read-only diagnostics, Phase 5 adds one evidence-grounded
 AegisOps investigator, and Phase 6 adds reproducible benchmark history and comparison
 without changing that investigator's behavior. Phase 7 adds private Brain v1 memory and
 its frozen negative calibration. Phase 8 adds the Atlas thin control-plane foundation
-for deterministic reviewed agent jobs.
+for deterministic reviewed agent jobs. The accelerated PatchForge track now has its
+strict task, policy, runtime-evidence, and patch-result contracts.
 
 The governing specifications are `NEXUS_PROJECT_INSTRUCTIONS.md`,
 `NEXUS_MASTER_BUILD_PROMPT.md`, and `BRAIN.md`.
@@ -316,3 +317,20 @@ unrestricted shell, merge, deployment, production remediation, Kubernetes, or me
 permission. `AgentRuntime`, `JobDispatch`, `PatchResult`, and `ReviewResult` form the
 future PatchForge/SentinelQA integration boundary. See
 `docs/adr/0009-atlas-thin-control-plane-foundation.md`.
+
+## PatchForge Contracts
+
+PatchForge v1 begins with a memoryless, single-agent contract boundary under
+`nexus.patchforge`. An `EngineeringTask` binds an Atlas job to an immutable source SHA
+and operator-owned repository-profile hash. Run budgets are phase-scoped and reserve
+finalization capacity. Parallel model tool calls are disabled.
+
+The model authors only an `AgentReport` narrative. Tool calls, test executions,
+reproduction status, validation checks, diff summaries, policy findings, and budget
+usage are runtime-attested and cross-checked by `PatchResult`. A successful result is
+only `patch_proposed`; PatchForge cannot approve, merge, deploy, or push to `main`.
+
+The repository profile defines argument-vector commands and a mandatory digest-pinned,
+networkless, secretless, non-root, resource-bounded sandbox policy. Workspace and Docker
+execution are the next milestones and are not claimed by the contract layer. See
+`docs/adr/0010-patchforge-v1-trustworthy-engineering-agent.md`.

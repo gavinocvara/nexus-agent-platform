@@ -6,6 +6,14 @@ All meaningful changes to NEXUS are recorded here.
 
 ### Added
 
+- PatchForge v1 Milestone A contracts for engineering tasks, run identity, visible
+  phase budgets, runtime-attested tool/test/reproduction/check/diff evidence, narrative-
+  only agent reports, typed patch outcomes, and deterministic canonical hashes.
+- Operator-owned repository profiles with argument-vector commands and mandatory
+  digest-pinned, networkless, secretless, non-root, resource-bounded sandbox policy.
+- ADR 0010 records the accelerated trustworthy PatchForge sequence and keeps Atlas,
+  Git authority, execution isolation, runtime evidence, and human approval separate.
+
 - Atlas v1 thin control-plane contracts for typed jobs, source revisions, budgets,
   capabilities, structured generic/patch results, SentinelQA-compatible reviews, human
   approval, typed failure, execution leases, and runtime dispatch adapters.
@@ -111,6 +119,8 @@ All meaningful changes to NEXUS are recorded here.
   and integration tests.
 
 ### Changed
+
+- Advanced the package to version 0.10.0 for the PatchForge v1 contract milestone.
 
 - Advanced the package to version 0.9.0 for the Phase 8 Atlas thin control-plane
   foundation. Atlas remains a local library and introduces no service, model call,
