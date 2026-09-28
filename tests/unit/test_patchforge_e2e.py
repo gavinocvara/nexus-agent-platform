@@ -1,11 +1,13 @@
 """Deterministic PatchForge end-to-end harness and scenario catalog."""
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
 
 import pytest
 
+from nexus.patchforge import e2e_catalog
 from nexus.patchforge.e2e import (
     E2EScenario,
     FixtureRepository,
@@ -13,7 +15,12 @@ from nexus.patchforge.e2e import (
     materialize_fixture,
 )
 from nexus.patchforge.e2e_catalog import CALCULATOR, default_catalog, patch_proposed
-from nexus.patchforge.models import CheckStatus, PatchOutcome, ReproductionStatus
+from nexus.patchforge.models import (
+    CheckStatus,
+    PatchForgeFailure,
+    PatchOutcome,
+    ReproductionStatus,
+)
 from nexus.patchforge.workspace import GitRunner
 
 NOW = datetime(2026, 9, 28, 12, tzinfo=UTC)
@@ -75,3 +82,22 @@ def test_every_catalog_scenario_matches_its_expected_outcome(
     assert [item.sequence for item in run.result.tool_calls] == list(
         range(1, len(run.result.tool_calls) + 1)
     )
+
+
+def test_catalog_covers_success_and_every_failure_classification() -> None:
+    catalog = default_catalog()
+    assert len({item.name for item in catalog}) == len(catalog)
+    assert {item.expected_failure for item in catalog} == {None, *PatchForgeFailure}
+
+
+def test_gate_passes_and_reports_mismatches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert e2e_catalog.run_gate(tmp_path / "ok") == []
+    wrong = replace(patch_proposed(), expected_outcome=PatchOutcome.PARTIAL)
+    monkeypatch.setattr(e2e_catalog, "default_catalog", lambda: [wrong])
+    assert e2e_catalog.run_gate(tmp_path / "wrong") == [
+        "patch_proposed: outcome or failure did not match"
+    ]
+    assert e2e_catalog.main() == 1
+    assert "FAILED patch_proposed" in capsys.readouterr().err

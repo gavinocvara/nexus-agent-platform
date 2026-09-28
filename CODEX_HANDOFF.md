@@ -34,17 +34,20 @@ Done:
 2. `nexus.patchforge.e2e_catalog`: calculator fixture, profile, budgets, step helpers,
    and the `patch_proposed` scenario.
 
+3. Catalog: success plus one scenario per `PatchForgeFailure` (validation, budget,
+   policy, cancelled, sandbox, workspace, engine, attestation, cleanup), each asserting
+   outcome and classification. `python -m nexus.patchforge.e2e_catalog` runs every
+   scenario twice, requires the expected outcome and a byte-identical replay, and exits
+   nonzero otherwise; CI runs it as "Validate PatchForge deterministic E2E".
+
 ## Exact Next Step
 
-G2: extend `default_catalog()` with one end-to-end scenario per failure path
-(validation, budget, policy, cancellation, sandbox, workspace, engine, attestation,
-cleanup), each asserting its outcome and classification; add a
-`python -m nexus.patchforge.e2e` gate that exits nonzero on any mismatch, plus a CI
-step. Then release 0.16.0 and hand off Milestone H. No live model calls.
+Release 0.16.0 (ADR 0010 note, ROADMAP, CHANGELOG, README status, full gate, green CI),
+then hand off Milestone H - Benchmark v0. No live model calls.
 
 ## Active Issues
 
-- No known failing tests. Focused PatchForge suite: 341 passed.
+- No known failing tests. Focused PatchForge suite: 352 passed.
 - During Milestone F, one focused-suite run reported a single failure that was not
   captured and did not recur in 19 later runs. Watch for PatchForge flakiness.
 - Test modules are not type-checked in CI and carry pre-existing strict-mypy noise

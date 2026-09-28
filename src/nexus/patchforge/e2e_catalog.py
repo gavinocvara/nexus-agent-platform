@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+import sys
+from datetime import UTC, datetime
 from hashlib import sha256
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import Any
 
 from pydantic import HttpUrl
 
 from nexus.patchforge.canonical import canonical_sha256
-from nexus.patchforge.e2e import E2EScenario, FixtureRepository, ScriptStep
+from nexus.patchforge.e2e import (
+    E2EScenario,
+    FixtureRepository,
+    PatchForgeE2EHarness,
+    ScriptStep,
+)
 from nexus.patchforge.gateway import (
     AdvancePhaseArguments,
     ListTreeArguments,
@@ -17,6 +27,7 @@ from nexus.patchforge.gateway import (
 )
 from nexus.patchforge.models import (
     AgentReport,
+    PatchForgeFailure,
     PatchForgePhase,
     PatchOutcome,
     PhaseBudget,
@@ -29,9 +40,10 @@ from nexus.patchforge.policy import (
     SandboxCommand,
     SandboxPolicy,
 )
-from nexus.patchforge.runtime import RuntimeToolAction
+from nexus.patchforge.runtime import RuntimeCancelledError, RuntimeToolAction
 from nexus.patchforge.sandbox import FakeSandboxPlan, SandboxStatus
 
+GATE_TIME = datetime(2026, 1, 1, tzinfo=UTC)
 BROKEN = "def subtract(a, b):\n    return a + b\n"
 FIXED = "def subtract(a, b):\n    return a - b\n"
 CALCULATOR = FixtureRepository(
@@ -219,7 +231,198 @@ def patch_proposed() -> E2EScenario:
     )
 
 
-def default_catalog() -> list[E2EScenario]:
-    """Every scenario the deterministic E2E gate must reproduce."""
+def _scenario(
+    name: str,
+    steps: list[ScriptStep],
+    plans: list[FakeSandboxPlan],
+    outcome: PatchOutcome,
+    failure: PatchForgeFailure,
+    **options: Any,
+) -> E2EScenario:
+    return E2EScenario(
+        name=name,
+        fixture=CALCULATOR,
+        profile=calculator_profile(),
+        budgets=calculator_budgets(),
+        steps=steps,
+        sandbox_plans=plans,
+        expected_outcome=outcome,
+        expected_failure=failure,
+        **options,
+    )
 
-    return [patch_proposed()]
+
+def validation_failed() -> E2EScenario:
+    """Targeted tests still fail on the final tree; the report is attested as partial."""
+
+    plans = happy_plans()
+    plans[1] = plan(CommandPurpose.TARGETED_TESTS, SandboxStatus.FAILED)
+    return _scenario(
+        "validation_failed",
+        happy_steps(),
+        plans,
+        PatchOutcome.PARTIAL,
+        PatchForgeFailure.VALIDATION_FAILED,
+    )
+
+
+def budget_exhausted() -> E2EScenario:
+    """A second implementation retry exceeds the one-loop budget."""
+
+    return _scenario(
+        "budget_exhausted",
+        [
+            *happy_steps()[:9],
+            advance(PatchForgePhase.IMPLEMENT),
+            advance(PatchForgePhase.TARGETED_VALIDATE),
+            advance(PatchForgePhase.IMPLEMENT),
+            report(),
+        ],
+        [
+            plan(CommandPurpose.REPRODUCTION, SandboxStatus.FAILED),
+            plan(CommandPurpose.TARGETED_TESTS, SandboxStatus.FAILED),
+        ],
+        PatchOutcome.PARTIAL,
+        PatchForgeFailure.BUDGET_EXHAUSTED,
+    )
+
+
+def policy_denied() -> E2EScenario:
+    """The engine tries to edit an operator-protected file; the gateway denies it."""
+
+    return _scenario(
+        "policy_denied",
+        [
+            *happy_steps()[:6],
+            write("changed\n", CALCULATOR.files["protected.txt"], path="protected.txt"),
+            report(),
+        ],
+        happy_plans()[:1],
+        PatchOutcome.POLICY_VIOLATION,
+        PatchForgeFailure.POLICY_DENIED,
+    )
+
+
+def cancelled() -> E2EScenario:
+    return _scenario(
+        "cancelled",
+        [*happy_steps()[:3], RuntimeCancelledError("operator cancelled the run"), report()],
+        [],
+        PatchOutcome.CANCELLED,
+        PatchForgeFailure.CANCELLED,
+    )
+
+
+def sandbox_error() -> E2EScenario:
+    return _scenario(
+        "sandbox_error",
+        [*happy_steps()[:5], report()],
+        [plan(CommandPurpose.REPRODUCTION, SandboxStatus.SANDBOX_ERROR)],
+        PatchOutcome.SANDBOX_FAILED,
+        PatchForgeFailure.SANDBOX_ERROR,
+    )
+
+
+def workspace_error() -> E2EScenario:
+    """Code in the sandbox rewrites ignore rules; the runtime fingerprint fails closed."""
+
+    def write_ignore_rules(call: int, worktree: Path) -> None:
+        if call == 1:
+            (worktree / ".gitignore").write_text("*.py\n", encoding="utf-8")
+
+    return _scenario(
+        "workspace_error",
+        [*happy_steps()[:5], report()],
+        happy_plans()[:1],
+        PatchOutcome.ABORTED,
+        PatchForgeFailure.WORKSPACE_ERROR,
+        sandbox_hook=write_ignore_rules,
+    )
+
+
+def engine_error() -> E2EScenario:
+    return _scenario(
+        "engine_error",
+        [*happy_steps()[:3], RuntimeError("engine adapter crashed"), report()],
+        [],
+        PatchOutcome.ABORTED,
+        PatchForgeFailure.ENGINE_ERROR,
+    )
+
+
+def attestation_failed() -> E2EScenario:
+    """The tree changes between recorded calls; the run completes but cannot be attested."""
+
+    def tamper(worktree: Path) -> None:
+        (worktree / "calculator.py").write_text(FIXED + "# out of band\n", encoding="utf-8")
+
+    steps = happy_steps()
+    steps.insert(10, tamper)
+    return _scenario(
+        "attestation_failed",
+        steps,
+        happy_plans(),
+        PatchOutcome.ABORTED,
+        PatchForgeFailure.ATTESTATION_FAILED,
+    )
+
+
+def cleanup_failed() -> E2EScenario:
+    return _scenario(
+        "cleanup_failed",
+        happy_steps(),
+        happy_plans(),
+        PatchOutcome.ABORTED,
+        PatchForgeFailure.CLEANUP_FAILED,
+        fail_cleanup=True,
+    )
+
+
+def default_catalog() -> list[E2EScenario]:
+    """Every scenario the deterministic E2E gate must reproduce: success plus one
+    scenario per failure classification."""
+
+    return [
+        patch_proposed(),
+        validation_failed(),
+        budget_exhausted(),
+        policy_denied(),
+        cancelled(),
+        sandbox_error(),
+        workspace_error(),
+        engine_error(),
+        attestation_failed(),
+        cleanup_failed(),
+    ]
+
+
+def run_gate(work_root: Path, now: datetime = GATE_TIME) -> list[str]:
+    """Run every scenario twice; return mismatch descriptions (empty means the gate passed)."""
+
+    problems: list[str] = []
+    for scenario in default_catalog():
+        first = PatchForgeE2EHarness(work_root / "first", now=now).run(scenario)
+        second = PatchForgeE2EHarness(work_root / "second", now=now).run(scenario)
+        failure = first.result.failure.value if first.result.failure else "none"
+        print(
+            f"{scenario.name}: outcome={first.result.outcome.value} failure={failure} "
+            f"result_sha256={first.result_sha256}"
+        )
+        if not first.matches_expectation:
+            problems.append(f"{scenario.name}: outcome or failure did not match")
+        if first.result_sha256 != second.result_sha256:
+            problems.append(f"{scenario.name}: replay was not byte-identical")
+    return problems
+
+
+def main() -> int:
+    with TemporaryDirectory(prefix="patchforge-e2e-") as directory:
+        problems = run_gate(Path(directory))
+    for problem in problems:
+        print(f"FAILED {problem}", file=sys.stderr)
+    print("PatchForge deterministic E2E gate: " + ("FAILED" if problems else "passed"))
+    return 1 if problems else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
