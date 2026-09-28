@@ -205,8 +205,9 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
   not mutate lifecycle state; Milestone E remains responsible for transitions.
 - This is a resumable foundation checkpoint, not Milestone D completion. Expected
   operational failures now produce typed evidence and all bounded output types propagate
-  truncation. Exhaustive execution-tool mapping and constructor-binding coverage,
-  repository-wide validation, documentation/version finalization, and CI remain required.
+  truncation. All fixed execution-command routes and constructor trust bindings now have
+  explicit coverage. Repository-wide validation, documentation/version finalization,
+  and CI remain required.
 
 ## Experimental Design
 
@@ -281,6 +282,11 @@ py -m pytest -m integration tests/integration
 
 ## Latest Validation
 
+- PatchForge Milestone D command/binding hardening on 2026-09-28: all 37 gateway unit
+  tests pass; strict mypy remains clean across 7 PatchForge source files and focused Ruff
+  lint passes. Reproduction and targeted validation select distinct operator commands;
+  all execution routes plus job, agent, task, source, profile, and workspace bindings are
+  covered with positive or negative deterministic tests.
 - PatchForge Milestone D error/truncation hardening on 2026-09-28: all 26 gateway unit
   tests pass; strict mypy remains clean across 7 PatchForge source files; focused Ruff
   formatting and lint pass. Coverage confirms typed workspace/sandbox failure evidence,
@@ -494,7 +500,7 @@ requirement is incompatible with the architecture.
 
 ## Next Step
 
-Continue PatchForge Milestone D from the typed gateway foundation. Cover every fixed
-execution-tool mapping plus constructor identity/source/profile/task/workspace binding,
-then run the complete deterministic suite. Finalize Milestone D documentation/version
-and CI only after those checks pass. Do not begin the Milestone E runtime state machine.
+Continue PatchForge Milestone D with the complete deterministic suite, full Ruff/mypy,
+frozen-boundary checks, scenario/Compose validation, and the three real Docker sandbox
+tests. Finalize documentation/version and CI only after those checks pass. Do not begin
+the Milestone E runtime state machine.

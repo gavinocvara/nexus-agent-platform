@@ -394,6 +394,12 @@ class ToolGateway:
             raise GatewayRequestError("Run identity does not match the workspace")
         if identity.task_id != task.task_id or task.task_id != workspace.record.task_id:
             raise GatewayRequestError("Task identity does not match the workspace")
+        if identity.atlas_job_id != task.atlas_job_id:
+            raise GatewayRequestError("Atlas job identity does not match the task")
+        if identity.agent_id != policy.agent_id:
+            raise GatewayRequestError("Run agent identity does not match gateway policy")
+        if identity.source != task.source or workspace.record.source_sha != task.source.commit_sha:
+            raise GatewayRequestError("Run source does not match the task and workspace")
         profile_hash = canonical_sha256(profile)
         if (
             task.repository_profile_id != profile.profile_id
@@ -404,8 +410,14 @@ class ToolGateway:
             or policy.repository_profile_sha256 != profile_hash
         ):
             raise GatewayRequestError("Repository profile binding does not match")
+        if str(task.source.repository_url) != str(profile.repository_url):
+            raise GatewayRequestError("Task repository URL does not match its profile")
         if identity.task_sha256 != canonical_sha256(task):
             raise GatewayRequestError("Run identity task hash does not match")
+        try:
+            workspace_manager.status_porcelain(workspace)
+        except WorkspaceError as exc:
+            raise GatewayRequestError("Workspace handle failed runtime verification") from exc
         self.identity = identity
         self.task = task
         self.profile = profile
@@ -566,8 +578,9 @@ class ToolGateway:
         if tool_name is ToolName.DELETE_FILE:
             return self._delete_file(cast(DeleteFileArguments, arguments)), None
         if tool_name in _COMMAND_BY_TOOL:
-            execution = self._execute_command(tool_name, phase, call_id)
-            return self._execution_output(_COMMAND_BY_TOOL[tool_name], execution), execution
+            purpose = self._command_purpose(tool_name, phase)
+            execution = self._execute_command(purpose, phase, call_id)
+            return self._execution_output(purpose, execution), execution
         if tool_name is ToolName.INSPECT_TEST_FAILURE:
             return self._inspect_test_failure(cast(InspectTestFailureArguments, arguments)), None
         if tool_name is ToolName.ADVANCE_PHASE:
@@ -805,11 +818,10 @@ class ToolGateway:
 
     def _execute_command(
         self,
-        tool_name: ToolName,
+        purpose: CommandPurpose,
         phase: PatchForgePhase,
         call_id: UUID,
     ) -> SandboxExecution:
-        purpose = _COMMAND_BY_TOOL[tool_name]
         command = self.profile.commands.get(purpose)
         if command is None:
             raise GatewayError(f"Repository profile has no {purpose} command")
@@ -826,6 +838,12 @@ class ToolGateway:
                 policy=self.profile.sandbox,
             )
         )
+
+    @staticmethod
+    def _command_purpose(tool_name: ToolName, phase: PatchForgePhase) -> CommandPurpose:
+        if tool_name is ToolName.RUN_TARGETED_TESTS and phase is PatchForgePhase.REPRODUCE:
+            return CommandPurpose.REPRODUCTION
+        return _COMMAND_BY_TOOL[tool_name]
 
     @staticmethod
     def _execution_output(

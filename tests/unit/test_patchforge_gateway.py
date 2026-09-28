@@ -439,6 +439,47 @@ def test_execution_uses_fixed_profile_command_and_supports_failure_inspection(
 
 
 @pytest.mark.parametrize(
+    ("tool_name", "phase", "purpose"),
+    [
+        (ToolName.RUN_TARGETED_TESTS, PatchForgePhase.REPRODUCE, CommandPurpose.REPRODUCTION),
+        (
+            ToolName.RUN_TARGETED_TESTS,
+            PatchForgePhase.TARGETED_VALIDATE,
+            CommandPurpose.TARGETED_TESTS,
+        ),
+        (ToolName.RUN_TEST_SUITE, PatchForgePhase.FULL_VALIDATE, CommandPurpose.FULL_TEST_SUITE),
+        (ToolName.RUN_FORMATTER, PatchForgePhase.TARGETED_VALIDATE, CommandPurpose.FORMATTER),
+        (ToolName.RUN_LINTER, PatchForgePhase.TARGETED_VALIDATE, CommandPurpose.LINTER),
+        (ToolName.RUN_TYPECHECK, PatchForgePhase.FULL_VALIDATE, CommandPurpose.TYPECHECK),
+    ],
+)
+def test_each_execution_tool_uses_the_phase_specific_operator_command(
+    tmp_path: Path,
+    tool_name: ToolName,
+    phase: PatchForgePhase,
+    purpose: CommandPurpose,
+) -> None:
+    profile = _profile()
+    command = profile.commands[purpose]
+    sandbox = FakeSandbox(
+        [
+            FakeSandboxPlan(
+                expected_command_sha256=canonical_sha256(command),
+                status=SandboxStatus.SUCCEEDED,
+                exit_code=0,
+            )
+        ],
+        clock=lambda: NOW,
+    )
+    gateway, _, _ = _gateway(tmp_path, sandbox=sandbox)
+    result = gateway.invoke(tool_name, {}, phase=phase)
+    assert result.record.status is ToolCallStatus.SUCCEEDED
+    assert isinstance(result.output, ExecutionOutput)
+    assert result.output.command_name == purpose.value
+    assert sandbox.requests[0].command == command
+
+
+@pytest.mark.parametrize(
     ("status", "expected"),
     [
         (SandboxStatus.SUCCEEDED, ToolCallStatus.SUCCEEDED),
@@ -520,6 +561,98 @@ def test_invalid_arguments_are_rejected_before_evidence_is_created(tmp_path: Pat
             phase=PatchForgePhase.RECON,
         )
     assert gateway.records == ()
+
+
+@pytest.mark.parametrize(
+    ("identity_update", "expected"),
+    [
+        ({"atlas_job_id": UUID(int=999)}, "Atlas job"),
+        ({"agent_id": "other.agent"}, "agent identity"),
+        ({"task_sha256": "f" * 64}, "task hash"),
+        (
+            {
+                "source": SourceRevision(
+                    repository_url="https://example.invalid/fixtures/calculator",
+                    commit_sha="f" * 40,
+                )
+            },
+            "source",
+        ),
+    ],
+)
+def test_gateway_constructor_rejects_invalid_run_bindings(
+    tmp_path: Path,
+    identity_update: dict[str, object],
+    expected: str,
+) -> None:
+    gateway, _, _ = _gateway(tmp_path)
+    with pytest.raises(GatewayRequestError, match=expected):
+        ToolGateway(
+            identity=gateway.identity.model_copy(update=identity_update),
+            task=gateway.task,
+            profile=gateway.profile,
+            policy=gateway.policy,
+            workspace=gateway.workspace,
+            workspace_manager=gateway.workspace_manager,
+            sandbox=FakeSandbox([]),
+            clock=lambda: NOW,
+        )
+
+
+def test_gateway_constructor_rejects_source_profile_and_workspace_mismatches(
+    tmp_path: Path,
+) -> None:
+    gateway, _, _ = _gateway(tmp_path)
+    changed_task = gateway.task.model_copy(
+        update={
+            "source": SourceRevision(
+                repository_url="https://example.invalid/fixtures/other",
+                commit_sha=gateway.task.source.commit_sha,
+            )
+        }
+    )
+    changed_identity = gateway.identity.model_copy(
+        update={
+            "source": changed_task.source,
+            "task_sha256": canonical_sha256(changed_task),
+        }
+    )
+    with pytest.raises(GatewayRequestError, match="repository URL"):
+        ToolGateway(
+            identity=changed_identity,
+            task=changed_task,
+            profile=gateway.profile,
+            policy=gateway.policy,
+            workspace=gateway.workspace,
+            workspace_manager=gateway.workspace_manager,
+            sandbox=FakeSandbox([]),
+        )
+
+    tampered_workspace = gateway.workspace.model_copy(
+        update={"record": gateway.workspace.record.model_copy(update={"source_sha": "f" * 40})}
+    )
+    with pytest.raises(GatewayRequestError, match="source"):
+        ToolGateway(
+            identity=gateway.identity,
+            task=gateway.task,
+            profile=gateway.profile,
+            policy=gateway.policy,
+            workspace=tampered_workspace,
+            workspace_manager=gateway.workspace_manager,
+            sandbox=FakeSandbox([]),
+        )
+
+    wrong_root = gateway.workspace.model_copy(update={"root": tmp_path / "elsewhere"})
+    with pytest.raises(GatewayRequestError, match="runtime verification"):
+        ToolGateway(
+            identity=gateway.identity,
+            task=gateway.task,
+            profile=gateway.profile,
+            policy=gateway.policy,
+            workspace=wrong_root,
+            workspace_manager=gateway.workspace_manager,
+            sandbox=FakeSandbox([]),
+        )
 
 
 def test_expected_workspace_and_sandbox_errors_become_failed_evidence(

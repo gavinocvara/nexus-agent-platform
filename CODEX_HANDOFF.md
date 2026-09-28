@@ -8,6 +8,8 @@
   resolve with `git rev-parse HEAD`
 - Verified remote foundation: `origin/main` =
   `03b9e5d8ecb545ab6207ed7a83d44e071743225d`
+- Error/truncation hardening commit:
+  `c19a623` (resolve the full SHA with `git rev-parse c19a623`)
 - NEXUS version: `0.12.0`
 - Active milestone: PatchForge Milestone D - ToolGateway, **in progress**
 
@@ -31,6 +33,11 @@
 - Propagated bounded tree, search, file, diff, and sandbox-output truncation into the
   runtime-owned `ToolCallRecord`; oversized phase output is replaced by a bounded typed
   failure.
+- Made command selection phase-aware: reproduction uses the operator's `REPRODUCTION`
+  command, while targeted validation uses `TARGETED_TESTS`; every execution tool mapping
+  now has explicit deterministic coverage.
+- Bound gateway construction to Atlas job, agent, task hash, source revision, repository
+  profile URL/hash, and a runtime-verified workspace handle.
 
 ## Files Changed
 
@@ -47,7 +54,7 @@
 
 - Foundation focused gate: **45 passed** across gateway, policy, and sandbox unit tests.
 - Latest gateway hardening gate: `pytest tests/unit/test_patchforge_gateway.py -q`:
-  **26 passed**
+  **37 passed**
 - `ruff check` on PatchForge sources and the three focused test files: **passed**
 - `ruff format --check` on the same files: **10 files already formatted**
 - `mypy src/nexus/patchforge`: **passed, 7 source files**
@@ -60,9 +67,6 @@
 - No focused test is failing.
 - The full repository suite, real Docker integration, secret scan, frozen-artifact diff,
   and GitHub Actions have not yet run for the Milestone D foundation.
-- Formatter, linter, and typecheck command mappings need explicit focused coverage.
-- Constructor identity, source, profile, task-hash, and verified-workspace bindings need
-  explicit negative coverage and any resulting implementation hardening.
 - Milestone D docs, changelog, version bump, and final CI are intentionally deferred.
 
 ## Uncommitted Work
@@ -73,12 +77,11 @@
 
 ## Exact Next Step
 
-Continue Milestone D only. Add explicit tests for every fixed execution-tool mapping and
-for constructor identity, source, profile, task-hash, and workspace binding. Harden only
-the failures those tests expose. Commit that unit before running the full deterministic
-suite, frozen-boundary checks, and real Docker tests. Only after those pass, update
-version/docs, commit Milestone D complete, push, and wait for both CI jobs. Do not start
-Milestone E in the same checkpoint.
+Continue Milestone D only. Run the complete deterministic suite, full Ruff/mypy checks,
+frozen-boundary checks, scenario/Compose validation, and the three real Docker sandbox
+tests. Fix only failures within Milestone D scope. After those pass, update version,
+changelog, README, ADR, ROADMAP, PROJECT_STATE, and this handoff; commit Milestone D
+complete, push, and wait for both CI jobs. Do not start Milestone E in the same checkpoint.
 
 ## Recommended Commands
 
