@@ -22,16 +22,29 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
   scope/protected/sensitive/test/size findings, and tamper checks; only a clean
   attestation is `patch_proposed` (ADR 0010, CHANGELOG 0.15.0).
 
+## Milestone G Progress (in progress, unreleased)
+
+Done:
+
+1. `nexus.patchforge.e2e`: `PatchForgeE2EHarness` composes WorkspaceManager, ToolGateway,
+   FakeSandbox, Runtime, and Attestor around a `ScriptedEngine`; `materialize_fixture`
+   builds fixture repositories with a fixed Git identity and date. Fixed clocks and
+   content-derived IDs make a scenario replay to a byte-identical `PatchResult`. Fault
+   hooks: out-of-band worktree steps, in-sandbox hooks, and a refused cleanup.
+2. `nexus.patchforge.e2e_catalog`: calculator fixture, profile, budgets, step helpers,
+   and the `patch_proposed` scenario.
+
 ## Exact Next Step
 
-Begin PatchForge Milestone G - Deterministic E2E: a
-scripted happy path plus every required failure/partial path through Runtime and
-Attestor end to end (see `ROADMAP.md` and ADR 0010). Reuse the real-path fixtures in
-`tests/unit/test_patchforge_attestor.py`. No live model calls.
+G2: extend `default_catalog()` with one end-to-end scenario per failure path
+(validation, budget, policy, cancellation, sandbox, workspace, engine, attestation,
+cleanup), each asserting its outcome and classification; add a
+`python -m nexus.patchforge.e2e` gate that exits nonzero on any mismatch, plus a CI
+step. Then release 0.16.0 and hand off Milestone H. No live model calls.
 
 ## Active Issues
 
-- No known failing tests.
+- No known failing tests. Focused PatchForge suite: 341 passed.
 - During Milestone F, one focused-suite run reported a single failure that was not
   captured and did not recur in 19 later runs. Watch for PatchForge flakiness.
 - Test modules are not type-checked in CI and carry pre-existing strict-mypy noise
