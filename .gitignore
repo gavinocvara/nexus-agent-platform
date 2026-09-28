@@ -23,3 +23,5 @@ build/
 
 .DS_Store
 Thumbs.db
+
+Claude outputs/
