@@ -8,7 +8,7 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
-## 0.15.0 — PatchForge Milestone F: Attestor
+## 0.15.0 — PatchForge Milestone F: Attestor (`d6d39d3`)
 
 - `PatchForgeAttestor` turns a closed `RuntimeCompletion` into a `PatchResult` from
   runtime-owned evidence only. Only a clean attestation is `patch_proposed`.

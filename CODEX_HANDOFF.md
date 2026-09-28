@@ -6,9 +6,9 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 ## Checkpoint
 
 - Branch `main`; local `HEAD` must equal `origin/main` at every checkpoint.
-- NEXUS `0.15.0`: PatchForge Milestones A-F complete. Milestone F (Attestor) release is
-  the commit that set 0.15.0; its SHA and GitHub Actions run are recorded here once CI is
-  green.
+- NEXUS `0.15.0`: PatchForge Milestones A-F complete. Milestone F (Attestor) release
+  `d6d39d3c1f2954921d03631dc7b1d4add5dca4b8`; GitHub Actions run `36491013537` passed
+  `validate` and `compose-integration` on the first attempt.
 - Local release gate: `pip check` passed; Ruff format (156 files) and lint clean; strict
   mypy clean (86 files); pytest 602 passed, 23 deselected; 5 scenarios validated; Compose
   config passed. Compose integration was not run locally (no Docker daemon); CI's
@@ -24,7 +24,7 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 ## Exact Next Step
 
-After CI is green for 0.15.0, begin PatchForge Milestone G - Deterministic E2E: a
+Begin PatchForge Milestone G - Deterministic E2E: a
 scripted happy path plus every required failure/partial path through Runtime and
 Attestor end to end (see `ROADMAP.md` and ADR 0010). Reuse the real-path fixtures in
 `tests/unit/test_patchforge_attestor.py`. No live model calls.
