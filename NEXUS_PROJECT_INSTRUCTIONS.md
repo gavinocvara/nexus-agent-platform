@@ -90,7 +90,7 @@ Agents may propose improvements to heuristics, procedures, prompt fragments, too
 ## Build order
 
 Original default order. Items 1-9 (Phases 0-8) are complete. By owner decision
-recorded in `docs/adr/0010-accelerate-patchforge-execution-order.md`, execution now
+recorded in `docs/adr/0010-patchforge-v1-trustworthy-engineering-agent.md`, execution now
 continues with PatchForge (item 12), then SentinelQA (item 13), then a bounded daily
 self-improvement milestone, before items 10, 11, 14, and 15. `ROADMAP.md` records the
 current order.

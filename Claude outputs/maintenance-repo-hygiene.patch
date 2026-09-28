@@ -1,0 +1,1640 @@
+From 574668f56132957b8450abe4e323509c64036d1d Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 27 Sep 2026 20:20:52 -0500
+Subject: [PATCH] docs: align governance, roadmap, and state with repository
+ reality
+
+Record the owner-approved PatchForge-first execution order in ADR 0010
+without renumbering phases, and add explicit precedence notes to the master
+prompt and project instructions so stale sequencing cannot override the
+roadmap, ADRs, or PROJECT_STATE.
+
+Rewrite the README for first-time readers, condense PROJECT_STATE for
+session recovery (removing a machine-specific worktree path), move Phase 7
+history to docs/milestones, add a Brain v1 implementation status to
+BRAIN.md, regroup CHANGELOG by package version, fix runbook drift (model
+required by preflight, run file names, lock schema 2), make the Makefile
+portable, and append a labeled independent-review addendum to the Brain v1
+calibration report. No source behavior, frozen artifact, or hash changes.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01NbtJunYMnXtpmzuZ9o1MBc
+---
+ .env.example                                  |   3 +
+ BRAIN.md                                      |  36 +-
+ CHANGELOG.md                                  | 207 ++++++++---
+ Makefile                                      |  24 +-
+ NEXUS_MASTER_BUILD_PROMPT.md                  |  22 ++
+ NEXUS_PROJECT_INSTRUCTIONS.md                 |  28 +-
+ PROJECT_STATE.md                              | 346 +++++-------------
+ README.md                                     |  88 ++++-
+ ROADMAP.md                                    |  45 ++-
+ ...0-accelerate-patchforge-execution-order.md |  87 +++++
+ .../brain-v1-calibration-report.md            |  33 ++
+ docs/maintenance/repo-hygiene-2026-09.md      |  53 +++
+ docs/milestones/phase-7-brain-v1.md           | 170 +++++++++
+ docs/runbooks/aegisops-benchmarking.md        |  18 +-
+ docs/runbooks/aegisops-investigator.md        |   9 +-
+ pyproject.toml                                |   2 +-
+ tests/{ => unit}/test_config.py               |   0
+ 17 files changed, 823 insertions(+), 348 deletions(-)
+ create mode 100644 docs/adr/0010-accelerate-patchforge-execution-order.md
+ create mode 100644 docs/maintenance/repo-hygiene-2026-09.md
+ create mode 100644 docs/milestones/phase-7-brain-v1.md
+ rename tests/{ => unit}/test_config.py (100%)
+
+diff --git a/.env.example b/.env.example
+index 4e6bc96..d0db472 100644
+--- a/.env.example
++++ b/.env.example
+@@ -19,6 +19,7 @@ NEXUS_DIAGNOSTICS_TIMEOUT_SECONDS=5
+ NEXUS_DIAGNOSTICS_MAX_RESPONSE_BYTES=1000000
+ 
+ # AegisOps investigator execution is opt-in. OPENAI_API_KEY belongs only in .env.
++# gpt-5-mini is the ad-hoc default; benchmark preflight requires gpt-5.6-sol.
+ NEXUS_AGENT_ENABLED=false
+ NEXUS_AGENT_MODEL=gpt-5-mini
+ NEXUS_AGENT_MAX_TURNS=10
+@@ -45,6 +46,8 @@ NEXUS_BENCHMARK_WARMUP_SECONDS=6
+ NEXUS_BENCHMARK_STACK_TIMEOUT_SECONDS=180
+ 
+ # Local Atlas job, idempotency, and append-only audit persistence.
++# Defined by AtlasSettings for future runtime wiring; storage callers currently pass the
++# SQLite path explicitly.
+ NEXUS_ATLAS_DATABASE_PATH=.nexus/atlas/atlas.sqlite3
+ 
+ # Local Docker Compose database values. Replace them in your untracked .env.
+diff --git a/BRAIN.md b/BRAIN.md
+index 7efd9bf..ebf005d 100644
+--- a/BRAIN.md
++++ b/BRAIN.md
+@@ -12,6 +12,36 @@ The key design rule is:
+ 
+ Each agent owns a private memory namespace. Agents do not casually read or rewrite one another’s memories. Useful knowledge crosses agent boundaries only through an auditable promotion and retrieval layer.
+ 
++## Implementation Status
++
++Everything after this section is the target architecture. What exists today is Brain
++v1, completed in Phase 7 (ADR 0008):
++
++- Implemented: one private namespace, `aegisops.investigator`, with typed episodic
++  and unverified candidate-procedural records. Every record carries provenance, a
++  validity interval, lifecycle and dispute state, and a version. The store is local
++  SQLite under ignored `.nexus/brain/`. The writer accepts only the allowlisted
++  `AgentObservableRun` projection. The modes are `disabled` (the default), `learn`
++  (guarded), and `frozen_eval` (read-only, hash-verified). Brain failures fail closed.
++- Not implemented: working, semantic, reflective, and identity memory classes; the
++  knowledge exchange; promotion; consolidation; vectors or graphs; and cross-agent
++  access.
++- Frozen snapshot rules: evaluation uses a read-only snapshot whose canonical logical
++  SHA-256 is verified before and after every run. Evaluation runs write nothing. A
++  Brain session can never be locked as an official baseline.
++- Demonstrated behavior (negative calibration): retrieval `bounded-lexical-v1` scores
++  records against one generic incident prompt. That prompt always matched the
++  procedural record through its hard-coded trigger terms and never matched the
++  episodic record. Retrieval was therefore a fixed context prefix, not
++  incident-specific recall. The frozen five-scenario smoke completed 0/5
++  investigations. No contemporaneous memoryless or placebo arm was run, so no causal
++  benefit or harm is claimed. Evidence: `docs/experiments/brain-v1-calibration-report.md`.
++- Binding lessons for future agents: every agent gets its own namespace, and no agent
++  reuses AegisOps records. Retrieval must be keyed on concrete task signals at defined
++  points, not on a generic prompt, so `bounded-lexical-v1` must not be copied as-is.
++  Verified outcomes outrank self-reported conclusions. Any memory-behavior claim needs
++  a contemporaneous control, a placebo when context is added, and pre-registration.
++
+ ## Why Not One Giant Shared Brain?
+ 
+ A single mutable shared memory store is easy to build but creates serious problems:
+@@ -386,7 +416,9 @@ For procedural memory, compare task success before and after a proposed lesson.
+ ## Storage Evolution
+ 
+ ### Brain v1
+-Use PostgreSQL tables with strong schemas.
++Original plan: PostgreSQL tables with strong schemas. As built, Brain v1 uses a local
++typed SQLite store behind a replaceable storage boundary, so memory survives lab
++database resets and faults. PostgreSQL or Engram storage is deferred.
+ 
+ Add pgvector only when semantic retrieval is useful.
+ 
+@@ -403,6 +435,8 @@ Do not begin with a complex graph database merely because the word “memory”
+ 
+ ## Suggested Repository Shape
+ 
++Target shape. Brain v1 is implemented as the `src/nexus/brain` package.
++
+ ```text
+ brain/
+ ├── core/
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 9c63a3d..8175013 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -2,8 +2,29 @@
+ 
+ All meaningful changes to NEXUS are recorded here.
+ 
++No Git tags or published releases exist. Each section below corresponds to a package
++version bump in `src/nexus/_version.py`, identified by the commit that introduced it.
++
+ ## Unreleased
+ 
++### Changed
++
++- Recorded the owner-approved execution-order change in ADR 0010: PatchForge v1, then
++  SentinelQA, then a bounded self-improvement milestone, before the deferred AegisOps
++  remediation and Kubernetes phases. Phase numbers are unchanged.
++- Aligned the governing documents with repository state. Added precedence notes to the
++  master prompt and project instructions. Rewrote `README.md` for first-time readers,
++  condensed `PROJECT_STATE.md` for session recovery, added a Brain v1 implementation
++  status to `BRAIN.md`, and moved Phase 7 history to `docs/milestones/`.
++- Corrected runbook drift: the benchmark model required by preflight, run file names,
++  and the lock schema 2 description. Made the Makefile portable and included format and
++  scenario checks in `make validate`.
++- Appended a clearly labeled independent-review addendum to the Brain v1 calibration
++  report. Recorded observations, hashes, and disposition are unchanged.
++- Moved `tests/test_config.py` into `tests/unit/` with the rest of the unit suite.
++
++## 0.9.0 — Phase 8: Atlas thin control plane (`c28fe5c`, 2026-09-27)
++
+ ### Added
+ 
+ - Atlas v1 thin control-plane contracts for typed jobs, source revisions, budgets,
+@@ -16,6 +37,29 @@ All meaningful changes to NEXUS are recorded here.
+ - Exhaustive transition-pair tests plus deterministic policy, idempotency, durability,
+   recovery, approval, audit, PatchForge-interface, and frozen-behavior isolation coverage.
+ 
++### Changed
++
++- Advanced the package to version 0.9.0 for the Phase 8 Atlas thin control-plane
++  foundation. Atlas remains a local library and introduces no service, model call,
++  scheduler, unrestricted shell, deployment, remediation, or agent business logic.
++
++## 0.8.1 — Phase 7: post-calibration hardening (`15eff37`, 2026-09-25)
++
++### Changed
++
++- Advanced the package to version 0.8.1 after the targeted Brain calibration. Legacy
++  analysis-version-1 summaries now preserve unavailable Phase 7 metrics as `null`, so
++  comparisons cannot manufacture historical zero values or deltas.
++- Made Brain configuration explicit outside the guarded benchmark CLI. Generic runtime
++  and benchmark constructors default to disabled, the legacy evaluation harness rejects
++  writable mode, and the ad-hoc investigator refuses ambient writable Brain settings.
++- Strengthened evaluator score/canary invariance through the complete scripted
++  benchmark/runtime path and require lock-schema-2 artifact digests to match `run_count`.
++
++## 0.8.0 — Phase 7: agent-private Brain v1 (`a7b6f5c`, 2026-09-24)
++
++### Added
++
+ - Brain v1 private episodic and procedural memory for `aegisops.investigator`, with
+   strict provenance, namespace isolation, lifecycle state, deterministic retrieval,
+   prompt-injection framing, secret rejection, and durable SQLite storage.
+@@ -30,14 +74,49 @@ All meaningful changes to NEXUS are recorded here.
+   the manifest, summary, and every run; legacy locks resolve by session ID without
+   trusting their historical absolute path.
+ 
++### Changed
++
++- Advanced the package to version 0.8.0 for Phase 7 Brain v1. Benchmark schema 3 remains
++  unchanged because Brain fields are backward-compatible additions with memoryless defaults;
++  the locked Phase 6 baseline remains parseable and comparable.
++- Restricted SQLAlchemy to the OpenTelemetry instrumentor's supported `<2.1` range so
++  Orders database spans remain present in Compose traces.
++
++## 0.7.4 — Phase 6: Windows evaluator portability repair (`52bd5f4`, 2026-09-23)
++
++### Added
++
+ - Locale-independent Docker Compose subprocess regression coverage for arbitrary byte
+   output, UTF-8 output, nonzero exits, timeouts, and executable failures.
+ 
++### Changed
++
++- Advanced the package to version 0.7.4 for the Phase 6 Windows evaluator portability
++  repair. Clean-stack commands now capture bytes so output decoding cannot change command
++  success, and failures distinguish timeout, launch failure, and nonzero exit without
++  persisting subprocess output.
++
++## 0.7.3 — Phase 6: SDK tool validation contracts (`5a2939e`, 2026-09-23)
++
++### Added
++
+ - Payload-free SDK validation diagnostics recording phase, Pydantic error type/location,
+   tool identity, function-call position, and invocation/output lifecycle state.
+ - Direct SDK-wrapper regression coverage for all eleven tools, legitimate empty and
+   non-empty results, invalid enums and filters, and pending-call run-data inspection.
+ 
++### Changed
++
++- Advanced the package to version 0.7.3 and durable benchmark schema to version 3 for
++  Phase 6 SDK validation repair metadata.
++- Aligned every SDK-facing function-tool schema with its inner Pydantic constraints,
++  restricted tools to direct callers, pinned Agents SDK 0.22.3 exactly, and extended
++  the tool identity hash to cover the actual SDK parameter/output schemas.
++
++## 0.7.2 — Phase 6: live runtime accounting (`2c2603a`, 2026-09-23)
++
++### Added
++
+ - Concurrency-safe diagnostic call permits, in-flight drain tracking, sanitized runtime
+   failure classification, partial failed-run accounting, and safe diagnostic backend
+   error codes/statuses.
+@@ -45,6 +124,16 @@ All meaningful changes to NEXUS are recorded here.
+   final-output validation classification, failed-run accounting, SDK teardown races,
+   and every supported structured evidence value/status shape.
+ 
++### Changed
++
++- Advanced the package to version 0.7.2 for the Phase 6 live-runtime correctness repair.
++- Advanced the durable benchmark schema to version 2 so failed-run turns distinguish
++  unknown from zero and persisted runs carry accounting completeness and typed failures.
++
++## 0.7.1 — Phase 6: structured-output schema repair (`e014a87`, 2026-09-23)
++
++### Added
++
+ - A strict `DiagnosisOutputSchema` adapter for the Responses API that preserves the
+   existing Pydantic diagnosis model while replacing its unconstrained `JsonValue`
+   transport node with a supported recursive schema.
+@@ -52,6 +141,16 @@ All meaningful changes to NEXUS are recorded here.
+   objects, diagnosed and insufficient-evidence parsing, compound evidence values, and
+   malformed-output rejection.
+ 
++### Changed
++
++- Advanced the package to version 0.7.1 for the pre-baseline structured-output repair.
++- Baseline diagnosis identity now hashes both the unchanged domain schema and the
++  provider-facing structured-output schema.
++
++## 0.7.0 — Phase 6: reproducible AegisOps benchmarking (`0c75809`, 2026-09-23)
++
++### Added
++
+ - A versioned `aegisops-memoryless-v1` identity covering Git state, behavior hashes,
+   execution limits, scenario catalog, evaluator schemas, and runtime versions.
+ - Secret-safe live preflight plus explicit smoke, repeated baseline, resume, compare,
+@@ -64,6 +163,16 @@ All meaningful changes to NEXUS are recorded here.
+   thresholds, clean-tree policy, secret safety, and sequential contamination.
+ - A reproducible-benchmarking ADR and live benchmark operator runbook.
+ 
++### Changed
++
++- Advanced the package to version 0.7.0 for Phase 6 benchmark infrastructure.
++- Extended normalized model usage with request, cached-input, cache-write, and
++  reasoning-token details when the pinned Agents SDK supplies them.
++
++## 0.6.0 — Phase 5: bounded AegisOps investigator (`d6132bd`, 2026-09-23)
++
++### Added
++
+ - A single `aegisops.investigator` using the OpenAI Agents SDK with exactly the
+   eleven Phase 4 read-only diagnostic tools and no handoffs, memory, or write access.
+ - Structured diagnoses, stable tool-call provenance, a separate evidence ledger,
+@@ -74,6 +183,16 @@ All meaningful changes to NEXUS are recorded here.
+   evaluator isolation, prompt injection, unsafe requests, scoring, and recovery.
+ - A single-investigator ADR and operator/evaluation runbook.
+ 
++### Changed
++
++- Advanced the package to version 0.6.0 for the Phase 5 investigator baseline.
++- Diagnostic results and audit events now share a stable `tool_call_id`; complete
++  evidence remains separate from audit metadata.
++
++## 0.5.0 — Phase 4: typed read-only diagnostics (`6d99c3d`, 2026-09-23)
++
++### Added
++
+ - A typed read-only diagnostics package with fixed health, Prometheus, Loki, and
+   Tempo adapters.
+ - High-level service inventory, health, request/dependency summaries, database
+@@ -86,6 +205,17 @@ All meaningful changes to NEXUS are recorded here.
+ - Diagnostic CLI, adapter/security unit tests, real-stack integration tests, and a
+   five-scenario evidence sufficiency evaluation.
+ - A typed diagnostic boundary ADR and operator runbook.
++
++### Changed
++
++- Advanced the package to version 0.5.0 for Phase 4 read-only diagnostics.
++- Service error codes are recorded as ordinary `error.type` trace evidence; trace
++  normalization redacts SQL-shaped operation names and non-allowlisted attributes.
++
++## 0.4.0 — Phase 3: operational observability (`88425d4`, 2026-09-22)
++
++### Added
++
+ - Prometheus request, dependency, latency, in-flight, and database-health metrics
+   with bounded labels and normalized route templates.
+ - OpenTelemetry request, HTTPX, and SQLAlchemy tracing through an OpenTelemetry
+@@ -95,12 +225,34 @@ All meaningful changes to NEXUS are recorded here.
+ - Telemetry isolation, cardinality, correlation, graceful-failure, and incident
+   integration tests.
+ - An operational observability ADR and local runbook.
++
++### Changed
++
++- Advanced the package to version 0.4.0 for Phase 3 operational observability.
++- Structured request logs include request duration and real OpenTelemetry trace and
++  span identifiers when an active span exists.
++
++## 0.3.0 — Phase 2: deterministic incident lab (`1e23b3a`, 2026-09-22)
++
++### Added
++
+ - Versioned, typed ground-truth definitions for five deterministic failure scenarios.
+ - Ephemeral concurrency-safe failure controllers for Users and Orders.
+ - Disabled-by-default lab control APIs with bounded activation and idempotent reset.
+ - Evaluator CLI and lifecycle runner for baseline, activation, symptom, reset, and
+   recovery verification.
+ - Unit, service, and Compose incident-lifecycle tests.
++
++### Changed
++
++- Advanced the package to version 0.3.0 for the Phase 2 controlled incident lab.
++- Structured request logs now include method, path, and status code fields already
++  supplied by the request middleware.
++
++## 0.2.0 — Phase 1: AegisOps distributed-systems lab (`f377535`, 2026-09-22)
++
++### Added
++
+ - Three independently runnable FastAPI services for Gateway, Users, and Orders.
+ - PostgreSQL order persistence with SQLAlchemy and an explicit Alembic migration.
+ - Docker Compose runtime with service and dependency health checks.
+@@ -112,57 +264,8 @@ All meaningful changes to NEXUS are recorded here.
+ 
+ ### Changed
+ 
+-- Advanced the package to version 0.9.0 for the Phase 8 Atlas thin control-plane
+-  foundation. Atlas remains a local library and introduces no service, model call,
+-  scheduler, unrestricted shell, deployment, remediation, or agent business logic.
+-
+-- Advanced the package to version 0.8.1 after the targeted Brain calibration. Legacy
+-  analysis-version-1 summaries now preserve unavailable Phase 7 metrics as `null`, so
+-  comparisons cannot manufacture historical zero values or deltas.
+-- Made Brain configuration explicit outside the guarded benchmark CLI. Generic runtime
+-  and benchmark constructors default to disabled, the legacy evaluation harness rejects
+-  writable mode, and the ad-hoc investigator refuses ambient writable Brain settings.
+-- Strengthened evaluator score/canary invariance through the complete scripted
+-  benchmark/runtime path and require lock-schema-2 artifact digests to match `run_count`.
+-- Advanced the package to version 0.8.0 for Phase 7 Brain v1. Benchmark schema 3 remains
+-  unchanged because Brain fields are backward-compatible additions with memoryless defaults;
+-  the locked Phase 6 baseline remains parseable and comparable.
+-- Restricted SQLAlchemy to the OpenTelemetry instrumentor's supported `<2.1` range so
+-  Orders database spans remain present in Compose traces.
+-
+-- Advanced the package to version 0.7.4 for the Phase 6 Windows evaluator portability
+-  repair. Clean-stack commands now capture bytes so output decoding cannot change command
+-  success, and failures distinguish timeout, launch failure, and nonzero exit without
+-  persisting subprocess output.
+-
+-- Advanced the package to version 0.7.3 and durable benchmark schema to version 3 for
+-  Phase 6 SDK validation repair metadata.
+-- Aligned every SDK-facing function-tool schema with its inner Pydantic constraints,
+-  restricted tools to direct callers, pinned Agents SDK 0.22.3 exactly, and extended
+-  the tool identity hash to cover the actual SDK parameter/output schemas.
+-
+-- Advanced the package to version 0.7.2 for the Phase 6 live-runtime correctness repair.
+-- Advanced the durable benchmark schema to version 2 so failed-run turns distinguish
+-  unknown from zero and persisted runs carry accounting completeness and typed failures.
+-
+-- Advanced the package to version 0.7.1 for the pre-baseline structured-output repair.
+-- Baseline diagnosis identity now hashes both the unchanged domain schema and the
+-  provider-facing structured-output schema.
++- Advanced the package to version 0.2.0 for the Phase 1 AegisOps lab.
+ 
+-- Advanced the package to version 0.7.0 for Phase 6 benchmark infrastructure.
+-- Extended normalized model usage with request, cached-input, cache-write, and
+-  reasoning-token details when the pinned Agents SDK supplies them.
+-
+-- Advanced the package to version 0.6.0 for the Phase 5 investigator baseline.
+-- Diagnostic results and audit events now share a stable `tool_call_id`; complete
+-  evidence remains separate from audit metadata.
++## 0.1.0 — Phase 0: repository foundation (`66ef536`, 2026-09-22)
+ 
+-- Advanced the package to version 0.5.0 for Phase 4 read-only diagnostics.
+-- Service error codes are recorded as ordinary `error.type` trace evidence; trace
+-  normalization redacts SQL-shaped operation names and non-allowlisted attributes.
+-- Advanced the package to version 0.4.0 for Phase 3 operational observability.
+-- Structured request logs include request duration and real OpenTelemetry trace and
+-  span identifiers when an active span exists.
+-- Advanced the package to version 0.3.0 for the Phase 2 controlled incident lab.
+-- Structured request logs now include method, path, and status code fields already
+-  supplied by the request middleware.
++- Bootstrapped Phase 0 repository foundation.
+diff --git a/Makefile b/Makefile
+index 0a301e1..26c2283 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,30 +1,36 @@
+-.PHONY: compose-clean compose-down compose-up format install-dev integration lint scenarios test typecheck validate
++.PHONY: compose-clean compose-down compose-up format format-check install-dev integration lint scenarios test typecheck validate
++
++# Override on Windows with: make PYTHON=py <target>
++PYTHON ?= python
+ 
+ install-dev:
+-	py -m pip install -e ".[dev]"
++	$(PYTHON) -m pip install -e ".[dev]"
+ 
+ format:
+-	py -m ruff format .
++	$(PYTHON) -m ruff format .
++
++format-check:
++	$(PYTHON) -m ruff format --check .
+ 
+ lint:
+-	py -m ruff check .
++	$(PYTHON) -m ruff check .
+ 
+ typecheck:
+-	py -m mypy
++	$(PYTHON) -m mypy
+ 
+ test:
+-	py -m pytest
++	$(PYTHON) -m pytest
+ 
+-validate: lint typecheck test
++validate: format-check lint typecheck test scenarios
+ 
+ scenarios:
+-	py -m nexus.lab.scenarios validate
++	$(PYTHON) -m nexus.lab.scenarios validate
+ 
+ compose-up:
+ 	docker compose up --build --detach --wait
+ 
+ integration:
+-	py -m pytest -m integration tests/integration
++	$(PYTHON) -m pytest -m integration tests/integration
+ 
+ compose-down:
+ 	docker compose down
+diff --git a/NEXUS_MASTER_BUILD_PROMPT.md b/NEXUS_MASTER_BUILD_PROMPT.md
+index 5c1ed60..fb6a298 100644
+--- a/NEXUS_MASTER_BUILD_PROMPT.md
++++ b/NEXUS_MASTER_BUILD_PROMPT.md
+@@ -1,5 +1,20 @@
+ # NEXUS — Master Build Prompt
+ 
++> **Document status.** This is the governing architecture specification. Sections 1-23
++> are invariant principles. Section 24 is the *original default* build order, and
++> section 25 is the *historical* Phase 0 bootstrap instruction; both are kept for intent
++> and history. For what to do now, the precedence is:
++>
++> 1. this specification (sections 1-23) and `BRAIN.md` for architecture principles;
++> 2. accepted ADRs in `docs/adr/` (ADR 0010 changed the execution order after Phase 8);
++> 3. `ROADMAP.md` for the current execution order;
++> 4. `PROJECT_STATE.md` for current implementation truth and the next task;
++> 5. `docs/runbooks/` for operational procedure;
++> 6. `docs/experiments/` and `docs/milestones/` as historical records.
++>
++> When sources conflict, current repository state plus accepted ADRs override older
++> sequencing text.
++
+ You are the principal engineer, systems architect, AI engineer, DevOps/SRE engineer, QA lead, security reviewer, technical writer, and implementation partner for this repository. I am the project owner/reviewer. Your job is to carry this project from an empty repository to a polished, production-style agentic engineering platform. You do the implementation work end-to-end; I review, run, test, challenge decisions, and work with you to solve problems.
+ 
+ ## 1. Mission
+@@ -753,6 +768,10 @@ When I challenge an architectural choice, evaluate it seriously rather than defe
+ 
+ ## 24. Initial Build Order
+ 
++> Original default order. Phases 0-8 were built in this order. ADR 0010 moved
++> PatchForge (Phase 11) and SentinelQA (Phase 12) ahead of Phases 9 and 10 without
++> renumbering them; see `ROADMAP.md` for the current execution order.
++
+ Use this order unless evidence justifies changing it:
+ 
+ ### Phase 0 — Foundation
+@@ -870,6 +889,9 @@ AegisOps detects incident
+ 
+ ## 25. First Instruction
+ 
++> Historical bootstrap instruction. Phase 0 is complete; new sessions start from
++> `PROJECT_STATE.md`.
++
+ Begin with **Phase 0 — Foundation**.
+ 
+ Inspect what already exists before creating files.
+diff --git a/NEXUS_PROJECT_INSTRUCTIONS.md b/NEXUS_PROJECT_INSTRUCTIONS.md
+index a230787..2cc3f4b 100644
+--- a/NEXUS_PROJECT_INSTRUCTIONS.md
++++ b/NEXUS_PROJECT_INSTRUCTIONS.md
+@@ -1,5 +1,20 @@
+ # NEXUS — Project Instructions
+ 
++> **Document status.** These are standing working instructions. The "Build order"
++> below is the original default order and "Start" describes session recovery; the
++> original sequence is kept for intent and history. For what to do now, the precedence is:
++>
++> 1. `NEXUS_MASTER_BUILD_PROMPT.md` (sections 1-23), this file, and `BRAIN.md` for
++>    architecture principles;
++> 2. accepted ADRs in `docs/adr/` (ADR 0010 changed the execution order after Phase 8);
++> 3. `ROADMAP.md` for the current execution order;
++> 4. `PROJECT_STATE.md` for current implementation truth and the next task;
++> 5. `docs/runbooks/` for operational procedure;
++> 6. `docs/experiments/` and `docs/milestones/` as historical records.
++>
++> When sources conflict, current repository state plus accepted ADRs override older
++> sequencing text.
++
+ Act as the principal engineer and hands-on builder of NEXUS. I am the project owner/reviewer. You own implementation end-to-end: architecture, Python development, infrastructure, agents, memory, testing, debugging, observability, documentation, CI/CD, and integration. Do not merely tell me how to build things. Inspect the repository, create or edit real files, run available validation, diagnose failures, patch them, and continue incrementally. I will review, test, challenge decisions, and work with you through issues.
+ 
+ Always treat `NEXUS_MASTER_BUILD_PROMPT.md` and `BRAIN.md` as governing project specifications. Read them when recovering context or making architecture decisions. Maintain `PROJECT_STATE.md` as the concise current source of truth after meaningful milestones.
+@@ -74,7 +89,13 @@ Agents may propose improvements to heuristics, procedures, prompt fragments, too
+ 
+ ## Build order
+ 
+-Follow this default order unless real evidence requires a change:
++Original default order. Items 1-9 (Phases 0-8) are complete. By owner decision
++recorded in `docs/adr/0010-accelerate-patchforge-execution-order.md`, execution now
++continues with PatchForge (item 12), then SentinelQA (item 13), then a bounded daily
++self-improvement milestone, before items 10, 11, 14, and 15. `ROADMAP.md` records the
++current order.
++
++Original default order:
+ 
+ 1. Repository foundation and quality tooling.
+ 2. AegisOps distributed-systems lab: gateway/users/orders + database + Docker.
+@@ -127,6 +148,9 @@ When a new session begins, recover the repo and `PROJECT_STATE.md` rather than m
+ 
+ ## Start
+ 
+-Begin with Phase 0: inspect the repository, bootstrap the smallest professional foundation, validate it, update `PROJECT_STATE.md`, and then move into the AegisOps lab incrementally.
++Phase 0 is complete. At the start of every session, read `PROJECT_STATE.md`, confirm
++the current `origin/main` SHA, check `ROADMAP.md` and any ADR newer than the state file,
++and continue from the documented next task. Do not begin a new phase without explicit
++owner authorization.
+ 
+ Take ownership of building the system. Keep me informed, let me review important decisions, teach me the meaningful engineering concepts as they arise, and keep moving the project toward a working, measured, auditable NEXUS platform.
+diff --git a/PROJECT_STATE.md b/PROJECT_STATE.md
+index c8e09dd..0bff0cf 100644
+--- a/PROJECT_STATE.md
++++ b/PROJECT_STATE.md
+@@ -1,92 +1,80 @@
+ # NEXUS Project State
+ 
+-## Current Milestone
++Concise current truth for session recovery. Historical Phase 7 detail lives in
++`docs/milestones/phase-7-brain-v1.md`. Experiment evidence lives in `docs/experiments/`.
++Execution order lives in `ROADMAP.md`, as amended by ADR 0010.
+ 
+-Phase 8 - Atlas Thin Control Plane Foundation is complete. Phase 7 Brain v1 is
+-accepted complete with its documented negative behavioral calibration and preserved
+-frozen evidence.
+-Atlas v1 now provides the minimum deterministic job, policy, persistence, approval,
+-recovery, and audit boundary needed for a future PatchForge runtime. Phase 9 and
+-PatchForge business logic have not begun.
++## Current Milestone
+ 
+-The frozen Phase 5 investigator and official Phase 6 memoryless baseline remain the
+-comparison control. Phase 7 does not change the model, investigator instructions,
+-eleven diagnostic tools, Diagnosis schema, scenarios, hidden truth, scoring, 12-call
+-budget, 10-turn budget, memoryless default, agent count, or remediation permissions.
++- Phases 0-8 are complete. Phase 8 (Atlas thin control plane) is the latest completed
++  phase.
++- Phase 7 Brain v1 is accepted as complete engineering with a documented negative
++  behavioral calibration.
++- Next authorized build target: PatchForge v1 (master-plan Phase 11), executed ahead of
++  Phases 9 and 10 by owner decision in
++  `docs/adr/0010-accelerate-patchforge-execution-order.md`. After it: SentinelQA
++  independent validation, then a bounded daily self-improvement milestone.
+ 
+ ## Repository
+ 
+-- Active working clone: `C:\Users\arman\Downloads\nexus-agent-platform\phase7-worktree`
+-- Remote: `https://github.com/gavinocvara/nexus-agent-platform.git`
+-- Branch: `main`
+-- Phase 7 starting point: `52bd5f47dfbf5591e5263911b1c64dab66158d90`
++- Remote: `https://github.com/gavinocvara/nexus-agent-platform.git`; branch `main`
+ - Package version: `0.9.0`
+-- Accepted Phase 6 baseline-record checkpoint: `5c0200d`
+-- Phase 7 implementation checkpoint: `a7b6f5c1fbfc1e218cfabb1d78ad8d830e2bc17c`
+-- Phase 7 validation handoff: the commit containing this document
+-- Post-calibration hardening: `15eff373cd92bcfd37611c3c7d9dd59f4c9e5efc`
+-- Frozen-smoke implementation identity: `f77313e7e624b68750578b2b25b90ba8123fab62`
+-- Phase 7 postmortem checkpoint: `71de1de99985a52c9cbb59a0b6e1950c83229500`
+-- Phase 8 validation checkpoint: the commit containing this document
+-
+-## Locked Phase 6 Baseline
+-
+-- Baseline: `aegisops-memoryless-v1`
+-- Session: `757df553-a0d0-4d11-845a-b972b456ee83`
+-- Git SHA: `52bd5f47dfbf5591e5263911b1c64dab66158d90`
+-- Model: `gpt-5.6-sol`; NEXUS: `0.7.4`; benchmark schema: `3`
+-- 15 investigations: five scenarios times three repetitions
+-- Completion `66.6667%`; component accuracy `46.6667%`; failure-class and exact
+-  accuracy `33.3333%`; abstention `53.3333%`; tool-budget failures `33.3333%`
+-- Invalid output, backend failure, timeout, unsupported claim, and unsafe attempt: `0%`
+-- Valid evidence references: `100%`; average tools `11.2`; median tools `12`
+-- Total tokens `130842`; average total tokens `8722.8`
+-- Immutable local lock:
+-  `.nexus/benchmarks/aegisops/baselines/aegisops-memoryless-v1.json`
+-- The lock is ignored local evidence and was not modified or regenerated by Phase 7.
+-
+-## Frozen Behavior Identity
+-
+-- Investigator instruction hash:
+-  `d858a63116e8579a4e19a19f01cea5441aa840213380455449528ca385dad456`
+-- Diagnostic SDK/tool-registry hash:
+-  `b75d71fff306ab51f445eba5d9a438dc394d02c810ec7fceb4110975a15cbfbf`
+-- Diagnosis-schema hash:
+-  `aea17a6803fe3c49f1d1e3268b5f58072e05b5edd5dce9fb72514b96a5b720ab`
+-- Scenario-catalog hash:
+-  `6b47e28ee3d5c13619903d9885212022c49940224e333188d177a40e46214e2c`
+-- Agents SDK: `0.22.3`; benchmark schema: `3`; evaluation/scenario schemas: `1`
+-
+-## Brain v1
+-
+-- Explicit `disabled`, `learn`, and `frozen_eval` settings under `NEXUS_BRAIN_*`;
+-  disabled reproduction opens no store and performs no retrieval or write.
+-- One private namespace, `aegisops.investigator`; every query includes agent and
+-  namespace predicates. No shared memory, Engram promotion, or cross-agent access.
+-- The writer accepts only an exact `AgentObservableRun` allowlist built field-by-field in
+-  runtime. It cannot receive scenarios, scores, correctness, plans, recovery, or harness
+-  state. Self-diagnoses are always `self_reported/unverified`.
+-- Strict schema-version-1 episodic and unverified candidate-procedure records carry
+-  stable IDs, validity intervals, private provenance, lifecycle/dispute state,
+-  supersession, retention policy, and version.
+-- SQLite persistence with typed canonical JSON, transactional writes, deduplication,
+-  explicit Windows-safe connection closure, integrity checks, and atomic snapshots.
+-- Deterministic lexical retrieval uses only the generic prompt and pinned run start,
+-  filters inactive/old/future records, and enforces one-query, record-count, character,
+-  token, and two-second bounds outside the agent loop.
+-- Retrieved context is canonical escaped JSON inside a delimited untrusted historical-data
+-  boundary. It cannot add tools, permissions, policy, identity, instructions, evidence,
+-  timeout, turns, or diagnostic-call budget.
+-- Secret-shaped values, harness markers, invalid namespaces, unknown fields, malformed
+-  rows, and identity/policy memory types are rejected. Brain failures and timeouts become
+-  explicit `brain_failure`; no silent memoryless fallback exists.
+-- Each run records mode, schema/writer/retriever/renderer identity, bounds, status,
+-  latency, as-of, ranked IDs/content hashes, context hash/size, Brain-attributable input,
+-  truncation, writes/latency, memory counts, and pre/post snapshot hashes.
+-- Frozen evaluation is hash-verified and read-only. Every run verifies equal pre/post
+-  hashes and zero writes. Benchmark schema 3 remains backward compatible.
+-- `targeted` performs one named evaluator-controlled investigation. Brain smoke and
+-  baseline commands require frozen read-only storage to prevent within-session learning.
++- Last recorded phase checkpoint: `c28fe5ca5ef393014fa6194944f91b1973097154` (Phase 8)
++- Local evidence (benchmarks, Brain stores, Atlas database) lives under ignored `.nexus/`
++  in the owner's canonical checkout and is never committed.
++
++## Architecture Today
++
++- `nexus.services`: Gateway, Users, and Orders FastAPI services with PostgreSQL.
++- `nexus.lab`: deterministic failure scenarios with evaluator-only ground truth.
++- `nexus.observability`: Prometheus, Loki, and Tempo telemetry.
++- `nexus.diagnostics`: eleven typed read-only diagnostic tools.
++- `nexus.aegisops`: one bounded OpenAI Agents SDK investigator (frozen behavior).
++- `nexus.evaluation.aegisops`: preflight, targeted/smoke/baseline runs, resume, compare,
++  and baseline locking.
++- `nexus.brain`: agent-private Brain v1, disabled by default.
++- `nexus.atlas`: typed job, policy, approval, and audit control plane (library only).
++
++## Frozen Identities That Still Matter
++
++- Phase 6 baseline `aegisops-memoryless-v1`: session
++  `757df553-a0d0-4d11-845a-b972b456ee83` at `52bd5f47dfbf5591e5263911b1c64dab66158d90`,
++  model `gpt-5.6-sol`, 15 runs. Exact diagnosis 33.3%, completion 66.7%, tool-budget
++  failure 33.3%. Summary SHA-256 `2078803c4e20852c435b10d0ab93206dd748d9b78cd81dc7e1a01c0cfde71301`;
++  lock-file SHA-256 `b6a46c51bf235f4bbe4465ee060f5d92cf0b0571a3835ce0c67ff062c0209d74`.
++  Full record: `docs/experiments/phase6-memoryless-baseline.md`.
++- Frozen investigator behavior:
++  - instruction `d858a63116e8579a4e19a19f01cea5441aa840213380455449528ca385dad456`
++  - tool registry `b75d71fff306ab51f445eba5d9a438dc394d02c810ec7fceb4110975a15cbfbf`
++  - Diagnosis schema `aea17a6803fe3c49f1d1e3268b5f58072e05b5edd5dce9fb72514b96a5b720ab`
++  - scenario catalog `6b47e28ee3d5c13619903d9885212022c49940224e333188d177a40e46214e2c`
++  - Agents SDK `0.22.3`; limits: 12 diagnostic calls, 10 turns, 120 seconds.
++- Brain v1 protocol SHA-256
++  `c6c3cff80da44c6fbc486a57b4eaf1ea6215c1ba923c1afed75d6717f94368ed`; frozen snapshot
++  logical SHA-256 `9e7d36376c6b0c8c77d5a3f94cafcea22cb2a53a313986a2a3fe6aed4f0fd3b6`;
++  targeted session `c6832bae-feb7-4216-933e-139c734c2173`; frozen smoke session
++  `4776dc1c-6f7a-41d1-b75b-e6c70856923c`.
++- Never alter the Phase 6 lock, the frozen snapshot, the protocol JSON, the historical
++  0.97-confidence unverified self-report, or the frozen investigator behavior.
++
++## Brain v1 Summary
++
++- Modes: `disabled` (default; opens no store), `learn` (only through the guarded
++  `targeted` benchmark command), and `frozen_eval` (hash-verified, read-only). Brain
++  failures fail closed as `brain_failure`.
++- One private namespace, `aegisops.investigator`. The writer accepts only the
++  allowlisted `AgentObservableRun` projection; no evaluator data enters memory.
++  Self-diagnoses are always `self_reported/unverified`.
++- Retrieval `bounded-lexical-v1` matches the single generic incident prompt. In the
++  frozen snapshot, the procedural record always matched through its hard-coded trigger
++  terms (`investigate`, `diagnostic`) and the episodic record never matched. Retrieval
++  therefore acted as a fixed context prefix, not incident-specific recall.
++- Frozen smoke outcome: 0/5 completions and 5/5 tool-budget exhaustion. The same
++  procedural record was retrieved in every run. No contemporaneous memoryless or placebo
++  arm was run, so no causal benefit or harm is claimed. Report:
++  `docs/experiments/brain-v1-calibration-report.md`.
++- Future agents (including PatchForge) get their own namespaces and must not reuse
++  AegisOps memories or copy `bounded-lexical-v1`.
+ 
+ ## Atlas v1
+ 
+@@ -120,60 +108,10 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
+   tool execution, repository mutation, merging, deployment, shared-memory access, or
+   free-form multi-agent planning.
+ 
+-## Experimental Design
+-
+-The byte-hashed protocol in `docs/experiments/brain-v1-protocol.json` pre-registers the
+-authorized calibration and a deferred leave-one-scenario-out study. The generic prompt
+-makes pre-run Brain v1 a reusable procedural prefix, not incident-specific recall. The
+-targeted learn run and five-scenario frozen smoke are mechanism/security calibration;
+-they cannot support a causal improvement claim. Brain calibration cannot be locked as
+-an official baseline. The smoke is complete with a negative behavioral result; the
+-official contemporaneous memoryless/placebo study remains deferred. Current protocol
+-SHA-256:
+-`c6c3cff80da44c6fbc486a57b4eaf1ea6215c1ba923c1afed75d6717f94368ed`.
+-
+-## Targeted Brain Calibration
+-
+-- Session: `c6832bae-feb7-4216-933e-139c734c2173`
+-- Completed with recovery verified, 11/12 diagnostic calls, three turns, complete
+-  accounting, zero backend failures, and zero Brain failures.
+-- Initial retrieval was empty: zero retrieved records and zero Brain-attributable input
+-  tokens. The run wrote one episodic and one procedural memory.
+-- Empty pre-snapshot advanced to logical SHA-256
+-  `9e7d36376c6b0c8c77d5a3f94cafcea22cb2a53a313986a2a3fe6aed4f0fd3b6`; inspection
+-  reported two active memories.
+-- Diagnosis component was correct and failure class was wrong at 0.97 confidence. This
+-  remains legitimate `self_reported/unverified` history and was not corrected, promoted,
+-  removed, or used to tune retrieval.
+-- The live store remains only in the ignored canonical checkout and has not been opened
+-  writable during post-calibration implementation.
+-
+-## Frozen Brain Smoke
+-
+-- Session: `4776dc1c-6f7a-41d1-b75b-e6c70856923c`
+-- Repository: `f77313e7e624b68750578b2b25b90ba8123fab62`; NEXUS `0.8.1`;
+-  model `gpt-5.6-sol`
+-- Five planned runs completed at the benchmark-session level, but all five investigations
+-  ended `tool_budget_exceeded`: zero investigation completions, 12 successful diagnostic
+-  calls and two turns in every run, zero backend failures, and zero Brain failures.
+-- Every run retrieved the same active, unverified candidate procedural memory,
+-  `8eef2c33-9acb-52b3-8329-11345784890c`. The active episodic memory was not retrieved.
+-  Retrieval was 5/5, memory hit rate was 100%, and each run added 420 estimated
+-  Brain-attributable input tokens.
+-- Every run wrote zero memories and recorded identical pre/post logical SHA-256
+-  `9e7d36376c6b0c8c77d5a3f94cafcea22cb2a53a313986a2a3fe6aed4f0fd3b6`.
+-  The frozen SQLite file SHA-256 is
+-  `eeb6e6604f032ac925a981ab249f189418bd92a0005801f513faeb3fd5636bb5`.
+-- Frozen calibration observed 0/5 completion with the same unverified procedural memory
+-  retrieved in all five scenarios and 100% diagnostic tool-budget exhaustion. This is
+-  consistent with procedural-memory anchoring but is not a causal comparison because no
+-  contemporaneous memoryless or placebo arm was run.
+-- The full safe memory payload, deterministic lexical scoring, sequence-overlap analysis,
+-  evidentiary classification, and artifact hashes are recorded in
+-  `docs/experiments/brain-v1-calibration-report.md`.
+-
+ ## Validation Commands
+ 
++Commands use the Windows `py` launcher; use `python` on Linux or macOS.
++
+ ```powershell
+ py -m pip install -e ".[dev]"
+ py -m pip check
+@@ -181,17 +119,17 @@ py -m ruff format --check .
+ py -m ruff check .
+ py -m mypy
+ py -m pytest
+-py -m pytest tests/unit/test_brain.py
+-py -m pytest tests/unit/test_aegisops_contracts.py tests/unit/test_aegisops_runtime.py
+-py -m pytest tests/unit/test_aegisops_benchmark.py tests/unit/test_aegisops_comparison.py tests/unit/test_aegisops_preflight.py
+ py -m nexus.lab.scenarios validate
+-py -m nexus.evaluation.aegisops preflight
+ docker compose config --quiet
++py -m nexus.evaluation.aegisops preflight
+ $env:RUN_INTEGRATION = "1"
+ py -m pytest -m integration tests/integration
+ ```
+ 
+-## Latest Validation
++Compose integration needs the PostgreSQL values from `.env.example` in `.env` or in the
++process environment.
++
++## Latest Validation (Phase 8)
+ 
+ - Phase 8 version 0.9.0 validation on 2026-09-27: the editable package installs and
+   `pip check` passes; all 137 files pass Ruff formatting; Ruff lint passes; strict mypy
+@@ -209,113 +147,6 @@ py -m pytest -m integration tests/integration
+ - All five scenario documents and Compose configuration validate. Compose emitted only
+   the expected warnings when the local PostgreSQL variables were absent during the
+   configuration-only check.
+-- Read-only Phase 7 postmortem on 2026-09-27 parsed the frozen canonical snapshot and all
+-  five durable smoke run records. The procedural record scored 22 from two lexical
+-  overlaps plus its type bonus; the episodic record had zero overlap and was excluded.
+-  Snapshot and smoke artifacts retained their recorded hashes after inspection.
+-- Post-calibration 0.8.1 validation on 2026-09-25: `pip check` passes; all 121 files
+-  pass Ruff formatting; Ruff lint passes; strict mypy reports no issues in 69 source
+-  files; all 149 non-integration tests pass; the 68 focused Brain/runtime/benchmark/
+-  evaluator/preflight tests pass; all 20 Compose integration tests pass.
+-- The five scenario documents and Compose configuration validate. GitHub Actions run
+-  `36104819422` for `15eff37` passed both `validate` and `compose-integration` on the
+-  first attempt.
+-- The immutable Phase 6 analysis-version-1 summary parses `genuine_abstention_rate`,
+-  `confident_wrong_rate`, and `brain_failure_rate` as unavailable rather than zero. Its
+-  historical `abstention_rate=0.533333...` remains distinct from the recorded
+-  `tool_budget_failure_rate=0.333333...`.
+-- Read-only compatibility inspection reports the calibration store at logical SHA-256
+-  `9e7d36376c6b0c8c77d5a3f94cafcea22cb2a53a313986a2a3fe6aed4f0fd3b6`, with one
+-  episodic and one procedural memory. Its physical file SHA-256 remains
+-  `41cee12dd35c38c62fcecaf38e8b2aad3f19231029d356142621c3d5254de38c`.
+-- Frozen behavior, memory-record schema, writer allowlist, retrieval algorithm, renderer,
+-  and protocol identities are unchanged by the post-calibration fixes.
+-- Post-final-edit validation on 2026-09-24: `pip check` passes; all 121 files pass Ruff
+-  formatting; Ruff lint passes; strict mypy reports no issues in 69 source files; all
+-  142 non-integration tests pass; the 51 focused Brain/runtime/benchmark/comparison
+-  tests pass.
+-- With the documented local-only PostgreSQL values supplied to Compose, a fresh
+-  volume-removing rebuild plus standard warm-up passes all 20 integration tests. This
+-  includes Brain survival across `down --volumes`, retrieval during the orders database
+-  fault, no Brain data in diagnostic telemetry, and PostgreSQL spans.
+-- The first fresh-stack integration pass was 19/20 because one Loki correlation test saw
+-  only one of two logs during startup ingestion. It passed immediately in isolation;
+-  adding the evaluator's standard warm-up after the deliberate reset produced the clean
+-  20/20 full pass.
+-- All five scenario documents validate. Compose configuration, diff whitespace, ignored
+-  `.env`/`.nexus`, and package dependency checks pass.
+-- The real locked schema-3 summary parses under 0.8.1 as 15 memoryless runs. Historical
+-  lock SHA-256 remains
+-  `b6a46c51bf235f4bbe4465ee060f5d92cf0b0571a3835ce0c67ff062c0209d74`.
+-- Governing specification files are unchanged. GitHub Actions run `36063663628` for
+-  `a7b6f5c` passed both `validate` and `compose-integration` on the first attempt.
+-- Disabled-mode preflight at `a7b6f5c` passed the frozen contract, five scenarios,
+-  eleven-tool policy, Brain identity, clean reproducible Git identity, all services,
+-  observability APIs, and lab controls. It correctly remained not ready because live
+-  execution was not opted in, no `OPENAI_API_KEY` was present, and the local default
+-  model was `gpt-5-mini` rather than frozen `gpt-5.6-sol`.
+-- One local integration attempt could not reach Docker from the filesystem sandbox. An
+-  unrestricted attempt then exposed the absent ignored `.env`: empty PostgreSQL values
+-  prevented startup. No code was changed for either environmental issue; supplying the
+-  documented process-local values produced the clean 20/20 result above.
+-
+-## Preserved Phase 7 Evidence
+-
+-Complete in this checkpoint:
+-
+-- Brain modes, private schema/storage, strict runtime projection, bounded deterministic
+-  retrieval, escaped untrusted rendering, lifecycle/dispute handling, frozen read-only
+-  verification, explicit failures, and audit identity are implemented.
+-- Benchmark compatibility, targeted calibration mode, frozen-run enforcement, portable
+-  locks, split Brain/agent/end-to-end measurements, evaluator separation, analytics,
+-  protocol pre-registration, ADR, runbook, and deterministic adversarial tests are
+-  implemented.
+-- All independent review constraints applicable before a Brain-enabled live run have
+-  an implementation and deterministic test path. No requirement was discarded, and
+-  no large or official evaluation was run.
+-- The authorized frozen snapshot and five-scenario smoke are complete. The result is
+-  negative: 0/5 investigation completion with 5/5 tool-budget exhaustion. Frozen-store
+-  integrity, read-only behavior, retrieval audit, and zero-write guarantees held.
+-- The postmortem documents the exact record, retrieval mechanism, tool-sequence overlap,
+-  and the boundary between observation, deterministic inference, and causal hypothesis.
+-
+-Deferred and still requiring separate authorization:
+-
+-- No further Phase 7 live investigation or smoke is authorized. Do not tune retrieval,
+-  rewrite memory, change budgets/prompts/tools, or delete the historical 0.97-confidence
+-  unverified self-report from this result.
+-- Any causal test of procedural anchoring requires the already designed, pre-registered
+-  contemporaneous memoryless and length-matched placebo arms. The official 100-plus-run
+-  study remains deferred.
+-Phase 7 is accepted complete. Do not alter the Phase 6 lock, frozen Brain snapshot,
+-protocol JSON, historical self-report, or frozen behavior while continuing the platform.
+-
+-## Independent Review Disposition
+-
+-Satisfied and enforced: structural evaluator isolation, the exact observable writer
+-projection, no score-conditioned behavior, unverified self-diagnoses, explicit modes,
+-frozen read-only hashes, fail-closed Brain errors, complete identity/audit metadata,
+-canonical replayable snapshots, isolated SQLite storage/telemetry, separate retrieval
+-budgets, escaped untrusted context, current-run-only evidence, contamination guards,
+-portable future locks, derived metric hygiene, and deterministic T1-T28-equivalent
+-coverage.
+-
+-Already satisfied before review-driven hardening: the unchanged eleven read-only tools,
+-12-call/10-turn/120-second limits, stable investigator instruction and Diagnosis hashes,
+-runtime-owned current evidence validation, and local ignored storage boundary.
+-
+-Changed because of review: exact field-by-field projection and import tests; explicit
+-`disabled`/`learn`/`frozen_eval`; self-report trust labels and dispute lifecycle; escaped
+-renderer and persistent-injection tests; Brain identity and per-run hashes; split
+-retrieval/agent/end-to-end latency and token accounting; evaluator-only fold ledger;
+-pre-registration; Brain calibration lock prohibition; and portable lock schema 2 with
+-legacy resolution.
+-
+-Deferred by design: placebo snapshot generation, interleaved leave-one-scenario-out
+-orchestration, and the 100-plus-run official study require later explicit authorization.
+-Semantic/reflective memory, supervised confirmed outcomes, vectors, Engram, cross-agent
+-sharing, and off-machine evidence publication are outside Brain v1. No review
+-requirement is incompatible with the architecture.
+ 
+ ## Storage And Security
+ 
+@@ -342,7 +173,21 @@ requirement is incompatible with the architecture.
+ - The candidate procedure recorded three redundant patterns but no budget-risk sequence.
+   The frozen smoke reproduced most recorded repetition counts and added three repeated
+   `get_recent_errors` calls in every run, but no causal attribution is supported without
+-  memoryless and placebo controls.
++  memoryless and placebo controls. The same repeated-tool counts also appear in
++  memoryless Phase 6 runs. Procedures store tool names without arguments, so calls to
++  the same tool for different services count as repetition.
++- An independent read-only review of the smoke artifacts found one consistent
++  structural difference from all 20 memoryless Phase 6 runs: the first model turn issued
++  8-10 parallel diagnostic calls instead of 1-7. The investigator is never told its
++  12-call budget, and parallel calls are allowed, so a wide first batch plus a normal
++  second batch exhausts the budget before a final answer. Whether memory content, the
++  memory wrapper text, extra context length, or model drift caused the wider batch is
++  untested (see the report addendum).
++- Brain metadata counts Brain-attributable input tokens once per run, although the
++  context is resent on every model request. Evidence-reference validity is reported as
++  `0.0` rather than unavailable when a run has no references.
++- `AtlasSettings` (`NEXUS_ATLAS_DATABASE_PATH`) is defined but not yet consumed. Callers
++  pass the Atlas SQLite path explicitly.
+ - SQLite supports this one-agent local experiment; PostgreSQL/Engram migration is deferred.
+ - No semantic, reflective, shared, vector, or graph memory exists in Brain v1.
+ - Five scenarios are insufficient for independent learning-effect estimates.
+@@ -351,8 +196,7 @@ requirement is incompatible with the architecture.
+ 
+ ## Next Step
+ 
+-Register a future PatchForge implementation behind `AgentRuntime`, accept only
+-`JobDispatch` from a running leased Atlas job, and return the existing typed
+-`PatchResult`. SentinelQA review and human approval must remain separate later steps.
+-Do not implement PatchForge, begin Phase 9, add unrestricted execution, or alter frozen
+-Brain behavior without explicit authorization.
++Implement PatchForge v1 behind Atlas `AgentRuntime`. It accepts only `JobDispatch` from
++a running, leased Atlas job and returns the typed `PatchResult`. SentinelQA review and
++human approval stay separate later steps. Do not add unrestricted execution, alter
++frozen Brain behavior, or begin Phases 9-10 without explicit authorization.
+diff --git a/README.md b/README.md
+index 6fa71ba..6d32f48 100644
+--- a/README.md
++++ b/README.md
+@@ -1,18 +1,42 @@
+ # NEXUS Agent Platform
+ 
+-NEXUS is a local-first engineering platform for auditable agent workflows. Phase 1
+-provides the AegisOps distributed-systems lab that later diagnostic agents will
+-observe, disrupt, repair, and evaluate. Phase 2 turns it into a deterministic
+-incident laboratory with isolated evaluator ground truth. Phase 3 adds operational
+-metrics, logs, and distributed traces without exposing those answers.
+-Phase 4 adds bounded read-only diagnostics, Phase 5 adds one evidence-grounded
+-AegisOps investigator, and Phase 6 adds reproducible benchmark history and comparison
+-without changing that investigator's behavior. Phase 7 adds private Brain v1 memory and
+-its frozen negative calibration. Phase 8 adds the Atlas thin control-plane foundation
+-for deterministic reviewed agent jobs.
+-
+-The governing specifications are `NEXUS_PROJECT_INSTRUCTIONS.md`,
+-`NEXUS_MASTER_BUILD_PROMPT.md`, and `BRAIN.md`.
++NEXUS is a local-first platform for building, governing, evaluating, and observing
++bounded AI agents. Agents get narrow typed tools instead of ambient machine access.
++Deterministic software owns permissions, budgets, provenance, and evaluation. Every
++behavior claim is measured against a recorded baseline, and negative results are kept.
++
++## Status
++
++Version `0.9.0`. Phases 0-8 are complete. The next authorized build target is
++PatchForge v1, a bounded software-engineering agent. See `ROADMAP.md` and
++`docs/adr/0010-accelerate-patchforge-execution-order.md`.
++
++| Phase | What exists | Validation |
++| --- | --- | --- |
++| 1-3 | AegisOps lab: Gateway/Users/Orders services, PostgreSQL, deterministic failure scenarios with isolated ground truth, Prometheus/Loki/Tempo observability | Unit tests plus Compose integration tests in CI |
++| 4 | Eleven typed, read-only diagnostic tools with bounded inputs and outputs | Unit, adapter, and real-stack tests |
++| 5 | One OpenAI Agents SDK incident investigator with hard call, turn, and time limits and machine-checked evidence citations | Scripted no-key safety tests |
++| 6 | Reproducible live benchmarking; frozen `aegisops-memoryless-v1` baseline | 15 live runs: 33.3% exact diagnosis, 66.7% completion, 100% valid evidence references, 0 unsupported claims ([record](docs/experiments/phase6-memoryless-baseline.md)) |
++| 7 | Agent-private Brain v1 memory: provenance, lifecycle, frozen snapshots, fail-closed modes; default off | Frozen calibration smoke: 0/5 completions, no improvement claim ([report](docs/experiments/brain-v1-calibration-report.md)) |
++| 8 | Atlas thin control plane: typed jobs, policy, approvals, idempotent SQLite persistence, append-only audit | Exhaustive state-machine and policy tests |
++
++What NEXUS does not do yet: PatchForge, SentinelQA, remediation or other write actions
++against running systems, Kubernetes, shared memory (Engram), and any autonomous merge or
++deployment. Agents never receive an unrestricted shell.
++
++## Documentation Map
++
++- Architecture principles: `NEXUS_MASTER_BUILD_PROMPT.md` (sections 1-23), `BRAIN.md`,
++  `NEXUS_PROJECT_INSTRUCTIONS.md`
++- Decisions: `docs/adr/` (0001-0010)
++- Current execution order: `ROADMAP.md`
++- Current implementation truth and next task: `PROJECT_STATE.md`
++- Operations: `docs/runbooks/`
++- Historical records: `docs/experiments/`, `docs/milestones/`, `docs/maintenance/`,
++  `CHANGELOG.md`
++
++When these disagree, current repository state plus accepted ADRs override older
++sequencing text.
+ 
+ ## AegisOps Lab
+ 
+@@ -31,13 +55,17 @@ logging conventions.
+ 
+ ## Install and Validate
+ 
+-Python 3.12 or newer is required.
++Python 3.12 or newer is required. Commands in this README use the Windows `py`
++launcher. On Linux or macOS, use `python` instead.
+ 
+ ```powershell
+ py -m pip install -e ".[dev]"
++py -m pip check
++py -m ruff format --check .
+ py -m ruff check .
+ py -m mypy
+ py -m pytest
++py -m nexus.lab.scenarios validate
+ ```
+ 
+ The default pytest command runs fast unit and service tests. Compose integration
+@@ -90,7 +118,6 @@ Important variables are:
+ - `NEXUS_METRICS_ENABLED`
+ - `NEXUS_OTEL_ENABLED`
+ - `NEXUS_OTEL_EXPORTER_ENDPOINT`
+-- `NEXUS_ATLAS_DATABASE_PATH`
+ - `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` for Compose substitution
+ 
+ ## Operations Foundation
+@@ -202,12 +229,14 @@ It receives only the eleven registered diagnostic tools and returns a strict dia
+ covering status, component, failure class, hypotheses, evidence references,
+ alternatives, confidence, and the next read-only diagnostic action. Every evidence
+ claim names a recorded tool call and an exact result value. There are no handoffs,
+-sessions, write/remediation tools, or ambient machine capabilities. Phase 7 can add
+-private memory context behind a separate default-off Brain toggle; it does not change
+-the investigator's tools, permissions, model, or execution budgets.
++sessions, write/remediation tools, or ambient machine capabilities. Phase 7 Brain v1
++memory is implemented behind a separate toggle that is off by default. Enabling it does
++not change the investigator's tools, permissions, model, or execution budgets.
+ 
+ Live execution is opt-in and requires `NEXUS_AGENT_ENABLED=true` plus an
+-`OPENAI_API_KEY` in the untracked environment. Run one generic investigation with:
++`OPENAI_API_KEY` in the untracked environment. The ad-hoc default model is
++`gpt-5-mini`. Benchmark preflight requires the frozen baseline model `gpt-5.6-sol`. Run
++one generic investigation with:
+ 
+ ```powershell
+ py -m nexus.aegisops investigate
+@@ -286,6 +315,15 @@ is bounded, provenance-bearing, and delimiter-escaped inside an explicitly untru
+ historical-data block. The committed protocol hash is part of benchmark identity. See
+ `docs/runbooks/aegisops-brain-v1.md` and `docs/adr/0008-agent-private-brain-v1.md`.
+ 
++The authorized calibration is complete, and its result is negative. In the frozen
++five-scenario smoke, every run exhausted its diagnostic budget: 0/5 investigations
++completed. Every run retrieved the same unverified procedural record. The incident prompt
++is identical for every scenario, so lexical retrieval cannot select memory relevant to a
++specific incident. No contemporaneous memoryless or placebo arm was run, so the smoke
++supports no claim that Brain v1 causes benefit or harm. Brain v1 is complete as
++engineering infrastructure and stays disabled by default. The evidence is in
++`docs/experiments/brain-v1-calibration-report.md`.
++
+ Legacy analysis-version-1 summaries expose Phase 7-only aggregate metrics as unavailable,
+ not zero. In particular, the historical Phase 6 `abstention_rate` combines genuine
+ abstentions with tool-budget failures and must be interpreted alongside the separately
+@@ -314,5 +352,15 @@ Agent policies allow only named capabilities. Atlas v1 includes source read, wor
+ write, bounded test execution, patch creation, and review capabilities; it has no
+ unrestricted shell, merge, deployment, production remediation, Kubernetes, or memory
+ permission. `AgentRuntime`, `JobDispatch`, `PatchResult`, and `ReviewResult` form the
+-future PatchForge/SentinelQA integration boundary. See
++PatchForge/SentinelQA integration boundary. Callers pass the SQLite path to the Atlas
++storage layer explicitly. `AtlasSettings` defines `NEXUS_ATLAS_DATABASE_PATH` for future
++runtime wiring, but no code consumes it yet. See
+ `docs/adr/0009-atlas-thin-control-plane-foundation.md`.
++
++## Next: PatchForge v1
++
++PatchForge is the next authorized milestone (ADR 0010). It will take an engineering task
++through an Atlas job into a disposable isolated workspace, reproduce the problem with a
++test, patch it with bounded tools, validate it, review its own diff, and return a
++`PatchResult` for independent SentinelQA review and human approval. It will never modify
++`main`, merge, or deploy.
+diff --git a/ROADMAP.md b/ROADMAP.md
+index bc30adf..7e24802 100644
+--- a/ROADMAP.md
++++ b/ROADMAP.md
+@@ -1,5 +1,11 @@
+ # NEXUS Roadmap
+ 
++This file records completed phases and the current execution order. Phase numbers come
++from `NEXUS_MASTER_BUILD_PROMPT.md` and are stable identifiers. Execution order after
++Phase 8 was changed by owner decision in
++`docs/adr/0010-accelerate-patchforge-execution-order.md`. Current implementation truth
++lives in `PROJECT_STATE.md`.
++
+ ## Phase 0 — Foundation (Complete)
+ 
+ - Repository bootstrap
+@@ -84,8 +90,39 @@
+ - No scheduler, network service, deployment, remediation, merge, model call, shared
+   memory, Engram, Kubernetes, or PatchForge business logic
+ 
+-## Later Phases
++## Execution Order After Phase 8 (ADR 0010)
++
++Each step requires explicit project-owner authorization before it begins.
++
++### Next — PatchForge v1 (master-plan Phase 11, executed early)
++
++- Bounded issue/task intake through an Atlas `JobDispatch`
++- Disposable isolated workspace per run with source SHA, dedicated branch, clean start,
++  final diff, and deterministic cleanup; never modifies `main`
++- Purpose-built, bounded repository, edit, and validation tools; no unrestricted shell
++- Test-first reproduction with runtime-attested fail-before/pass-after evidence
++- Deterministic self-review, strict `PatchResult`, and draft PR only after human approval
++- Controlled defect benchmark with evaluator-only acceptance tests before any
++  improvement claim
++
++### Then — SentinelQA / Independent Validation (master-plan Phase 12)
++
++- Independent re-execution of PatchForge output in a fresh workspace
++- Typed `ReviewResult` through the existing Atlas review boundary; never merges
++- Requirements-to-tests, browser/API evidence, and bug reports as later SentinelQA scope
++
++### Then — Bounded Daily Self-Improvement (named milestone)
++
++- A scheduled evaluation that proposes at most one measured change as a PR
++- Contemporaneous baseline comparison on a held-out split, SentinelQA review, and human
++  approval; the loop never merges or deploys by itself
++- Policy, permissions, budgets, evaluator, metrics, and benchmark tasks stay outside the
++  editable surface
++
++### Deferred Master-Plan Phases (order decided when authorized)
+ 
+-The remaining sequence is governed by `NEXUS_MASTER_BUILD_PROMPT.md`: AegisOps
+-remediation, Kubernetes, PatchForge, SentinelQA, Engram evolution, and integrated
+-NEXUS workflows. No later phase begins without explicit project-owner authorization.
++- Phase 9 — AegisOps specialist agents, verifier, and approval-gated remediation
++- Phase 10 — Kubernetes/kind lab, Kubernetes tools, and failure benchmark
++- Phase 13 — Engram v2: temporal knowledge and validated cross-agent exchange
++- Phase 14 — Integrated NEXUS closed-loop workflow
++- Phase 15 — Portfolio polish
+diff --git a/docs/adr/0010-accelerate-patchforge-execution-order.md b/docs/adr/0010-accelerate-patchforge-execution-order.md
+new file mode 100644
+index 0000000..1bd99f8
+--- /dev/null
++++ b/docs/adr/0010-accelerate-patchforge-execution-order.md
+@@ -0,0 +1,87 @@
++# ADR 0010: Accelerate PatchForge in the Execution Order
++
++## Status
++
++Accepted. Owner-approved roadmap decision recorded on 2026-09-28 after Phase 8.
++
++## Context
++
++`NEXUS_MASTER_BUILD_PROMPT.md` section 24 defines the original default build order.
++After Phase 8 (Atlas thin control plane) it continues:
++
++```text
++Phase 9  AegisOps multi-agent + approval-gated remediation
++Phase 10 Kubernetes (kind lab, Kubernetes tools and failure benchmark)
++Phase 11 PatchForge
++Phase 12 SentinelQA
++Phase 13 Engram v2
++Phase 14 Integrated NEXUS
++Phase 15 Portfolio polish
++```
++
++Phases 0-8 are complete. The remaining NEXUS work is mostly software engineering on
++NEXUS itself. A bounded, evaluated software-engineering agent can help with that work
++earlier, and it can do so without new production-facing capabilities. Remediation and
++Kubernetes both add write authority over running infrastructure. That makes them the
++highest-risk phases, and nothing currently depends on them.
++
++## Decision
++
++The project owner changes the execution order. The work that follows Phase 8 is:
++
++1. PatchForge v1: bounded issue/task -> isolated workspace -> reproduce -> patch ->
++   validate -> self-review -> structured `PatchResult` -> draft PR for human approval.
++2. SentinelQA / independent validation: independent re-execution and review of
++   PatchForge output through the existing Atlas `ReviewResult` boundary.
++3. Bounded daily self-improvement capability: scheduled evaluation that may propose one
++   measured change as a PR and never merges or deploys by itself.
++4. The deferred master-plan phases, in an order chosen when each is authorized:
++   AegisOps specialists and approval-gated remediation (original Phase 9), Kubernetes
++   (original Phase 10), Engram evolution (original Phase 13), integrated NEXUS workflows
++   (original Phase 14), and portfolio polish (original Phase 15).
++
++Phase numbers do not change. Master-plan phase numbers stay stable identifiers, so
++existing references (for example "Phase 6 baseline" or "Phase 7 Brain") keep their
++meaning. PatchForge keeps the identifier Phase 11 and SentinelQA keeps Phase 12;
++they are simply executed before Phases 9 and 10. Self-improvement is a named milestone,
++not a numbered phase. `ROADMAP.md` records the current execution order.
++
++## Prerequisite
++
++Atlas v1 (ADR 0009) is the required dispatch substrate. PatchForge runs only through
++`AgentRuntime` and accepts `JobDispatch` from a running, leased Atlas job. It returns the
++typed `PatchResult`. SentinelQA returns `ReviewResult`. Human approval stays a separate
++Atlas decision. PatchForge needs no Atlas capability beyond the Phase 8 vocabulary:
++source read, worktree write, bounded test execution, and patch creation.
++
++## Why Remediation and Kubernetes Can Wait
++
++- Neither is a dependency of PatchForge or SentinelQA.
++- Both add write authority over running systems. Deferring them keeps the platform's
++  authority read-only toward infrastructure while the engineering loop matures.
++- The frozen AegisOps investigator, the Phase 6 baseline, and the Phase 7 evidence stay
++  valid comparison controls regardless of when remediation begins.
++
++## Unchanged Constraints
++
++- All governing principles in `NEXUS_MASTER_BUILD_PROMPT.md` sections 1-23 and `BRAIN.md`.
++- Least privilege, no unrestricted shell, no autonomous merge or deployment, and
++  approval gates for sensitive actions.
++- Evaluation-first adoption. A proposed improvement, including a PatchForge
++  self-improvement, must beat a contemporaneous baseline under pre-registered rules and
++  receive human approval.
++- Private per-agent memory. PatchForge must not reuse AegisOps Brain records, and it
++  must not copy `bounded-lexical-v1` retrieval, whose generic-prompt limitation Phase 7
++  demonstrated.
++- The frozen Phase 5 behavior, the Phase 6 lock, and the Phase 7 artifacts are immutable.
++- Each phase or milestone still requires explicit owner authorization.
++
++## Consequences
++
++- `ROADMAP.md` and `PROJECT_STATE.md` hold the current execution order. The master
++  prompt's section 24 is the original default order and is read through this ADR.
++- The end-to-end demonstration in the master prompt (AegisOps detects, PatchForge fixes,
++  SentinelQA validates, AegisOps verifies recovery) still requires the deferred
++  remediation work before it can be closed.
++- If PatchForge evidence shows the engineering loop is not useful, the owner may return
++  to the original order. That change would need a new ADR.
+diff --git a/docs/experiments/brain-v1-calibration-report.md b/docs/experiments/brain-v1-calibration-report.md
+index 395f7e9..82b86c6 100644
+--- a/docs/experiments/brain-v1-calibration-report.md
++++ b/docs/experiments/brain-v1-calibration-report.md
+@@ -240,3 +240,36 @@ No further live Phase 7 call is authorized. The official 100-plus-run controlled
+ retrieval tuning, memory correction, and Phase 8 remain deferred pending explicit owner
+ authorization and a new pre-registered work item.
+ 
++
++## Addendum: Independent Read-Only Review (2026-09-27, recorded 2026-09-28)
++
++This addendum records an independent parallel-track review of the same ignored
++artifacts. It does not modify the observations, the hashes, or the disposition above.
++No live call was made.
++
++- The rendered memory context was reproduced byte-for-byte from the frozen snapshot with
++  the repository retrieval code (SHA-256
++  `f12eecc7133e8fce2b0e0df98823a9930fa4fff915457401182c81859251b5ce`, 1,677 characters).
++- Path similarity to the stored procedure was measured as ordered agreement between each
++  run's first-use tool order and `candidate_next_steps`. It was no higher in the frozen
++  smoke than in memoryless Phase 6 runs: Kendall tau 0.46 for the smoke versus 0.72 for
++  the 15 baseline runs. No run in any session made an exact duplicate call; repeated tool
++  names were calls for different services or windows. The observed paths are therefore
++  not evidence of replaying the stored procedure.
++- The distinctive observation is first-turn parallel fan-out. Every smoke run issued
++  8-10 diagnostic calls in its first model turn. None of the 20 memoryless Phase 6 runs
++  (baseline and smoke) did so; their first turns issued 1, 5, or 7 calls. The investigator
++  instructions do not state the 12-call budget, SDK parallel tool calls are enabled, and
++  crossing the budget aborts the run. A first batch of 8 followed by a typical second
++  batch therefore exhausts the budget before a final answer turn.
++- The rendered untrusted-memory preamble contains the sentence "Validate every current
++  condition with the registered diagnostic tools." That wrapper text is a candidate cause
++  in its own right, separate from memory content.
++- Competing untested explanations for the wider fan-out: session-to-session variance or
++  provider drift between 2026-09-24 and 2026-09-27; extra context length; the wrapper
++  sentence; and the procedural checklist content.
++- The smallest discriminating design identified is contemporaneous and interleaved:
++  memoryless, the frozen Brain snapshot, a length-matched placebo snapshot, and
++  optionally a wrapper-only arm. It runs 5 scenarios x 2 repetitions per arm and uses
++  first-turn batch size, budget exhaustion, and turns as pre-registered primary outcomes.
++  It is not authorized.
+diff --git a/docs/maintenance/repo-hygiene-2026-09.md b/docs/maintenance/repo-hygiene-2026-09.md
+new file mode 100644
+index 0000000..6842c75
+--- /dev/null
++++ b/docs/maintenance/repo-hygiene-2026-09.md
+@@ -0,0 +1,53 @@
++# Repository Hygiene Audit (2026-09)
++
++Audit of `main` at `c28fe5c` (NEXUS 0.9.0), done on branch `maintenance/repo-hygiene`.
++This file records the decisions that are not visible from the diff itself. Those are the
++items deliberately left unchanged, and the remaining debt that belongs to active or
++future work.
++
++## Kept Deliberately
++
++- ADRs 0001-0009 are unchanged. They are historical decision records. Forward-looking
++  sentences in them, for example "Brain v1 remains blocked on a genuine accepted
++  baseline" in ADR 0007, describe the state when each ADR was accepted. ADR 0010 records
++  the execution-order change instead of editing older ADRs.
++- `docs/experiments/*` keeps its recorded observations, hashes, and dispositions. The
++  only change is a clearly labeled addendum appended to the Brain v1 calibration report.
++  `brain-v1-protocol.json` is byte-identical (SHA-256 `c6c3cff8...68ed`).
++- Benchmark fixtures that carry old versions (`nexus_version` 0.7.0/0.7.3/0.7.4, the
++  synthetic `C:\old-host` lock path) are intentional compatibility and legacy-parsing
++  test data.
++- `LegacyLockedBaselineManifest` and analysis-version-1 handling are required to parse
++  the immutable Phase 6 lock and summary.
++- `AegisOpsEvaluationHarness` (the Phase 5 multi-scenario harness) has no CLI entry
++  point. It is still exported, tested, and guarded against writable Brain mode, so it
++  stays as the documented Phase 5 path.
++- Frozen AegisOps modules keep two unused names, `INSTRUCTION_VERSION` and the
++  `ToolInvoker` alias. Removing them would not change any behavior hash, but editing
++  frozen-behavior modules for trivial dead names adds review risk without value.
++- SDK hook and output-schema methods that static analysis reports as unused
++  (`on_llm_end`, `is_strict_json_schema`, and similar) are called by the Agents SDK.
++- CI's focused test steps re-run subsets of the full suite. They add no coverage but
++  were left alone to avoid conflicting with PatchForge CI changes.
++
++## Remaining Debt
++
++1. `nexus.atlas.config.AtlasSettings` is defined but not imported anywhere. The
++   documented variable `NEXUS_ATLAS_DATABASE_PATH` therefore has no effect yet. Wire it
++   when the first Atlas runtime entry point exists, or remove it. This is the Atlas/
++   PatchForge surface, so it is left to that work.
++2. `analytics._rate` returns `0.0` for a zero denominator. As a result,
++   `valid_evidence_reference_rate` reads `0.0` rather than unavailable when no evidence
++   references exist, which misstates a comparison against the baseline's `1.0`.
++3. `brain_attributable_input_tokens` counts rendered memory once per run, but the
++   context is resent on every model request.
++4. The rejected over-budget call requests are not persisted. That hides the second-turn
++   demand behind a budget failure.
++5. The investigator is not told its 12-call budget, and SDK parallel tool calls are on.
++   This is frozen Phase 5 behavior and must not change for the AegisOps baseline. New
++   agents (PatchForge) should expose budgets and restrict parallel calls from the start.
++6. `docs/runbooks/aegisops-brain-v1.md` mixes operating steps with the historical
++   record of the single authorized calibration. Split them if Brain runs are ever
++   authorized again.
++7. No automated Markdown link check exists in CI. This audit used a one-off local
++   script over relative links and backticked repository paths.
+diff --git a/docs/milestones/phase-7-brain-v1.md b/docs/milestones/phase-7-brain-v1.md
+new file mode 100644
+index 0000000..51ca074
+--- /dev/null
++++ b/docs/milestones/phase-7-brain-v1.md
+@@ -0,0 +1,170 @@
++# Phase 7 Brain v1 Milestone Record
++
++Historical record moved out of `PROJECT_STATE.md` during the 2026-09 repository-hygiene
++pass. The content is unchanged except for heading levels, removal of one developer's local
++worktree path, and replacement of self-referential "the commit containing this document"
++entries with their actual commit SHAs. Authoritative experiment evidence remains in
++`docs/experiments/brain-v1-calibration-report.md`, `docs/experiments/brain-v1-protocol.md`,
++and `docs/experiments/phase6-memoryless-baseline.md`. The protocol JSON and every recorded
++hash are unchanged.
++
++## Phase 7 Repository Checkpoints
++
++- Remote: `https://github.com/gavinocvara/nexus-agent-platform.git`
++- Branch: `main`
++- Phase 7 starting point: `52bd5f47dfbf5591e5263911b1c64dab66158d90`
++- Accepted Phase 6 baseline-record checkpoint: `5c0200d`
++- Phase 7 implementation checkpoint: `a7b6f5c1fbfc1e218cfabb1d78ad8d830e2bc17c`
++- Phase 7 validation handoff: `b72c922f894dd731e3ce13b12ac038cfd8f5c8f1`
++- Post-calibration hardening: `15eff373cd92bcfd37611c3c7d9dd59f4c9e5efc`
++- Frozen-smoke implementation identity: `f77313e7e624b68750578b2b25b90ba8123fab62`
++- Phase 7 postmortem checkpoint: `71de1de99985a52c9cbb59a0b6e1950c83229500`
++- Phase 8 Atlas checkpoint: `c28fe5ca5ef393014fa6194944f91b1973097154`
++
++## Targeted Brain Calibration
++
++- Session: `c6832bae-feb7-4216-933e-139c734c2173`
++- Completed with recovery verified, 11/12 diagnostic calls, three turns, complete
++  accounting, zero backend failures, and zero Brain failures.
++- Initial retrieval was empty: zero retrieved records and zero Brain-attributable input
++  tokens. The run wrote one episodic and one procedural memory.
++- Empty pre-snapshot advanced to logical SHA-256
++  `9e7d36376c6b0c8c77d5a3f94cafcea22cb2a53a313986a2a3fe6aed4f0fd3b6`; inspection
++  reported two active memories.
++- Diagnosis component was correct and failure class was wrong at 0.97 confidence. This
++  remains legitimate `self_reported/unverified` history and was not corrected, promoted,
++  removed, or used to tune retrieval.
++- The live store remains only in the ignored canonical checkout and has not been opened
++  writable during post-calibration implementation.
++
++## Frozen Brain Smoke
++
++- Session: `4776dc1c-6f7a-41d1-b75b-e6c70856923c`
++- Repository: `f77313e7e624b68750578b2b25b90ba8123fab62`; NEXUS `0.8.1`;
++  model `gpt-5.6-sol`
++- Five planned runs completed at the benchmark-session level, but all five investigations
++  ended `tool_budget_exceeded`: zero investigation completions, 12 successful diagnostic
++  calls and two turns in every run, zero backend failures, and zero Brain failures.
++- Every run retrieved the same active, unverified candidate procedural memory,
++  `8eef2c33-9acb-52b3-8329-11345784890c`. The active episodic memory was not retrieved.
++  Retrieval was 5/5, memory hit rate was 100%, and each run added 420 estimated
++  Brain-attributable input tokens.
++- Every run wrote zero memories and recorded identical pre/post logical SHA-256
++  `9e7d36376c6b0c8c77d5a3f94cafcea22cb2a53a313986a2a3fe6aed4f0fd3b6`.
++  The frozen SQLite file SHA-256 is
++  `eeb6e6604f032ac925a981ab249f189418bd92a0005801f513faeb3fd5636bb5`.
++- Frozen calibration observed 0/5 completion with the same unverified procedural memory
++  retrieved in all five scenarios and 100% diagnostic tool-budget exhaustion. This is
++  consistent with procedural-memory anchoring but is not a causal comparison because no
++  contemporaneous memoryless or placebo arm was run.
++- The full safe memory payload, deterministic lexical scoring, sequence-overlap analysis,
++  evidentiary classification, and artifact hashes are recorded in
++  `docs/experiments/brain-v1-calibration-report.md`.
++
++- Read-only Phase 7 postmortem on 2026-09-27 parsed the frozen canonical snapshot and all
++  five durable smoke run records. The procedural record scored 22 from two lexical
++  overlaps plus its type bonus; the episodic record had zero overlap and was excluded.
++  Snapshot and smoke artifacts retained their recorded hashes after inspection.
++- Post-calibration 0.8.1 validation on 2026-09-25: `pip check` passes; all 121 files
++  pass Ruff formatting; Ruff lint passes; strict mypy reports no issues in 69 source
++  files; all 149 non-integration tests pass; the 68 focused Brain/runtime/benchmark/
++  evaluator/preflight tests pass; all 20 Compose integration tests pass.
++- The five scenario documents and Compose configuration validate. GitHub Actions run
++  `36104819422` for `15eff37` passed both `validate` and `compose-integration` on the
++  first attempt.
++- The immutable Phase 6 analysis-version-1 summary parses `genuine_abstention_rate`,
++  `confident_wrong_rate`, and `brain_failure_rate` as unavailable rather than zero. Its
++  historical `abstention_rate=0.533333...` remains distinct from the recorded
++  `tool_budget_failure_rate=0.333333...`.
++- Read-only compatibility inspection reports the calibration store at logical SHA-256
++  `9e7d36376c6b0c8c77d5a3f94cafcea22cb2a53a313986a2a3fe6aed4f0fd3b6`, with one
++  episodic and one procedural memory. Its physical file SHA-256 remains
++  `41cee12dd35c38c62fcecaf38e8b2aad3f19231029d356142621c3d5254de38c`.
++- Frozen behavior, memory-record schema, writer allowlist, retrieval algorithm, renderer,
++  and protocol identities are unchanged by the post-calibration fixes.
++- Post-final-edit validation on 2026-09-24: `pip check` passes; all 121 files pass Ruff
++  formatting; Ruff lint passes; strict mypy reports no issues in 69 source files; all
++  142 non-integration tests pass; the 51 focused Brain/runtime/benchmark/comparison
++  tests pass.
++- With the documented local-only PostgreSQL values supplied to Compose, a fresh
++  volume-removing rebuild plus standard warm-up passes all 20 integration tests. This
++  includes Brain survival across `down --volumes`, retrieval during the orders database
++  fault, no Brain data in diagnostic telemetry, and PostgreSQL spans.
++- The first fresh-stack integration pass was 19/20 because one Loki correlation test saw
++  only one of two logs during startup ingestion. It passed immediately in isolation;
++  adding the evaluator's standard warm-up after the deliberate reset produced the clean
++  20/20 full pass.
++- All five scenario documents validate. Compose configuration, diff whitespace, ignored
++  `.env`/`.nexus`, and package dependency checks pass.
++- The real locked schema-3 summary parses under 0.8.1 as 15 memoryless runs. Historical
++  lock SHA-256 remains
++  `b6a46c51bf235f4bbe4465ee060f5d92cf0b0571a3835ce0c67ff062c0209d74`.
++- Governing specification files are unchanged. GitHub Actions run `36063663628` for
++  `a7b6f5c` passed both `validate` and `compose-integration` on the first attempt.
++- Disabled-mode preflight at `a7b6f5c` passed the frozen contract, five scenarios,
++  eleven-tool policy, Brain identity, clean reproducible Git identity, all services,
++  observability APIs, and lab controls. It correctly remained not ready because live
++  execution was not opted in, no `OPENAI_API_KEY` was present, and the local default
++  model was `gpt-5-mini` rather than frozen `gpt-5.6-sol`.
++- One local integration attempt could not reach Docker from the filesystem sandbox. An
++  unrestricted attempt then exposed the absent ignored `.env`: empty PostgreSQL values
++  prevented startup. No code was changed for either environmental issue; supplying the
++  documented process-local values produced the clean 20/20 result above.
++
++## Preserved Phase 7 Evidence
++
++Complete in this checkpoint:
++
++- Brain modes, private schema/storage, strict runtime projection, bounded deterministic
++  retrieval, escaped untrusted rendering, lifecycle/dispute handling, frozen read-only
++  verification, explicit failures, and audit identity are implemented.
++- Benchmark compatibility, targeted calibration mode, frozen-run enforcement, portable
++  locks, split Brain/agent/end-to-end measurements, evaluator separation, analytics,
++  protocol pre-registration, ADR, runbook, and deterministic adversarial tests are
++  implemented.
++- All independent review constraints applicable before a Brain-enabled live run have
++  an implementation and deterministic test path. No requirement was discarded, and
++  no large or official evaluation was run.
++- The authorized frozen snapshot and five-scenario smoke are complete. The result is
++  negative: 0/5 investigation completion with 5/5 tool-budget exhaustion. Frozen-store
++  integrity, read-only behavior, retrieval audit, and zero-write guarantees held.
++- The postmortem documents the exact record, retrieval mechanism, tool-sequence overlap,
++  and the boundary between observation, deterministic inference, and causal hypothesis.
++
++Deferred and still requiring separate authorization:
++
++- No further Phase 7 live investigation or smoke is authorized. Do not tune retrieval,
++  rewrite memory, change budgets/prompts/tools, or delete the historical 0.97-confidence
++  unverified self-report from this result.
++- Any causal test of procedural anchoring requires the already designed, pre-registered
++  contemporaneous memoryless and length-matched placebo arms. The official 100-plus-run
++  study remains deferred.
++Phase 7 is accepted complete. Do not alter the Phase 6 lock, frozen Brain snapshot,
++protocol JSON, historical self-report, or frozen behavior while continuing the platform.
++
++## Independent Review Disposition
++
++Satisfied and enforced: structural evaluator isolation, the exact observable writer
++projection, no score-conditioned behavior, unverified self-diagnoses, explicit modes,
++frozen read-only hashes, fail-closed Brain errors, complete identity/audit metadata,
++canonical replayable snapshots, isolated SQLite storage/telemetry, separate retrieval
++budgets, escaped untrusted context, current-run-only evidence, contamination guards,
++portable future locks, derived metric hygiene, and deterministic T1-T28-equivalent
++coverage.
++
++Already satisfied before review-driven hardening: the unchanged eleven read-only tools,
++12-call/10-turn/120-second limits, stable investigator instruction and Diagnosis hashes,
++runtime-owned current evidence validation, and local ignored storage boundary.
++
++Changed because of review: exact field-by-field projection and import tests; explicit
++`disabled`/`learn`/`frozen_eval`; self-report trust labels and dispute lifecycle; escaped
++renderer and persistent-injection tests; Brain identity and per-run hashes; split
++retrieval/agent/end-to-end latency and token accounting; evaluator-only fold ledger;
++pre-registration; Brain calibration lock prohibition; and portable lock schema 2 with
++legacy resolution.
++
++Deferred by design: placebo snapshot generation, interleaved leave-one-scenario-out
++orchestration, and the 100-plus-run official study require later explicit authorization.
++Semantic/reflective memory, supervised confirmed outcomes, vectors, Engram, cross-agent
++sharing, and off-machine evidence publication are outside Brain v1. No review
++requirement is incompatible with the architecture.
+diff --git a/docs/runbooks/aegisops-benchmarking.md b/docs/runbooks/aegisops-benchmarking.md
+index 7aa2515..54e7f9e 100644
+--- a/docs/runbooks/aegisops-benchmarking.md
++++ b/docs/runbooks/aegisops-benchmarking.md
+@@ -3,7 +3,8 @@
+ ## Boundary
+ 
+ Phase 6 measures the frozen `aegisops-memoryless-v1` investigator. It does not add
+-memory, agents, tools, remediation, or hidden-reasoning collection. Live output is
++memory, agents, tools, remediation, or hidden-reasoning collection. Brain-enabled
++benchmarking is covered in `aegisops-brain-v1.md`. Live output is
+ local and ignored by Git under `.nexus/benchmarks/aegisops/`.
+ 
+ ## Configure Safely
+@@ -12,10 +13,14 @@ Put local settings in the ignored `.env` or in the process environment:
+ 
+ ```text
+ NEXUS_AGENT_ENABLED=true
+-NEXUS_AGENT_MODEL=gpt-5-mini
++NEXUS_AGENT_MODEL=gpt-5.6-sol
+ OPENAI_API_KEY=<local secret>
+ ```
+ 
++Preflight requires the frozen baseline model `gpt-5.6-sol` and the frozen 12-call,
++10-turn, 120-second contract. The package default `gpt-5-mini` is for ad-hoc
++investigation only.
++
+ Never put the key on a command line, in a committed file, or in a benchmark artifact.
+ Optional benchmark settings are `NEXUS_BENCHMARK_ROOT`,
+ `NEXUS_BENCHMARK_WARMUP_SECONDS`, and `NEXUS_BENCHMARK_STACK_TIMEOUT_SECONDS`.
+@@ -84,7 +89,7 @@ Session files are:
+ 
+ ```text
+ .nexus/benchmarks/aegisops/<session-id>/manifest.json
+-.nexus/benchmarks/aegisops/<session-id>/runs/run-001.json
++.nexus/benchmarks/aegisops/<session-id>/runs/run-0001.json
+ .nexus/benchmarks/aegisops/<session-id>/summary.json
+ .nexus/benchmarks/aegisops/comparisons/*.json
+ .nexus/benchmarks/aegisops/baselines/*.json
+@@ -114,8 +119,11 @@ After reviewing a genuine, complete, clean-tree live baseline, lock it explicitl
+ py -m nexus.evaluation.aegisops lock <session-id> --name aegisops-memoryless-v1
+ ```
+ 
+-The lock contains identifiers, schema versions, run count, summary path, and summary
+-hash only. Existing lock files are never overwritten.
++New locks use lock schema 2: identifiers, schema versions, run count, a POSIX path
++relative to the benchmark root, and SHA-256 digests of the manifest, summary, and every
++run file. The historical `aegisops-memoryless-v1` lock predates schema 2, keeps its
++original absolute path, and resolves by session ID with its summary digest verified.
++Existing lock files are never overwritten. Brain-enabled sessions cannot be locked.
+ 
+ ## Cleanup
+ 
+diff --git a/docs/runbooks/aegisops-investigator.md b/docs/runbooks/aegisops-investigator.md
+index a1da3e5..2e4e7f5 100644
+--- a/docs/runbooks/aegisops-investigator.md
++++ b/docs/runbooks/aegisops-investigator.md
+@@ -4,7 +4,9 @@
+ 
+ `aegisops.investigator` is one read-only agent. It can invoke only the eleven tools in
+ the Phase 4 diagnostic registry. It has no shell, filesystem, browser, web search,
+-MCP, SQL, Docker, GitHub, lab control, memory, handoff, code execution, or write tool.
++MCP, SQL, Docker, GitHub, lab control, handoff, code execution, or write tool. Brain v1
++memory is off by default and is enabled only through the guarded paths in
++`aegisops-brain-v1.md`.
+ It reports diagnoses and read-only next diagnostic steps; it cannot remediate.
+ 
+ ## Configuration
+@@ -45,8 +47,9 @@ model errors produce explicit statuses and exit `2`.
+ 
+ ## Live Evaluation
+ 
+-With Compose healthy and the live-agent settings enabled, run preflight and explicitly
+-authorize the five-scenario smoke:
++With Compose healthy and the live-agent settings enabled, set
++`NEXUS_AGENT_MODEL=gpt-5.6-sol` (preflight requires the frozen baseline model), then run
++preflight and explicitly authorize the five-scenario smoke:
+ 
+ ```powershell
+ py -m nexus.evaluation.aegisops preflight
+diff --git a/pyproject.toml b/pyproject.toml
+index f51bd58..504c49c 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
+ [project]
+ name = "nexus-agent-platform"
+ version = "0.9.0"
+-description = "NEXUS agentic engineering platform and AegisOps systems lab."
++description = "NEXUS: a local-first platform for bounded, auditable, and evaluated AI agents."
+ readme = "README.md"
+ requires-python = ">=3.12"
+ license = { text = "Proprietary" }
+diff --git a/tests/test_config.py b/tests/unit/test_config.py
+similarity index 100%
+rename from tests/test_config.py
+rename to tests/unit/test_config.py
+-- 
+2.43.0
+
