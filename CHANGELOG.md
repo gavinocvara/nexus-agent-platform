@@ -8,6 +8,27 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
+## 0.15.0 — PatchForge Milestone F: Attestor
+
+- `PatchForgeAttestor` turns a closed `RuntimeCompletion` into a `PatchResult` from
+  runtime-owned evidence only. Only a clean attestation is `patch_proposed`.
+- Runtime fingerprints the worktree diff at start and around every write or sandbox
+  execution, and commits the final tree before cleanup (`WorkspaceManager.propose_commit`:
+  fixed runtime identity, private index, byte-identical diff).
+- Validation counts only when it observed the exact final tree and left it unchanged.
+  Reproduction requires the profile's `reproduction` command to run on the unmodified
+  tree; without that command it is `not_practical`.
+- Tamper checks: pristine start, no unexplained or post-final changes, fingerprints on
+  every write or execution, command and sandbox-policy hashes, verifiable report
+  evidence. Scope, protected, sensitive, test-policy, and size checks re-run on the
+  final diff.
+- The patch is stored in a content-addressed `LocalArtifactStore`.
+- Additive contract changes: `RuntimeCompletion` gains `workspace_states`,
+  `final_capture`, and `final_capture_error`; `GitRunner` accepts an allowlist of index
+  and commit-identity environment overrides.
+- `RuntimeGateway.workspace_manager` is a read-only protocol property, so the real
+  `ToolGateway` satisfies the protocol under strict typing.
+
 ## 0.14.0 — PatchForge Milestone E: Runtime (`7222297`)
 
 - Closed deterministic lifecycle from `created` through `closed`, with explicit

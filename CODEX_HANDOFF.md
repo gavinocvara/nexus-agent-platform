@@ -6,41 +6,36 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 ## Checkpoint
 
 - Branch `main`; local `HEAD` must equal `origin/main` at every checkpoint.
-- Released: NEXUS `0.14.0` (Milestones A-E). Runtime release `7222297`; GitHub Actions
-  run `36459625231` passed both jobs.
-- Active: PatchForge Milestone F - Attestor (in progress, unreleased).
+- NEXUS `0.15.0`: PatchForge Milestones A-F complete. Milestone F (Attestor) release is
+  the commit that set 0.15.0; its SHA and GitHub Actions run are recorded here once CI is
+  green.
+- Local release gate: `pip check` passed; Ruff format (156 files) and lint clean; strict
+  mypy clean (86 files); pytest 602 passed, 23 deselected; 5 scenarios validated; Compose
+  config passed. Compose integration was not run locally (no Docker daemon); CI's
+  `compose-integration` job is the integration gate.
 
-## Milestone F Progress
+## Milestone F Summary
 
-Done (committed and pushed):
+- `WorkspaceManager.propose_commit`: runtime-owned proposal commit, byte-identical diff.
+- Runtime workspace fingerprints and pre-cleanup `FinalWorkspaceCapture`.
+- `PatchForgeAttestor` + `LocalArtifactStore`: reproduction, final-tree checks, diff,
+  scope/protected/sensitive/test/size findings, and tamper checks; only a clean
+  attestation is `patch_proposed` (ADR 0010, CHANGELOG 0.15.0).
 
-1. `WorkspaceManager.propose_commit`: runtime-owned commit in the control repository with
-   a fixed identity, caller timestamp, and private index; its diff must equal the
-   worktree diff byte for byte. `GitRunner` accepts only allowlisted index/identity env.
-2. Runtime workspace fingerprints: `WorkspaceStateRecord` at start and before/after every
-   write or sandbox-execution call, plus `FinalWorkspaceCapture` (proposed commit and
-   patch bytes) at `reported`, before cleanup. Capture failures are typed
-   (`WORKSPACE_ERROR` during the run; `FinalCaptureError` at the end).
+## Exact Next Step
 
-3. `PatchForgeAttestor` (`src/nexus/patchforge/attestor.py`): pure function from
-   `RuntimeCompletion` (plus task, profile, policy) to `PatchResult`, with a
-   content-addressed `LocalArtifactStore` for the patch. Checks count only when their
-   execution observed the exact final tree and left it unchanged. Blocking findings map
-   tamper -> `attestation_failed`, policy -> `policy_denied`, validation ->
-   `validation_failed`; only a clean attestation is `patch_proposed`.
-4. Real-path proof: `tests/unit/test_patchforge_attestor.py` drives WorkspaceManager +
-   ToolGateway + FakeSandbox + Runtime + Attestor through the happy path and stale-
-   validation, tamper, mutating-validation, reproduction, scope, protected/sensitive,
-   no-change, command-hash, and runtime-failure paths.
-
-Remaining:
-
-5. Release 0.15.0: ADR 0010 section, ROADMAP, CHANGELOG, README status, full gate,
-   green GitHub Actions, then hand off Milestone G.
+After CI is green for 0.15.0, begin PatchForge Milestone G - Deterministic E2E: a
+scripted happy path plus every required failure/partial path through Runtime and
+Attestor end to end (see `ROADMAP.md` and ADR 0010). Reuse the real-path fixtures in
+`tests/unit/test_patchforge_attestor.py`. No live model calls.
 
 ## Active Issues
 
-- No known failing tests. Focused PatchForge suite: 336 passed.
+- No known failing tests.
+- During Milestone F, one focused-suite run reported a single failure that was not
+  captured and did not recur in 19 later runs. Watch for PatchForge flakiness.
+- Test modules are not type-checked in CI and carry pre-existing strict-mypy noise
+  (`HttpUrl` literals, fake gateway locals).
 - Remote branch `maintenance/repo-hygiene-claude` is unmerged and untouched; owner decides.
 
 ## Critical Constraints

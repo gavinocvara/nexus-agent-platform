@@ -120,9 +120,9 @@ Engram records the validated history.
   Git inspection, fixed-profile execution, and explicit control-request tools
 - **E. Runtime (Complete):** closed phased workflow, bounded implementation loops,
   reserved finalization, lease refresh, typed failure outcomes, and deterministic cleanup
-- **F. Attestor (Next):** reproduction, regression, diff, validation, scope, and basic
-  tamper checks
-- **G. Deterministic E2E:** scripted happy path and all required failure/partial paths
+- **F. Attestor (Complete):** runtime workspace fingerprints, runtime-owned proposal
+  commit, reproduction, final-tree validation, diff, scope, and basic tamper checks
+- **G. Deterministic E2E (Next):** scripted happy path and all required failure/partial paths
 - **H. Benchmark v0:** small synthetic defect corpus and reproducible harness
 - **I. Live engine:** explicit opt-in, one targeted task, artifact inspection, then stop
 - **J. SentinelQA-lite:** independent fresh-sandbox patch and validation verification

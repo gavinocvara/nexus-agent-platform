@@ -17,7 +17,7 @@ against a baseline before adoption.
 | Benchmarking | Built | Reproducible sessions, comparison, immutable baseline locks | ADR 0007, `docs/runbooks/aegisops-benchmarking.md` |
 | Brain v1 | Built (negative calibration) | Private per-agent memory, default off | `BRAIN.md`, ADR 0008, `docs/runbooks/aegisops-brain-v1.md` |
 | Atlas | Thin v1 | Local control plane: typed jobs, policy, review, approval, audit | ADR 0009 |
-| PatchForge | In progress | Contracts, workspaces, sandbox, ToolGateway, and closed Runtime complete | ADR 0010 |
+| PatchForge | In progress | Contracts, workspaces, sandbox, ToolGateway, Runtime, and Attestor complete | ADR 0010 |
 | SentinelQA, Engram | Planned | Independent validation; shared validated knowledge | `ROADMAP.md` |
 
 Lab request path:
@@ -115,7 +115,7 @@ Alloy. None of these is safe for a normal deployment.
 
 ## Status
 
-Version `0.14.0`. Phases 0-8 are complete; Brain v1 ended with a documented negative
-calibration. PatchForge v1 Milestones A-E (contracts, workspaces, sandbox, ToolGateway,
-and Runtime) are complete. Milestone F - Attestor is next. See `CODEX_HANDOFF.md` for
+Version `0.15.0`. Phases 0-8 are complete; Brain v1 ended with a documented negative
+calibration. PatchForge v1 Milestones A-F (contracts, workspaces, sandbox, ToolGateway,
+Runtime, and Attestor) are complete. Milestone G - Deterministic E2E is next. See `CODEX_HANDOFF.md` for
 the current checkpoint and `ROADMAP.md` for the full sequence.

@@ -135,6 +135,33 @@ transition, lease, and budget evidence. It deliberately does not claim
 `patch_proposed`; Milestone F must attest reproduction, checks, diff, scope, and tamper
 conditions before constructing that outcome.
 
+Milestone F (0.15.0) adds that attestation:
+
+- Runtime fingerprints the worktree diff at the start of the run and before and after
+  every write or sandbox-execution call. At `reported`, before cleanup, it commits the
+  final tree in the control repository with a fixed runtime identity and a private index;
+  the commit's diff must equal the worktree diff byte for byte. The patch is kept as a
+  content-addressed artifact because cleanup deletes the control repository;
+  `proposed_head_sha` is reproducible from the base, the patch, and the recorded
+  commit time.
+- `PatchForgeAttestor` is a pure function of runtime-owned evidence. It never runs
+  commands or reads model narrative as evidence.
+- Validation counts only when its execution observed the exact final tree and left it
+  unchanged. Validation before a later change, or validation that changes the tree,
+  does not count.
+- Reproduction is practical exactly when the operator profile defines a `reproduction`
+  command. Then the command must have run on the unmodified tree: failure followed by
+  passing targeted tests on the final tree is `fail_before_pass_after`; passing before
+  any change is a warning. Otherwise reproduction is `not_practical`.
+- Tamper checks: a pristine starting tree, no worktree change unexplained by a recorded
+  call, no change after the last call, before/after fingerprints on every write or
+  execution, operator command and sandbox-policy hashes, and verifiable report evidence.
+- Scope, protected-path, sensitive-path, test-policy, file-count, and diff-size checks
+  re-run on the final diff as defense in depth for changes made by code in the sandbox.
+- Blocking findings choose the failure by precedence: tamper (`attestation_failed`),
+  then policy (`policy_denied`), then validation (`validation_failed`). Runtime failures
+  keep their own classification. Only a clean attestation is `patch_proposed`.
+
 ## Budgets And Runtime
 
 PatchForge uses the closed phases:
