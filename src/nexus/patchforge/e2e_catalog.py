@@ -8,6 +8,7 @@ from hashlib import sha256
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
+from uuid import UUID
 
 from pydantic import HttpUrl
 
@@ -284,6 +285,8 @@ def budget_exhausted() -> E2EScenario:
         ],
         PatchOutcome.PARTIAL,
         PatchForgeFailure.BUDGET_EXHAUSTED,
+        expected_phase_reached=PatchForgePhase.TARGETED_VALIDATE,
+        expected_implementation_loops=1,
     )
 
 
@@ -300,6 +303,7 @@ def policy_denied() -> E2EScenario:
         happy_plans()[:1],
         PatchOutcome.POLICY_VIOLATION,
         PatchForgeFailure.POLICY_DENIED,
+        expected_phase_reached=PatchForgePhase.IMPLEMENT,
     )
 
 
@@ -310,6 +314,7 @@ def cancelled() -> E2EScenario:
         [],
         PatchOutcome.CANCELLED,
         PatchForgeFailure.CANCELLED,
+        expected_phase_reached=PatchForgePhase.HYPOTHESIS,
     )
 
 
@@ -320,6 +325,7 @@ def sandbox_error() -> E2EScenario:
         [plan(CommandPurpose.REPRODUCTION, SandboxStatus.SANDBOX_ERROR)],
         PatchOutcome.SANDBOX_FAILED,
         PatchForgeFailure.SANDBOX_ERROR,
+        expected_phase_reached=PatchForgePhase.REPRODUCE,
     )
 
 
@@ -337,6 +343,7 @@ def workspace_error() -> E2EScenario:
         PatchOutcome.ABORTED,
         PatchForgeFailure.WORKSPACE_ERROR,
         sandbox_hook=write_ignore_rules,
+        expected_phase_reached=PatchForgePhase.REPRODUCE,
     )
 
 
@@ -347,6 +354,7 @@ def engine_error() -> E2EScenario:
         [],
         PatchOutcome.ABORTED,
         PatchForgeFailure.ENGINE_ERROR,
+        expected_phase_reached=PatchForgePhase.HYPOTHESIS,
     )
 
 
@@ -364,6 +372,7 @@ def attestation_failed() -> E2EScenario:
         happy_plans(),
         PatchOutcome.ABORTED,
         PatchForgeFailure.ATTESTATION_FAILED,
+        expected_findings=("workspace_changed_out_of_band",),
     )
 
 
@@ -375,6 +384,207 @@ def cleanup_failed() -> E2EScenario:
         PatchOutcome.ABORTED,
         PatchForgeFailure.CLEANUP_FAILED,
         fail_cleanup=True,
+        expected_phase_reached=PatchForgePhase.CLEANUP,
+    )
+
+
+WRONG = "def subtract(a, b):\n    return b - a\n"
+
+
+def reproduction_not_demonstrated() -> E2EScenario:
+    """The defect cannot be reproduced: the reproduction already passes. A warning only."""
+
+    plans = happy_plans()
+    plans[0] = plan(CommandPurpose.REPRODUCTION, SandboxStatus.SUCCEEDED)
+    return E2EScenario(
+        name="reproduction_not_demonstrated",
+        fixture=CALCULATOR,
+        profile=calculator_profile(),
+        budgets=calculator_budgets(),
+        steps=happy_steps(),
+        sandbox_plans=plans,
+        expected_outcome=PatchOutcome.PATCH_PROPOSED,
+        expected_failure=None,
+        expected_findings=("reproduction_not_demonstrated",),
+    )
+
+
+def reproduction_missing() -> E2EScenario:
+    """The engine skips reproduction although the profile makes it practical."""
+
+    steps = happy_steps()
+    del steps[4]
+    return _scenario(
+        "reproduction_missing",
+        steps,
+        happy_plans()[1:],
+        PatchOutcome.PARTIAL,
+        PatchForgeFailure.VALIDATION_FAILED,
+        expected_findings=("reproduction_missing",),
+    )
+
+
+def targeted_retry_succeeds() -> E2EScenario:
+    """A wrong first fix fails targeted tests; one bounded retry fixes it."""
+
+    return E2EScenario(
+        name="targeted_retry_succeeds",
+        fixture=CALCULATOR,
+        profile=calculator_profile(),
+        budgets=calculator_budgets(),
+        steps=[
+            *happy_steps()[:6],
+            write(WRONG, BROKEN),
+            advance(PatchForgePhase.TARGETED_VALIDATE),
+            run(ToolName.RUN_TARGETED_TESTS),
+            advance(PatchForgePhase.IMPLEMENT),
+            write(FIXED, WRONG),
+            *happy_steps()[7:],
+        ],
+        sandbox_plans=[
+            plan(CommandPurpose.REPRODUCTION, SandboxStatus.FAILED),
+            plan(CommandPurpose.TARGETED_TESTS, SandboxStatus.FAILED),
+            plan(CommandPurpose.TARGETED_TESTS, SandboxStatus.SUCCEEDED),
+            plan(CommandPurpose.FULL_TEST_SUITE, SandboxStatus.SUCCEEDED),
+        ],
+        expected_outcome=PatchOutcome.PATCH_PROPOSED,
+        expected_failure=None,
+        expected_implementation_loops=1,
+    )
+
+
+def full_validation_failed() -> E2EScenario:
+    plans = happy_plans()
+    plans[2] = plan(CommandPurpose.FULL_TEST_SUITE, SandboxStatus.FAILED)
+    return _scenario(
+        "full_validation_failed",
+        happy_steps(),
+        plans,
+        PatchOutcome.PARTIAL,
+        PatchForgeFailure.VALIDATION_FAILED,
+    )
+
+
+def stale_validation() -> E2EScenario:
+    """Targeted tests pass, then the code changes again without re-running them."""
+
+    revised = FIXED.replace("a - b", "a - b  # revised")
+    return _scenario(
+        "stale_validation",
+        [
+            *happy_steps()[:9],
+            advance(PatchForgePhase.IMPLEMENT),
+            write(revised, FIXED),
+            advance(PatchForgePhase.TARGETED_VALIDATE),
+            *happy_steps()[9:],
+        ],
+        happy_plans(),
+        PatchOutcome.PARTIAL,
+        PatchForgeFailure.VALIDATION_FAILED,
+        expected_implementation_loops=1,
+        expected_findings=("stale_validation",),
+    )
+
+
+def lease_renewal_failed() -> E2EScenario:
+    """The workspace lease cannot be renewed before the reproduction run."""
+
+    return _scenario(
+        "lease_renewal_failed",
+        [*happy_steps()[:5], report()],
+        [],
+        PatchOutcome.ABORTED,
+        PatchForgeFailure.WORKSPACE_ERROR,
+        fail_lease_renewal_at=3,
+        expected_phase_reached=PatchForgePhase.REPRODUCE,
+    )
+
+
+def finalization_failed() -> E2EScenario:
+    """The engine fails inside finalization; cleanup still runs and closes the run."""
+
+    return _scenario(
+        "finalization_failed",
+        [*happy_steps()[:14], RuntimeError("engine failed while finalizing")],
+        happy_plans(),
+        PatchOutcome.ABORTED,
+        PatchForgeFailure.ENGINE_ERROR,
+        expected_phase_reached=PatchForgePhase.FINALIZE,
+    )
+
+
+def unknown_report_evidence() -> E2EScenario:
+    """The report cites evidence that does not exist; the gateway refuses it."""
+
+    invalid = RuntimeToolAction(
+        tool_name=ToolName.SUBMIT_REPORT,
+        arguments=SubmitReportArguments(
+            report=AgentReport(
+                summary="Claims evidence that was never recorded.",
+                hypothesis="Not applicable.",
+                implementation="Not applicable.",
+                evidence_references=[UUID(int=999)],
+            )
+        ),
+    )
+    return _scenario(
+        "unknown_report_evidence",
+        [*happy_steps()[:14], invalid],
+        happy_plans(),
+        PatchOutcome.POLICY_VIOLATION,
+        PatchForgeFailure.POLICY_DENIED,
+        expected_phase_reached=PatchForgePhase.FINALIZE,
+    )
+
+
+def tamper_after_last_call() -> E2EScenario:
+    """The tree changes after the last recorded call; the final capture cannot be attested."""
+
+    def tamper(worktree: Path) -> None:
+        (worktree / "calculator.py").write_text(FIXED + "# late edit\n", encoding="utf-8")
+
+    steps = happy_steps()
+    steps.insert(13, tamper)
+    return _scenario(
+        "tamper_after_last_call",
+        steps,
+        happy_plans(),
+        PatchOutcome.ABORTED,
+        PatchForgeFailure.ATTESTATION_FAILED,
+        expected_findings=("final_state_unobserved",),
+    )
+
+
+def finalization_reserve_used() -> E2EScenario:
+    """A finalize-phase read may use the reserve, but never the report's last call."""
+
+    return E2EScenario(
+        name="finalization_reserve_used",
+        fixture=CALCULATOR,
+        profile=calculator_profile(),
+        budgets=calculator_budgets(),
+        steps=[*happy_steps()[:14], run(ToolName.GIT_STATUS), report()],
+        sandbox_plans=happy_plans(),
+        expected_outcome=PatchOutcome.PATCH_PROPOSED,
+        expected_failure=None,
+    )
+
+
+def finalization_reserve_protected() -> E2EScenario:
+    """A second finalize-phase read would take the report's reserved call; it is refused."""
+
+    return _scenario(
+        "finalization_reserve_protected",
+        [
+            *happy_steps()[:14],
+            run(ToolName.GIT_STATUS),
+            run(ToolName.GIT_STATUS),
+            report(),
+        ],
+        happy_plans(),
+        PatchOutcome.PARTIAL,
+        PatchForgeFailure.BUDGET_EXHAUSTED,
+        expected_phase_reached=PatchForgePhase.FINALIZE,
     )
 
 
@@ -393,6 +603,17 @@ def default_catalog() -> list[E2EScenario]:
         engine_error(),
         attestation_failed(),
         cleanup_failed(),
+        reproduction_not_demonstrated(),
+        reproduction_missing(),
+        targeted_retry_succeeds(),
+        full_validation_failed(),
+        stale_validation(),
+        lease_renewal_failed(),
+        finalization_failed(),
+        unknown_report_evidence(),
+        tamper_after_last_call(),
+        finalization_reserve_used(),
+        finalization_reserve_protected(),
     ]
 
 
@@ -406,10 +627,11 @@ def run_gate(work_root: Path, now: datetime = GATE_TIME) -> list[str]:
         failure = first.result.failure.value if first.result.failure else "none"
         print(
             f"{scenario.name}: outcome={first.result.outcome.value} failure={failure} "
+            f"phase={first.result.phase_reached.value} "
+            f"loops={first.completion.snapshot.implementation_loops} "
             f"result_sha256={first.result_sha256}"
         )
-        if not first.matches_expectation:
-            problems.append(f"{scenario.name}: outcome or failure did not match")
+        problems.extend(f"{scenario.name}: {problem}" for problem in first.problems())
         if first.result_sha256 != second.result_sha256:
             problems.append(f"{scenario.name}: replay was not byte-identical")
     return problems

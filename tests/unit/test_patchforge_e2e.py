@@ -9,6 +9,7 @@ import pytest
 
 from nexus.patchforge import e2e_catalog
 from nexus.patchforge.e2e import (
+    E2ERun,
     E2EScenario,
     FixtureRepository,
     PatchForgeE2EHarness,
@@ -21,6 +22,7 @@ from nexus.patchforge.models import (
     PatchOutcome,
     ReproductionStatus,
 )
+from nexus.patchforge.policy import CommandPurpose
 from nexus.patchforge.workspace import GitRunner
 
 NOW = datetime(2026, 9, 28, 12, tzinfo=UTC)
@@ -75,13 +77,83 @@ def test_every_catalog_scenario_matches_its_expected_outcome(
 ) -> None:
     run = PatchForgeE2EHarness(tmp_path, now=NOW).run(scenario)
 
+    # Outcome, classification, phase, loops, findings, closed lifecycle with cleanup,
+    # authoritative evidence, untouched source repository, no network/secrets/memory.
+    assert run.problems() == []
     assert run.result.outcome is scenario.expected_outcome
     assert run.result.failure is scenario.expected_failure
-    assert run.workspace_removed
-    assert run.completion.snapshot.phase.value == "closed"
-    assert [item.sequence for item in run.result.tool_calls] == list(
-        range(1, len(run.result.tool_calls) + 1)
-    )
+
+
+def _run(tmp_path: Path, name: str) -> E2ERun:
+    scenario = next(item for item in default_catalog() if item.name == name)
+    return PatchForgeE2EHarness(tmp_path, now=NOW).run(scenario)
+
+
+def test_bounded_retry_proposes_the_second_fix(tmp_path: Path) -> None:
+    run = _run(tmp_path, "targeted_retry_succeeds")
+    assert run.completion.snapshot.implementation_loops == 1
+    assert run.result.diff is not None
+    patch = run.artifacts.read(run.result.diff.patch_artifact)
+    assert b"+    return a - b\n" in patch and b"b - a" not in patch
+
+
+def test_finalization_reserve_is_usable_and_protected(tmp_path: Path) -> None:
+    used = _run(tmp_path / "used", "finalization_reserve_used")
+    assert used.result.budget_usage.finalization_reserve_used is True
+    assert used.result.outcome is PatchOutcome.PATCH_PROPOSED
+
+    protected = _run(tmp_path / "protected", "finalization_reserve_protected")
+    finalize_calls = [
+        item.tool_name.value
+        for item in protected.result.tool_calls
+        if item.phase.value == "finalize"
+    ]
+    # The second read was refused before execution, so it left no tool-call record.
+    assert finalize_calls == ["git_status"]
+    # Current Runtime semantics end finalization on that refusal, so no report is accepted.
+    assert protected.completion.report is None
+
+
+def test_unknown_report_evidence_is_refused_by_the_gateway(tmp_path: Path) -> None:
+    run = _run(tmp_path, "unknown_report_evidence")
+    last = run.result.tool_calls[-1]
+    assert last.tool_name.value == "submit_report"
+    assert last.status.value == "denied"
+    assert run.completion.report is None
+
+
+def test_tamper_and_stale_evidence_are_named_findings(tmp_path: Path) -> None:
+    for name, code in (
+        ("attestation_failed", "workspace_changed_out_of_band"),
+        ("tamper_after_last_call", "final_state_unobserved"),
+        ("stale_validation", "stale_validation"),
+        ("reproduction_missing", "reproduction_missing"),
+        ("reproduction_not_demonstrated", "reproduction_not_demonstrated"),
+    ):
+        run = _run(tmp_path / name, name)
+        assert code in {item.code for item in run.result.policy_findings}, name
+
+
+def test_sandbox_only_ever_receives_isolated_operator_commands(tmp_path: Path) -> None:
+    run = _run(tmp_path, "patch_proposed")
+    profile = run.scenario.profile
+    assert [item.command for item in run.sandbox_requests] == [
+        profile.commands[purpose]
+        for purpose in (
+            CommandPurpose.REPRODUCTION,
+            CommandPurpose.TARGETED_TESTS,
+            CommandPurpose.FULL_TEST_SUITE,
+        )
+    ]
+    for request in run.sandbox_requests:
+        assert request.policy.network_disabled and not request.policy.secrets_allowed
+        assert not request.policy.git_directory_mounted
+
+
+def test_invariant_checker_detects_a_changed_source_repository(tmp_path: Path) -> None:
+    run = _run(tmp_path, "patch_proposed")
+    tampered = replace(run, source_refs_after=run.source_refs_after + "extra\n")
+    assert "source repository changed" in tampered.problems()
 
 
 def test_catalog_covers_success_and_every_failure_classification() -> None:
@@ -96,8 +168,6 @@ def test_gate_passes_and_reports_mismatches(
     assert e2e_catalog.run_gate(tmp_path / "ok") == []
     wrong = replace(patch_proposed(), expected_outcome=PatchOutcome.PARTIAL)
     monkeypatch.setattr(e2e_catalog, "default_catalog", lambda: [wrong])
-    assert e2e_catalog.run_gate(tmp_path / "wrong") == [
-        "patch_proposed: outcome or failure did not match"
-    ]
+    assert e2e_catalog.run_gate(tmp_path / "wrong") == ["patch_proposed: unexpected outcome"]
     assert e2e_catalog.main() == 1
     assert "FAILED patch_proposed" in capsys.readouterr().err

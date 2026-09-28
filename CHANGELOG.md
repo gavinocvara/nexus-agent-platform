@@ -8,7 +8,7 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
-## 0.16.0 — PatchForge Milestone G: Deterministic E2E
+## 0.16.0 — PatchForge Milestone G: Deterministic E2E (`915ea12`)
 
 - `PatchForgeE2EHarness` runs scenarios through the real PatchForge path around a
   `ScriptedEngine` and `FakeSandbox`, with no model, network, Docker, or secrets.

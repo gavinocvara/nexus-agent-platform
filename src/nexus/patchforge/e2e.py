@@ -22,6 +22,7 @@ from nexus.patchforge.gateway import ToolGateway
 from nexus.patchforge.models import (
     EngineeringTask,
     PatchForgeFailure,
+    PatchForgePhase,
     PatchOutcome,
     PatchResult,
     RunBudgets,
@@ -41,7 +42,12 @@ from nexus.patchforge.sandbox import (
     SandboxExecution,
     SandboxRequest,
 )
-from nexus.patchforge.workspace import GitRunner, WorkspaceError, WorkspaceManager
+from nexus.patchforge.workspace import (
+    GitRunner,
+    WorkspaceError,
+    WorkspaceHandle,
+    WorkspaceManager,
+)
 
 _E2E_NAMESPACE = UUID("8d3c2f64-0b1e-4c55-9a27-2f6e1d0c9b31")
 FIXTURE_AUTHOR_NAME = "PatchForge Fixture"
@@ -85,6 +91,10 @@ class E2EScenario:
     allowed_tools: Sequence[ToolName] = tuple(ToolName)
     sandbox_hook: SandboxHook | None = None
     fail_cleanup: bool = False
+    fail_lease_renewal_at: int | None = None
+    expected_phase_reached: PatchForgePhase = PatchForgePhase.CLOSED
+    expected_implementation_loops: int = 0
+    expected_findings: Sequence[str] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +104,9 @@ class E2ERun:
     result: PatchResult
     source_sha: str
     workspace_removed: bool
+    source_refs_after: str
+    source_refs_before: str
+    sandbox_requests: Sequence[SandboxRequest]
     artifacts: LocalArtifactStore = field(repr=False)
 
     @property
@@ -102,11 +115,70 @@ class E2ERun:
 
     @property
     def matches_expectation(self) -> bool:
-        return (
-            self.result.outcome is self.scenario.expected_outcome
-            and self.result.failure is self.scenario.expected_failure
-            and self.workspace_removed
+        return not self.problems()
+
+    def problems(self) -> list[str]:
+        """Every expectation and universal PatchForge invariant this run violates."""
+
+        scenario = self.scenario
+        result = self.result
+        snapshot = self.completion.snapshot
+        problems: list[str] = []
+
+        def check(condition: bool, message: str) -> None:
+            if not condition:
+                problems.append(message)
+
+        # Scenario expectations.
+        check(result.outcome is scenario.expected_outcome, "unexpected outcome")
+        check(result.failure is scenario.expected_failure, "unexpected failure")
+        check(result.phase_reached is scenario.expected_phase_reached, "unexpected phase")
+        check(
+            snapshot.implementation_loops == scenario.expected_implementation_loops,
+            "unexpected implementation-loop count",
         )
+        codes = {item.code for item in result.policy_findings}
+        check(set(scenario.expected_findings) <= codes, "expected finding missing")
+        # Lifecycle: a closed transcript that always ends by cleaning up.
+        transitions = snapshot.transitions
+        check(transitions[0].source is PatchForgePhase.CREATED, "transcript start")
+        check(snapshot.phase is PatchForgePhase.CLOSED, "lifecycle not closed")
+        check(
+            any(item.target is PatchForgePhase.CLEANUP for item in transitions),
+            "cleanup phase never entered",
+        )
+        check(self.workspace_removed, "workspace was not removed")
+        # Evidence authority: every claim resolves to runtime-owned records.
+        calls = {item.call_id for item in result.tool_calls}
+        check(
+            all(item.tool_call_id in calls for item in result.executions),
+            "execution without a tool call",
+        )
+        check(
+            result.budget_usage.total_tool_calls == len(result.tool_calls),
+            "budget usage does not match the tool-call ledger",
+        )
+        check(
+            all(item.attested_by == "patchforge.runtime" for item in result.tool_calls),
+            "tool call not runtime-attested",
+        )
+        if result.outcome is PatchOutcome.PATCH_PROPOSED:
+            check(result.diff is not None, "proposal without a diff")
+        # No approval, merge, deployment, or push: the source repository is untouched.
+        check(self.source_refs_after == self.source_refs_before, "source repository changed")
+        # No network, secrets, memory, parallel calls, or live model.
+        check(
+            all(
+                item.policy.network_disabled and not item.policy.secrets_allowed
+                for item in self.sandbox_requests
+            ),
+            "sandbox request allowed network or secrets",
+        )
+        identity = result.identity
+        check(identity.memory_mode == "disabled", "memory enabled")
+        check(identity.parallel_tool_calls is False, "parallel tool calls enabled")
+        check(identity.engine_kind == "scripted", "non-scripted engine")
+        return problems
 
 
 class ScriptedEngine:
@@ -144,11 +216,33 @@ class _HookedSandbox:
         return self.inner.execute(request)
 
 
-class _FailingCleanupManager(WorkspaceManager):
-    """Refuse the Runtime's cleanup once, so cleanup failure is exercised deterministically."""
+class _FaultyWorkspaceManager(WorkspaceManager):
+    """Inject scenario faults: a refused cleanup or a failed Nth lease renewal."""
+
+    def __init__(
+        self,
+        root: Path,
+        *,
+        clock: Callable[[], datetime],
+        git_runner: GitRunner,
+        fail_cleanup: bool,
+        fail_lease_renewal_at: int | None,
+    ) -> None:
+        super().__init__(root, clock=clock, git_runner=git_runner)
+        self.fail_cleanup = fail_cleanup
+        self.fail_lease_renewal_at = fail_lease_renewal_at
+        self.renewals = 0
+
+    def renew_lease(self, handle: WorkspaceHandle, lease_duration: timedelta) -> WorkspaceHandle:
+        self.renewals += 1
+        if self.renewals == self.fail_lease_renewal_at:
+            raise WorkspaceError("Scenario fault: lease renewal refused")
+        return super().renew_lease(handle, lease_duration)
 
     def cleanup(self, workspace_id: UUID) -> bool:
-        raise WorkspaceError("Scenario fault: cleanup refused")
+        if self.fail_cleanup:
+            raise WorkspaceError("Scenario fault: cleanup refused")
+        return super().cleanup(workspace_id)
 
     def force_cleanup(self, workspace_id: UUID) -> bool:
         return super().cleanup(workspace_id)
@@ -240,8 +334,14 @@ class PatchForgeE2EHarness:
             max_diff_bytes=100_000,
             allow_test_file_changes=scenario.allow_test_file_changes,
         )
-        manager_type = _FailingCleanupManager if scenario.fail_cleanup else WorkspaceManager
-        manager = manager_type(root / "workspaces", clock=clock, git_runner=git)
+        manager = _FaultyWorkspaceManager(
+            root / "workspaces",
+            clock=clock,
+            git_runner=git,
+            fail_cleanup=scenario.fail_cleanup,
+            fail_lease_renewal_at=scenario.fail_lease_renewal_at,
+        )
+        source_refs_before = self._source_refs(git, root / "source")
         handle = manager.provision(
             task,
             profile,
@@ -277,7 +377,7 @@ class PatchForgeE2EHarness:
         )
         completion = runtime.execute()
         workspace_removed = not handle.root.exists()
-        if isinstance(manager, _FailingCleanupManager):
+        if scenario.fail_cleanup:
             # The Runtime's cleanup was refused on purpose; recorded evidence already says
             # so. Remove the workspace now so the harness never leaks a tree.
             manager.force_cleanup(handle.record.workspace_id)
@@ -292,11 +392,20 @@ class PatchForgeE2EHarness:
             result=attestor.attest(completion),
             source_sha=source_sha,
             workspace_removed=workspace_removed,
+            source_refs_before=source_refs_before,
+            source_refs_after=self._source_refs(git, root / "source"),
+            sandbox_requests=tuple(sandbox.inner.requests),
             artifacts=artifacts,
         )
 
     def _clock(self) -> datetime:
         return self.now
+
+    @staticmethod
+    def _source_refs(git: GitRunner, source: Path) -> str:
+        """All refs and their targets in the operator's source repository."""
+
+        return git.run(["-C", str(source), "show-ref", "--head"]).stdout_text()
 
     @staticmethod
     def _uuid(scenario: E2EScenario, purpose: str) -> UUID:

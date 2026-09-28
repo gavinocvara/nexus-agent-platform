@@ -6,35 +6,39 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 ## Checkpoint
 
 - Branch `main`; local `HEAD` must equal `origin/main` at every checkpoint.
-- NEXUS `0.16.0`: PatchForge Milestones A-G complete. The Milestone G release is the
-  commit that set 0.16.0; its SHA and GitHub Actions run are recorded here once CI is
-  green.
-- Previous release: 0.15.0 (Attestor) `d6d39d3`, GitHub Actions run `36491013537` green.
-- Local release gate: `pip check` passed; Ruff format (159 files) and lint clean; strict
-  mypy clean (88 files); pytest 618 passed, 23 deselected (six consecutive clean runs);
-  5 scenarios validated; E2E gate passed; Compose config passed. Compose integration was
-  not run locally (no Docker daemon); CI's `compose-integration` job is the gate.
+- Released: NEXUS `0.16.0` (Milestone G first cut) `915ea12`; GitHub Actions run
+  `36493180253` passed both jobs, including the E2E gate step. Milestone F release
+  `d6d39d3`, run `36491013537` green.
+- Active: completing Milestone G against the owner's full scenario list (unreleased).
 
-## Milestone G Summary
+## Milestone G Progress
 
-- `nexus.patchforge.e2e`: `PatchForgeE2EHarness`, `ScriptedEngine`, and
-  `materialize_fixture` run the production path deterministically (byte-identical
-  replay).
-- `nexus.patchforge.e2e_catalog`: calculator fixture; success plus one scenario per
-  `PatchForgeFailure`; `python -m nexus.patchforge.e2e_catalog` is a CI gate.
+- Harness: `PatchForgeE2EHarness` (real Runtime + ToolGateway + WorkspaceManager +
+  FakeSandbox + Attestor), deterministic replay, fault injection (worktree, in-sandbox,
+  refused cleanup, refused Nth lease renewal).
+- `E2ERun.problems()` checks every run for expected outcome, classification, phase,
+  loop count, and findings; a closed transcript through cleanup; workspace removal;
+  runtime-owned evidence linkage; an untouched source repository (no push, merge, or
+  approval); sandbox requests without network or secrets; memory off; scripted engine.
+- Catalog: 21 scenarios covering success, the reproduction variants, targeted failure,
+  successful bounded retry, full-suite failure, budget, cancellation, policy,
+  workspace and lease failure, sandbox, engine, finalization failure, cleanup failure,
+  in-run and post-final tamper, stale validation, unknown report evidence, and
+  finalization-reserve use and refusal. The gate runs each twice (byte-identical).
 
 ## Exact Next Step
 
-After CI is green for 0.16.0, begin PatchForge Milestone H - Benchmark v0: a small
-synthetic defect corpus and a reproducible harness (see `ROADMAP.md`). Build it on the
-Milestone G harness and fixtures. No live model calls; Milestone I needs explicit owner
-authorization.
+Release Milestone G completion as 0.16.1 (CHANGELOG, ADR 0010 note, full gate, green
+CI). Do not start Milestone H until then.
 
 ## Active Issues
 
-- No known failing tests. The intermittent failure seen in Milestones F and G was a test
-  that compared proposal commits on two separately created fixture repositories; fixed.
-- Test modules are not type-checked in CI and carry pre-existing strict-mypy noise.
+- Design question for the owner: in `finalize`, the gateway refuses a non-report tool
+  that would take the report's reserved call, but Runtime (per Milestone E) treats any
+  failure during finalization as final, so the report is never submitted (scenario
+  `finalization_reserve_protected`). This fails closed; making the reserve usable after
+  a refusal would change Runtime lifecycle semantics.
+- No known failing tests; the F/G intermittent failure was a test bug, fixed in 0.16.0.
 - Remote branch `maintenance/repo-hygiene-claude` is unmerged and untouched; owner decides.
 
 ## Critical Constraints
