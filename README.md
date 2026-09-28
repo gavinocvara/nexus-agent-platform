@@ -332,7 +332,8 @@ only `patch_proposed`; PatchForge cannot approve, merge, deploy, or push to `mai
 
 The repository profile defines argument-vector commands and a mandatory digest-pinned,
 networkless, secretless, non-root, resource-bounded sandbox policy. Workspace isolation
-is implemented below; Docker execution remains the next milestone. See
+and Docker execution are implemented below; model-facing tool exposure remains deferred.
+See
 `docs/adr/0010-patchforge-v1-trustworthy-engineering-agent.md`.
 
 ### Disposable Workspaces
@@ -346,5 +347,20 @@ All Git operations use fixed argument vectors, sanitized noninteractive configur
 disabled hooks and automatic line-ending conversion, explicit time/output bounds, and
 no shell. The manager derives deterministic binary diffs, stores a durable expiring
 lease, cleans up idempotently, and reaps only UUID-named expired workspaces with valid
-matching markers. Current coverage uses generated synthetic repositories; Docker
-execution is the next milestone.
+matching markers. Current coverage uses generated synthetic repositories.
+
+### Sandboxed Execution
+
+`DockerSandbox` runs only an operator-profile command in a disposable container using a
+content-addressed local image and `--pull=never`. It disables networking, passes no host
+environment or secrets, uses a non-root UID/GID and read-only root, drops every Linux
+capability, enables no-new-privileges, and bounds CPU, memory, PIDs, duration, and
+combined output. The only bind mount is the `.git`-free worktree. Timeouts and output
+exhaustion kill the Docker client and force-remove the named container.
+
+`FakeSandbox` implements the same typed executor protocol for deterministic tests and
+cannot fabricate output exhaustion without actually exceeding the configured bound.
+Real Docker integration tests verify non-root execution, blocked networking, absent host
+secrets and Git metadata, read-only root, writable worktree, termination, and cleanup.
+The tool gateway that will expose selected operations to PatchForge is not implemented
+yet.

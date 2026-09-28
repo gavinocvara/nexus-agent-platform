@@ -2,11 +2,11 @@
 
 ## Current Milestone
 
-The accelerated PatchForge v1 track is active. Milestones A - Contracts and B -
-WorkspaceManager are complete in the current checkpoint; Milestone C - SandboxExecutor
-is next. Atlas-min remains the outer job, policy, review, approval, persistence, and
-audit boundary. No PatchForge Docker sandbox, tool gateway, runtime, model call, GitHub
-action, or memory behavior is claimed yet.
+The accelerated PatchForge v1 track is active. Milestones A - Contracts, B -
+WorkspaceManager, and C - SandboxExecutor are complete in the current checkpoint;
+Milestone D - ToolGateway is next. Atlas-min remains the outer job, policy, review,
+approval, persistence, and audit boundary. No PatchForge model-facing tool gateway,
+runtime, model call, GitHub action, or memory behavior is claimed yet.
 
 Phase 7 Brain v1 remains accepted complete with its documented negative behavioral
 calibration and preserved frozen evidence. Phase 8 Atlas remains complete and unchanged.
@@ -22,7 +22,7 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - Remote: `https://github.com/gavinocvara/nexus-agent-platform.git`
 - Branch: `main`
 - Phase 7 starting point: `52bd5f47dfbf5591e5263911b1c64dab66158d90`
-- Package version: `0.11.0`
+- Package version: `0.12.0`
 - Accepted Phase 6 baseline-record checkpoint: `5c0200d`
 - Phase 7 implementation checkpoint: `a7b6f5c1fbfc1e218cfabb1d78ad8d830e2bc17c`
 - Phase 7 validation handoff: the commit containing this document
@@ -32,6 +32,7 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - Phase 8 validation checkpoint: the commit containing this document
 - PatchForge v1 contracts checkpoint: the commit containing this document
 - PatchForge v1 workspace checkpoint: the commit containing this document
+- PatchForge v1 sandbox checkpoint: the commit containing this document
 
 ## Locked Phase 6 Baseline
 
@@ -163,8 +164,29 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - Durable markers record source SHA, runtime branch, lifecycle state, and lease expiry.
   Lease renewal is explicit. Cleanup is idempotent and refuses unmarked, symlinked, or
   identity-mismatched paths. Reaping removes only expired, marker-verified workspaces.
-- Milestone B tests generate local synthetic Git repositories. Remote cloning, Docker
-  execution, model tools, Git commits/pushes, and GitHub access remain absent.
+- Milestone B tests generate local synthetic Git repositories. Remote cloning, model
+  tools, Git commits/pushes, and GitHub access remain absent.
+
+## PatchForge v1 SandboxExecutor
+
+- `SandboxExecutor` is a typed protocol implemented by deterministic `FakeSandbox` and
+  local `DockerSandbox` executors. Requests bind the run, call, workspace, typed command,
+  and sandbox policy; results attest command and policy hashes, status, bounded output,
+  timestamps, exit evidence, and runtime identity.
+- Docker runs only operator-profile argument-vector commands from a content-addressed
+  local image with pulls and networking disabled. It passes no host secrets, runs as the
+  configured non-root UID/GID, uses a read-only root, drops all capabilities, enables
+  no-new-privileges, and bounds CPU, memory, swap, PIDs, time, and combined output.
+- The `.git`-free disposable worktree is the only bind mount. `/tmp` is a bounded
+  no-exec tmpfs. Timeout and output exhaustion kill the Docker client; unconditional
+  cleanup force-removes the uniquely named container after every attempted execution.
+- Unit tests verify strict evidence contracts, deterministic fake behavior, content-
+  addressed images, command/profile policy bounds, isolation flags, and recursive Git
+  metadata rejection. Real Docker tests verify non-root execution, blocked networking,
+  absent host secrets and Git metadata, read-only root, writable worktree, termination,
+  and container cleanup.
+- The sandbox trusts the operator-selected content-addressed image itself. No model-facing
+  tool gateway, runtime phase loop, target-repository commit, or remote operation exists.
 
 ## Experimental Design
 
@@ -239,6 +261,21 @@ py -m pytest -m integration tests/integration
 
 ## Latest Validation
 
+- PatchForge Milestone C version 0.12.0 validation on 2026-09-27: the editable package
+  installs and `pip check` passes; all 149 files pass Ruff formatting; Ruff lint passes;
+  strict mypy reports no issues in 83 source files; all 313 non-integration tests pass
+  with 23 integration tests deselected. The explicit focused PatchForge unit suite
+  passes all 47 tests, including 22 sandbox/policy tests.
+- Three real Docker integration tests pass against a content-addressed local image. They
+  prove non-root execution, blocked networking, no host-secret or Git-metadata exposure,
+  read-only root plus writable worktree, output-limit and timeout termination, and no
+  residual named container. No model call or remote target-repository operation ran.
+- The initial repository-wide pytest collection found that the new unit and integration
+  sandbox modules had the same basename. Renaming the integration module to
+  `test_patchforge_docker_sandbox.py` removed the import collision; the complete suite
+  then passed. An initial Docker attempt under the restricted filesystem could not read
+  the local Docker configuration or named pipe; the explicitly authorized local Docker
+  rerun passed without a code change.
 - PatchForge Milestone B version 0.11.0 validation on 2026-09-27: the editable package
   installs and `pip check` passes; all 146 files pass Ruff formatting; Ruff lint passes;
   strict mypy reports no issues in 82 source files; all 302 non-integration tests pass
@@ -419,14 +456,14 @@ requirement is incompatible with the architecture.
 - Five scenarios are insufficient for independent learning-effect estimates.
 - Atlas v1 is deliberately single-node. It has no remote API, scheduler, worker heartbeat,
   distributed claim protocol, credential broker, or PostgreSQL control-plane backend.
-- PatchForge has no Docker executor yet. Workspace separation prevents `.git` exposure,
-  but network, secret, UID, filesystem, CPU, memory, PID, time, and output sandbox policy
-  will not be runtime-enforced until Milestone C.
+- PatchForge has no model-facing ToolGateway or runtime yet. `DockerSandbox` enforces the
+  Milestone C boundary, but only for operator-selected content-addressed images and
+  operator-profile commands; image provenance/signing is outside v1.
 
 ## Next Step
 
-Implement PatchForge Milestone C `SandboxExecutor`: a Docker implementation that mounts
-only the `.git`-free worktree and enforces the operator profile's digest-pinned image,
-network/secret/user/filesystem/resource/time/output policy, plus a deterministic
-`FakeSandbox` for unit tests. Do not expose these executors to a model or begin the tool
-gateway in this milestone.
+Implement PatchForge Milestone D `ToolGateway`: expose only narrow, typed repository
+read/search/write, operator-profile command execution, diff, and control operations over
+the disposable workspace and `SandboxExecutor`. Enforce phase/capability/budget/path
+policy before every call, record runtime-owned evidence, and keep shell, Git metadata,
+network, secrets, commits, pushes, approvals, deployment, and memory inaccessible.

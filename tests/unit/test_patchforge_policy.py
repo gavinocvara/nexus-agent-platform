@@ -43,8 +43,8 @@ def _sandbox() -> SandboxPolicy:
         cpu_limit_millis=1000,
         memory_limit_mb=512,
         pids_limit=128,
-        default_timeout_seconds=60,
-        max_output_bytes=100_000,
+        default_timeout_seconds=600,
+        max_output_bytes=1_000_000,
     )
 
 
@@ -80,6 +80,19 @@ def test_repository_profile_is_operator_owned_and_canonically_hashed() -> None:
     assert profile.sandbox.network_disabled is True
     assert profile.sandbox.secrets_allowed is False
     assert profile.sandbox.git_directory_mounted is False
+
+
+def test_repository_commands_cannot_exceed_sandbox_bounds() -> None:
+    profile = _profile()
+    payload = profile.model_dump(mode="python")
+    payload["sandbox"]["default_timeout_seconds"] = 1
+    with pytest.raises(ValidationError, match="timeout exceeds"):
+        RepositoryProfile.model_validate(payload)
+
+    payload = profile.model_dump(mode="python")
+    payload["sandbox"]["max_output_bytes"] = 10
+    with pytest.raises(ValidationError, match="output exceeds"):
+        RepositoryProfile.model_validate(payload)
 
 
 @pytest.mark.parametrize(

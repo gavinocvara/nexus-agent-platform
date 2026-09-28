@@ -86,6 +86,13 @@ must use a digest-pinned image, no network, no secrets, a non-root UID/GID, a re
 root filesystem, bounded CPU, memory, PIDs, time, and output. A fake executor may replace
 Docker only in deterministic unit tests.
 
+Milestone C implements `DockerSandbox` and `FakeSandbox` behind one typed protocol. The
+Docker executor uses a content-addressed local image with pulls disabled, passes no host
+environment, mounts only the `.git`-free worktree, drops all capabilities, enables
+no-new-privileges, and force-removes named containers after success or interruption.
+Real integration tests verify the isolation boundary plus timeout and output-limit
+termination. Tool exposure remains deferred to Milestone D.
+
 ## Budgets And Runtime
 
 PatchForge uses the closed phases:

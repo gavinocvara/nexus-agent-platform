@@ -90,8 +90,8 @@
   patch results, operator policy, sandbox requirements, and canonical hashes
 - **B. WorkspaceManager (Complete):** disposable source-SHA workspaces, runtime-owned Git,
   hardened commands, diff, cleanup, and orphan reaping over synthetic repositories
-- **C. SandboxExecutor (Next):** Docker isolation plus deterministic `FakeSandbox`
-- **D. ToolGateway:** narrow read, write, execution, and control tools
+- **C. SandboxExecutor (Complete):** Docker isolation plus deterministic `FakeSandbox`
+- **D. ToolGateway (Next):** narrow read, write, execution, and control tools
 - **E. Runtime:** closed phased workflow with bounded implementation loops and reserved
   finalization capacity
 - **F. Attestor:** reproduction, regression, diff, validation, scope, and basic tamper checks

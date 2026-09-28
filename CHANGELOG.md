@@ -6,6 +6,15 @@ All meaningful changes to NEXUS are recorded here.
 
 ### Added
 
+- PatchForge v1 Milestone C `DockerSandbox` and `FakeSandbox` behind one typed executor
+  protocol, with runtime-attested command/policy hashes and typed success, failure,
+  timeout, output-limit, and sandbox-error results.
+- Real Docker enforcement for immutable local images, no pull/network/host environment,
+  non-root execution, read-only root, dropped capabilities, no-new-privileges, bounded
+  CPU/memory/PIDs/time/output, one `.git`-free worktree mount, and forced cleanup.
+- Deterministic fake-executor tests and real Docker integration proofs for secret/network/
+  Git isolation, writable workspace, read-only root, output exhaustion, and timeout.
+
 - PatchForge v1 Milestone B `WorkspaceManager` with exact-SHA disposable worktrees,
   runtime-owned bare Git metadata outside the execution tree, deterministic bounded
   diffs, durable leases, idempotent cleanup, and marker-verified orphan reaping.
@@ -125,6 +134,10 @@ All meaningful changes to NEXUS are recorded here.
   and integration tests.
 
 ### Changed
+
+- Advanced the package to version 0.12.0 for the PatchForge sandbox milestone.
+- Repository commands must fit within their operator-owned sandbox timeout and output
+  ceilings; sandbox images accept only content-addressed image IDs or repository digests.
 
 - Advanced the package to version 0.11.0 for the PatchForge workspace milestone.
 

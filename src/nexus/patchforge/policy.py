@@ -21,7 +21,10 @@ class CommandPurpose(StrEnum):
 CommandArgument = Annotated[str, StringConstraints(min_length=1, max_length=500)]
 ImageDigest = Annotated[
     str,
-    StringConstraints(pattern=r"^[^\s@]+@sha256:[a-f0-9]{64}$", max_length=500),
+    StringConstraints(
+        pattern=r"^(?:[^\s@]+@)?sha256:[a-f0-9]{64}$",
+        max_length=500,
+    ),
 ]
 
 
@@ -74,6 +77,11 @@ class RepositoryProfile(StrictModel):
             raise ValueError("Protected paths must be unique")
         if len(set(self.test_path_prefixes)) != len(self.test_path_prefixes):
             raise ValueError("Test path prefixes must be unique")
+        for command in self.commands.values():
+            if command.timeout_seconds > self.sandbox.default_timeout_seconds:
+                raise ValueError("Repository command timeout exceeds sandbox policy")
+            if command.max_output_bytes > self.sandbox.max_output_bytes:
+                raise ValueError("Repository command output exceeds sandbox policy")
         return self
 
 
