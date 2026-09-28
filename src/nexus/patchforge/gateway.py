@@ -18,7 +18,9 @@ from nexus.patchforge.models import (
     AgentReport,
     EngineeringTask,
     PatchForgePhase,
+    PhaseUsage,
     RepositoryPath,
+    RunBudgetUsage,
     RunIdentity,
     ToolCallRecord,
     ToolCallStatus,
@@ -479,6 +481,32 @@ class ToolGateway:
     @property
     def executions(self) -> tuple[SandboxExecution, ...]:
         return tuple(self._executions.values())
+
+    @property
+    def budget_usage(self) -> RunBudgetUsage:
+        phases: list[PhaseUsage] = []
+        for phase in PatchForgePhase:
+            calls = sum(record.phase is phase for record in self._records)
+            duration = self._phase_duration.get(phase, 0.0)
+            output = self._phase_output.get(phase, 0)
+            if calls or duration or output:
+                phases.append(
+                    PhaseUsage(
+                        phase=phase,
+                        tool_calls=calls,
+                        duration_seconds=duration,
+                        output_bytes=output,
+                    )
+                )
+        return RunBudgetUsage(
+            phases=phases,
+            total_tool_calls=len(self._records),
+            total_duration_seconds=sum(self._phase_duration.values()),
+            total_output_bytes=sum(record.output_bytes for record in self._records),
+            finalization_reserve_used=any(
+                record.phase is PatchForgePhase.FINALIZE for record in self._records
+            ),
+        )
 
     @staticmethod
     def requires_workspace(tool_name: ToolName) -> bool:

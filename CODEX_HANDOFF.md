@@ -38,6 +38,13 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
   typed workspace failures.
 - Runtime always attempts cleanup and closes success, cancellation, budget, policy,
   workspace, sandbox, engine, finalization, and cleanup-failure paths.
+- Engine-adapter exceptions are typed as engine failures. Unexpected gateway or Runtime
+  programming defects are not swallowed or relabeled; cleanup runs and the defect
+  propagates.
+- Runtime requires the ToolGateway's exact bound workspace manager and a fresh gateway
+  evidence ledger, preventing cross-run or pre-used authority from being adopted.
+- ToolGateway exposes runtime-attested per-phase call/duration/output usage, total usage,
+  and finalization-reserve use. Runtime completion cross-checks it against tool evidence.
 - Added a real deterministic integration proof over `WorkspaceManager`,
   `ToolGateway`, and `FakeSandbox`: failing reproduction, compare-and-swap edit,
   targeted/full validation, diff inspection, finalization-reserve use, report, lease
@@ -60,7 +67,7 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 ## Validation
 
-- Runtime lifecycle and coordinator suites: **202 passed in 2.03s**.
+- Runtime lifecycle and coordinator suites: **204 passed in 1.47s**.
 - Real ToolGateway/WorkspaceManager/FakeSandbox Runtime path: **1 passed**.
 - Focused workspace cleanup tests: **3 passed**.
 - Focused PatchForge contracts/policy/sandbox/workspace/gateway/Runtime suite:
@@ -73,10 +80,10 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 ## Exact Next Step
 
-Perform the Milestone E closure audit against the explicit requirements. Add only
-missing deterministic edge coverage or narrowly required Runtime behavior. If no
-architectural gap remains, update the required release docs/version and run the full
-release gate once. Do not implement Milestone F attestation.
+Milestone E's deterministic implementation requirements are satisfied. Advance the
+package for the Milestone E release, update only CHANGELOG, README, ADR 0010, ROADMAP,
+and this handoff, then run the one-time full release gate. Push and require both GitHub
+Actions jobs green. Leave Milestone F - Attestor as the exact next task.
 
 ## Critical Constraints
 

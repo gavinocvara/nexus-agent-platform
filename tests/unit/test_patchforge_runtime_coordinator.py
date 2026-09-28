@@ -34,7 +34,9 @@ from nexus.patchforge.models import (
     PatchForgePhase,
     PatchOutcome,
     PhaseBudget,
+    PhaseUsage,
     RunBudgets,
+    RunBudgetUsage,
     RunIdentity,
     ToolCallRecord,
     ToolCallStatus,
@@ -196,6 +198,7 @@ class FakeGateway:
         self,
         *,
         events: list[str],
+        workspace_manager: FakeWorkspaceManager,
         budgets: RunBudgets | None = None,
         failure_code: str | None = None,
     ) -> None:
@@ -211,6 +214,7 @@ class FakeGateway:
             allow_test_file_changes=True,
         )
         self.workspace = _workspace()
+        self.workspace_manager = workspace_manager
         self.events = events
         self.failure_code = failure_code
         self.refresh_calls = 0
@@ -223,6 +227,30 @@ class FakeGateway:
     @property
     def executions(self) -> tuple[()]:
         return ()
+
+    @property
+    def budget_usage(self) -> RunBudgetUsage:
+        phases = [
+            PhaseUsage(
+                phase=phase,
+                tool_calls=sum(record.phase is phase for record in self._records),
+                duration_seconds=0,
+                output_bytes=sum(
+                    record.output_bytes for record in self._records if record.phase is phase
+                ),
+            )
+            for phase in PatchForgePhase
+            if any(record.phase is phase for record in self._records)
+        ]
+        return RunBudgetUsage(
+            phases=phases,
+            total_tool_calls=len(self._records),
+            total_duration_seconds=0,
+            total_output_bytes=sum(record.output_bytes for record in self._records),
+            finalization_reserve_used=any(
+                record.phase is PatchForgePhase.FINALIZE for record in self._records
+            ),
+        )
 
     @staticmethod
     def requires_workspace(tool_name: ToolName) -> bool:
@@ -322,12 +350,13 @@ def _runtime(
     cleanup_error: bool = False,
 ) -> tuple[PatchForgeRuntime, FakeGateway, FakeWorkspaceManager, list[str]]:
     events: list[str] = []
+    manager = FakeWorkspaceManager(events, cleanup_error=cleanup_error)
     gateway = FakeGateway(
         events=events,
+        workspace_manager=manager,
         budgets=_budgets(loops=loops),
         failure_code=failure_code,
     )
-    manager = FakeWorkspaceManager(events, cleanup_error=cleanup_error)
     runtime = PatchForgeRuntime(
         gateway=gateway,
         workspace_manager=manager,
@@ -348,6 +377,8 @@ def test_happy_path_uses_one_action_at_a_time_and_always_cleans_up() -> None:
     assert completion.snapshot.failure is None
     assert completion.report is not None
     assert completion.workspace_cleaned is True
+    assert completion.budget_usage.total_tool_calls == len(completion.tool_calls)
+    assert completion.budget_usage.finalization_reserve_used is True
     assert len(completion.lease_renewals) == 1
     assert gateway.refresh_calls == manager.renewals == 1
     assert events == ["renew", "refresh", "cleanup"]
@@ -379,6 +410,34 @@ def test_real_gateway_workspace_requirement_is_closed_and_explicit() -> None:
     }
 
     assert {tool for tool in ToolName if not ToolGateway.requires_workspace(tool)} == workspace_free
+
+
+def test_runtime_rejects_mismatched_manager_or_preused_gateway() -> None:
+    events: list[str] = []
+    bound_manager = FakeWorkspaceManager(events)
+    other_manager = FakeWorkspaceManager(events)
+    gateway = FakeGateway(
+        events=events,
+        workspace_manager=bound_manager,
+    )
+    engine = ScriptedEngine(_happy_actions())
+
+    with pytest.raises(ValueError, match="bound workspace manager"):
+        PatchForgeRuntime(
+            gateway=gateway,
+            workspace_manager=other_manager,
+            engine=engine,
+            lease_duration=timedelta(minutes=5),
+        )
+
+    gateway.invoke(ToolName.GIT_STATUS, {}, phase=PatchForgePhase.RECON)
+    with pytest.raises(ValueError, match="fresh ToolGateway"):
+        PatchForgeRuntime(
+            gateway=gateway,
+            workspace_manager=bound_manager,
+            engine=engine,
+            lease_duration=timedelta(minutes=5),
+        )
 
 
 def test_failed_refresh_after_renewal_is_a_workspace_failure() -> None:
@@ -459,6 +518,29 @@ def test_engine_failure_can_finalize_with_a_partial_report() -> None:
     assert completion.snapshot.outcome is PatchOutcome.ABORTED
     assert completion.report is not None
     assert completion.workspace_cleaned is True
+
+
+def test_unexpected_gateway_defect_propagates_after_cleanup() -> None:
+    runtime, gateway, manager, events = _runtime(
+        actions=[RuntimeToolAction(tool_name=ToolName.GIT_STATUS)]
+    )
+
+    def fail_programming_contract(
+        tool_name: ToolName,
+        arguments: Mapping[str, object],
+        *,
+        phase: PatchForgePhase,
+    ) -> GatewayResult:
+        raise AssertionError("scripted programming defect")
+
+    gateway.invoke = fail_programming_contract  # type: ignore[method-assign]
+
+    with pytest.raises(AssertionError, match="programming defect"):
+        runtime.execute()
+
+    assert manager.cleanup_calls == 1
+    assert events == ["renew", "refresh", "cleanup"]
+    assert runtime.lifecycle.snapshot.phase is PatchForgePhase.CLOSED
 
 
 def test_repeated_engine_failure_in_finalization_still_cleans_up() -> None:
@@ -717,6 +799,8 @@ def test_real_gateway_workspace_and_fake_sandbox_complete_closed_runtime(
     assert completion.report is not None
     assert completion.workspace_cleaned is True
     assert len(completion.executions) == 3
+    assert completion.budget_usage.total_tool_calls == len(completion.gateway_results)
+    assert completion.budget_usage.finalization_reserve_used is True
     assert len(completion.lease_renewals) == refresh_calls == 8
     assert [request.command for request in sandbox.requests] == [
         profile.commands[CommandPurpose.REPRODUCTION],

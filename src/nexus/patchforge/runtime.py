@@ -1,5 +1,7 @@
 """Closed deterministic lifecycle for the PatchForge runtime."""
 
+from __future__ import annotations
+
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -17,7 +19,6 @@ from nexus.patchforge.gateway import (
     FailureOutput,
     GatewayBudgetError,
     GatewayError,
-    GatewayRequestError,
     GatewayResult,
     PhaseRequestOutput,
     ReportOutput,
@@ -32,6 +33,7 @@ from nexus.patchforge.models import (
     PatchForgePhase,
     PatchOutcome,
     RunBudgets,
+    RunBudgetUsage,
     RunIdentity,
     ToolCallRecord,
     ToolName,
@@ -117,7 +119,7 @@ class RuntimeTransition(StrictModel):
     attested_by: Literal["patchforge.runtime"] = "patchforge.runtime"
 
     @model_validator(mode="after")
-    def validate_failure_shape(self) -> "RuntimeTransition":
+    def validate_failure_shape(self) -> RuntimeTransition:
         if (self.kind is RuntimeTransitionKind.FAILURE) != (self.failure is not None):
             raise ValueError("Only failure transitions carry a failure classification")
         return self
@@ -135,7 +137,7 @@ class RuntimeSnapshot(StrictModel):
     attested_by: Literal["patchforge.runtime"] = "patchforge.runtime"
 
     @model_validator(mode="after")
-    def validate_transcript(self) -> "RuntimeSnapshot":
+    def validate_transcript(self) -> RuntimeSnapshot:
         if self.implementation_loops > self.max_implementation_loops:
             raise ValueError("Implementation loop count exceeds the configured limit")
         if (self.failure is None) != (self.outcome in {None, PatchOutcome.PATCH_PROPOSED}):
@@ -166,7 +168,7 @@ class RuntimeToolAction(StrictModel):
     arguments: ToolArguments = Field(default_factory=EmptyArguments)
 
     @model_validator(mode="after")
-    def validate_argument_contract(self) -> "RuntimeToolAction":
+    def validate_argument_contract(self) -> RuntimeToolAction:
         parsed = parse_tool_arguments(
             self.tool_name,
             self.arguments.model_dump(mode="python"),
@@ -197,7 +199,7 @@ class LeaseRenewalRecord(StrictModel):
     attested_by: Literal["patchforge.runtime"] = "patchforge.runtime"
 
     @model_validator(mode="after")
-    def validate_expiry(self) -> "LeaseRenewalRecord":
+    def validate_expiry(self) -> LeaseRenewalRecord:
         if self.renewed_expires_at < self.previous_expires_at:
             raise ValueError("Workspace lease renewal cannot shorten the active lease")
         return self
@@ -210,12 +212,13 @@ class RuntimeCompletion(StrictModel):
     gateway_results: list[GatewayResult] = Field(default_factory=list, max_length=10_000)
     tool_calls: list[ToolCallRecord] = Field(default_factory=list, max_length=10_000)
     executions: list[SandboxExecution] = Field(default_factory=list, max_length=1000)
+    budget_usage: RunBudgetUsage
     lease_renewals: list[LeaseRenewalRecord] = Field(default_factory=list, max_length=10_000)
     workspace_cleaned: bool
     attested_by: Literal["patchforge.runtime"] = "patchforge.runtime"
 
     @model_validator(mode="after")
-    def validate_completion(self) -> "RuntimeCompletion":
+    def validate_completion(self) -> RuntimeCompletion:
         if self.snapshot.run_id != self.identity.run_id:
             raise ValueError("Runtime snapshot belongs to another run")
         if self.snapshot.phase is not PatchForgePhase.CLOSED:
@@ -228,6 +231,8 @@ class RuntimeCompletion(StrictModel):
             raise ValueError("Runtime tool calls must match ordered gateway results")
         if any(item.run_id != self.identity.run_id for item in self.executions):
             raise ValueError("Sandbox execution belongs to another run")
+        if self.budget_usage.total_tool_calls != len(self.tool_calls):
+            raise ValueError("Runtime budget usage does not match tool-call evidence")
         if any(item.run_id != self.identity.run_id for item in self.lease_renewals):
             raise ValueError("Lease renewal belongs to another run")
         report_outputs = [
@@ -260,12 +265,16 @@ class RuntimeGateway(Protocol):
     task: EngineeringTask
     policy: PatchForgePolicy
     workspace: WorkspaceHandle
+    workspace_manager: RuntimeWorkspaceManager
 
     @property
     def records(self) -> tuple[ToolCallRecord, ...]: ...
 
     @property
     def executions(self) -> tuple[SandboxExecution, ...]: ...
+
+    @property
+    def budget_usage(self) -> RunBudgetUsage: ...
 
     @staticmethod
     def requires_workspace(tool_name: ToolName) -> bool: ...
@@ -450,6 +459,10 @@ class PatchForgeRuntime:
             raise ValueError("Runtime workspace lease duration must be positive")
         if gateway.identity.run_id != gateway.workspace.record.run_id:
             raise ValueError("Runtime gateway workspace belongs to another run")
+        if gateway.workspace_manager is not workspace_manager:
+            raise ValueError("Runtime must use the ToolGateway's bound workspace manager")
+        if gateway.records or gateway.executions:
+            raise ValueError("Runtime requires a fresh ToolGateway evidence ledger")
         if gateway.policy.parallel_tool_calls is not False:
             raise ValueError("PatchForge Runtime requires disabled parallel tool calls")
         if gateway.policy.memory_enabled is not False:
@@ -489,35 +502,38 @@ class PatchForgeRuntime:
                     implementation_loops=snapshot.implementation_loops,
                     max_implementation_loops=snapshot.max_implementation_loops,
                 )
+                action = self._next_action(turn)
+                if action is None:
+                    continue
                 try:
-                    action = self.engine.next_action(turn)
                     if self.gateway.requires_workspace(action.tool_name):
                         self._renew_workspace()
+                except WorkspaceError:
+                    self._record_failure(PatchForgeFailure.WORKSPACE_ERROR)
+                    continue
+                try:
                     result = self.gateway.invoke(
                         action.tool_name,
                         action.arguments.model_dump(mode="python"),
                         phase=self.lifecycle.phase,
                     )
-                    self._results.append(result)
-                    previous_result = result
-                    self._accept_result(action, result)
-                except RuntimeCancelledError:
-                    self._record_failure(PatchForgeFailure.CANCELLED)
                 except GatewayBudgetError:
                     self._record_failure(PatchForgeFailure.BUDGET_EXHAUSTED)
-                except (GatewayRequestError, RuntimeTransitionError) as exc:
+                    continue
+                except GatewayError:
+                    self._record_failure(PatchForgeFailure.POLICY_DENIED)
+                    continue
+                self._results.append(result)
+                previous_result = result
+                try:
+                    self._accept_result(action, result)
+                except RuntimeTransitionError as exc:
                     failure = (
                         PatchForgeFailure.BUDGET_EXHAUSTED
                         if "loop budget" in str(exc)
                         else PatchForgeFailure.POLICY_DENIED
                     )
                     self._record_failure(failure)
-                except WorkspaceError:
-                    self._record_failure(PatchForgeFailure.WORKSPACE_ERROR)
-                except GatewayError:
-                    self._record_failure(PatchForgeFailure.POLICY_DENIED)
-                except Exception:
-                    self._record_failure(PatchForgeFailure.ENGINE_ERROR)
         finally:
             self._finish_cleanup()
         return RuntimeCompletion(
@@ -527,9 +543,19 @@ class PatchForgeRuntime:
             gateway_results=self._results,
             tool_calls=list(self.gateway.records),
             executions=list(self.gateway.executions),
+            budget_usage=self.gateway.budget_usage,
             lease_renewals=self._renewals,
             workspace_cleaned=self._workspace_cleaned,
         )
+
+    def _next_action(self, turn: RuntimeTurn) -> RuntimeToolAction | None:
+        try:
+            return self.engine.next_action(turn)
+        except RuntimeCancelledError:
+            self._record_failure(PatchForgeFailure.CANCELLED)
+        except Exception:
+            self._record_failure(PatchForgeFailure.ENGINE_ERROR)
+        return None
 
     def _renew_workspace(self) -> None:
         current = self.gateway.workspace
