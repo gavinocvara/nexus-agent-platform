@@ -9,8 +9,9 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 - Released: NEXUS `0.16.0` (Milestone G first cut) `915ea12`; GitHub Actions run
   `36493180253` passed both jobs, including the E2E gate step. Milestone F release
   `d6d39d3`, run `36491013537` green.
-- Milestone G completion release: NEXUS `0.16.1`, the commit that set that version; its
-  SHA and GitHub Actions run are recorded here once CI is green.
+- Milestone G completion release: NEXUS `0.16.1`
+  `9b05cdce16a25b1ae86c3e580951728e017b7df1`; GitHub Actions run `36494052048` passed
+  `validate` and `compose-integration` on the first attempt.
 
 ## Milestone G Progress
 
@@ -29,9 +30,9 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 ## Exact Next Step
 
-After CI is green for 0.16.1, record it here. Then Milestone H - Benchmark v0 (small
-synthetic defect corpus and reproducible harness) may begin, built on the Milestone G
-harness. No live model calls; Milestone I needs explicit owner authorization.
+Milestone G is released and verified. Next is Milestone H - Benchmark v0 (small
+synthetic defect corpus and reproducible harness), built on the Milestone G harness,
+once the owner has weighed the finalization-reserve question below. No live model calls; Milestone I needs explicit owner authorization.
 
 ## Active Issues
 

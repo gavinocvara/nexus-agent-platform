@@ -8,7 +8,7 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
-## 0.16.1 — PatchForge Milestone G completion
+## 0.16.1 — PatchForge Milestone G completion (`9b05cdc`)
 
 - The deterministic E2E catalog grows to 21 scenarios: success, inability to reproduce
   (already passing and skipped), targeted and full-suite validation failure, a
