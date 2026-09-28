@@ -24,9 +24,11 @@ build/
 .DS_Store
 Thumbs.db
 
-# Local agent and scratch artifacts
-CLAUDE.local.md
+# Local agent scratch and transfer artifacts
+Claude outputs/
 .claude/settings.local.json
+*.bundle
+CLAUDE.local.md
 *.orig
 *.rej
 *.patch

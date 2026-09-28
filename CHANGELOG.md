@@ -6,11 +6,14 @@ All meaningful changes to NEXUS are recorded here.
 
 ### Changed
 
-- Repository context slimming: added a concise `AGENTS.md` router (imported by
-  `CLAUDE.md`), compacted `CODEX_HANDOFF.md` to current state only, moved later-phase
-  execution order and known limitations into `ROADMAP.md`, and removed the superseded
-  `NEXUS_PROJECT_INSTRUCTIONS.md`, `NEXUS_MASTER_BUILD_PROMPT.md`, and `PROJECT_STATE.md`.
-  The PatchForge policy fixture now protects `AGENTS.md`. No runtime behavior changed.
+- Slimmed default agent context:
+  - Added a short `AGENTS.md` router, with `CLAUDE.md` importing it.
+  - Retired `NEXUS_MASTER_BUILD_PROMPT.md`, `NEXUS_PROJECT_INSTRUCTIONS.md`, and
+    `PROJECT_STATE.md`. Their still-current requirements now live in `AGENTS.md`,
+    `ROADMAP.md` (execution order and target systems), `BRAIN.md` (a Brain v1
+    implementation status), the ADRs, and the Brain runbook.
+  - Compacted `CODEX_HANDOFF.md` to current state only.
+- No runtime behavior, test semantics, or frozen evidence changed.
 
 ### Added
 

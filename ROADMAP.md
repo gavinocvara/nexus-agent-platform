@@ -1,5 +1,30 @@
 # NEXUS Roadmap
 
+This file owns execution order. Accepted ADRs own design decisions, `BRAIN.md` owns memory
+architecture, and `CODEX_HANDOFF.md` records the current checkpoint. Phase numbers are
+stable identifiers. PatchForge was deliberately moved ahead of the original Phases 9-10
+(see ADR 0010).
+
+## Target Systems
+
+NEXUS is built toward five cooperating systems:
+
+- **AegisOps**: agentic SRE and incident response (lab, diagnostics, investigator,
+  benchmark done; specialists and approval-gated remediation deferred)
+- **Atlas**: the control plane: registration, identity, tool registry, permissions,
+  approvals, scoped credentials, budgets, model routing, durable execution, audit, and
+  sandbox policy (thin v1 done; the rest added only when a consumer needs it)
+- **PatchForge**: an issue-to-tested-patch software engineer (active track)
+- **SentinelQA**: independent validation, requirements-to-tests, browser/API evidence,
+  reproduction, and bug reports, including a selector/DOM mutation benchmark
+- **Engram**: provenance-aware engineering knowledge with temporal validity and a
+  verified cross-agent exchange (`BRAIN.md`)
+
+The eventual closed-loop demonstration is: AegisOps detects and verifies an incident →
+creates an engineering issue → PatchForge reproduces and fixes it with tests → SentinelQA
+validates → CI passes → an approved change is deployed → AegisOps verifies recovery →
+Engram records the validated history.
+
 ## Phase 0 — Foundation (Complete)
 
 - Repository bootstrap
@@ -105,31 +130,26 @@
 PatchForge memory, large benchmarks, automatic improvement adoption, Kubernetes, Engram,
 and free-form multi-agent planning remain deferred.
 
-## Later Phases
+## After PatchForge v1
 
-Execution order after PatchForge v1 (this file is the authoritative sequence):
+Each step needs explicit owner authorization:
 
-1. AegisOps specialist agents, verifier, and approval-gated remediation with recovery
-   verification, once the single-investigator baseline justifies decomposition
-2. Kubernetes/kind lab, Kubernetes tools, and Kubernetes failure benchmark
-3. SentinelQA: requirements-to-tests, browser/API evidence, bug reports, and a selector/
-   DOM mutation resilience benchmark
-4. Engram v2: temporal validity, supersession, contradiction handling, and validated
-   cross-agent knowledge exchange (see `BRAIN.md`)
-5. Integrated NEXUS loop: AegisOps detects and verifies an incident -> engineering issue
-   -> PatchForge tested fix -> SentinelQA validation -> CI -> approved deployment ->
-   AegisOps verifies recovery -> Engram records the validated lesson
-6. Portfolio polish based only on measured results
-
-No unrelated phase begins while PatchForge v1 is being brought online. Evidence may
-reorder later phases; record such changes here and in an ADR.
+1. SentinelQA independent validation (Phase 12), starting from PatchForge Milestone J
+2. Bounded daily self-improvement: at most one measured proposal per day as a PR, with a
+   held-out comparison, SentinelQA review, and human approval; it never merges itself
+3. Deferred, in an order chosen when authorized:
+   - Phase 9: AegisOps specialists, verifier, and approval-gated remediation with
+     recovery verification
+   - Phase 10: Kubernetes/kind lab, tools, and failure benchmark
+   - Phase 13: Engram v2 with temporal knowledge and validated exchange
+   - Phase 14: integrated closed loop
+   - Phase 15: portfolio polish
 
 ## Known Limitations
 
-- Brain v1 is SQLite, single-agent, episodic/procedural only; semantic, reflective,
-  shared, vector, and graph memory are absent. Five scenarios cannot estimate learning
-  effects; the official memoryless/placebo study remains deferred (ADR 0008).
+- Brain v1 is local SQLite, single-agent, episodic/procedural only; five scenarios cannot
+  estimate learning effects (ADR 0008, `BRAIN.md`).
 - Atlas v1 is local single-node: no remote API, scheduler, heartbeat, distributed claim,
   credential broker, or PostgreSQL backend (ADR 0009).
-- PatchForge has no Runtime or model adapter yet. `DockerSandbox` trusts the
-  operator-selected content-addressed image; image provenance/signing is outside v1.
+- `DockerSandbox` trusts the operator-selected content-addressed image; image
+  provenance/signing is outside PatchForge v1.

@@ -12,9 +12,9 @@ its frozen negative calibration. Phase 8 adds the Atlas thin control-plane found
 for deterministic reviewed agent jobs. The accelerated PatchForge track now has strict
 contracts, disposable workspaces, sandboxed execution, and a typed ToolGateway.
 
-Contributor and coding-agent instructions are in `AGENTS.md`; memory architecture is
-governed by `BRAIN.md`, execution order by `ROADMAP.md`, and accepted design decisions
-by `docs/adr/`. Current state and the next step are in `CODEX_HANDOFF.md`.
+Coding agents start at `AGENTS.md`. Execution order is in `ROADMAP.md`, accepted
+decisions are in `docs/adr/`, memory architecture is in `BRAIN.md`, and the current
+checkpoint is in `CODEX_HANDOFF.md`.
 
 ## AegisOps Lab
 
@@ -204,9 +204,9 @@ It receives only the eleven registered diagnostic tools and returns a strict dia
 covering status, component, failure class, hypotheses, evidence references,
 alternatives, confidence, and the next read-only diagnostic action. Every evidence
 claim names a recorded tool call and an exact result value. There are no handoffs,
-sessions, write/remediation tools, or ambient machine capabilities. Phase 7 can add
-private memory context behind a separate default-off Brain toggle; it does not change
-the investigator's tools, permissions, model, or execution budgets.
+sessions, write/remediation tools, or ambient machine capabilities. Phase 7 Brain v1
+memory is implemented behind a separate toggle that is off by default. Enabling it does
+not change the investigator's tools, permissions, model, or execution budgets.
 
 Live execution is opt-in and requires `NEXUS_AGENT_ENABLED=true` plus an
 `OPENAI_API_KEY` in the untracked environment. Run one generic investigation with:
