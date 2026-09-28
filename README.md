@@ -12,8 +12,9 @@ its frozen negative calibration. Phase 8 adds the Atlas thin control-plane found
 for deterministic reviewed agent jobs. The accelerated PatchForge track now has strict
 contracts, disposable workspaces, sandboxed execution, and a typed ToolGateway.
 
-The governing specifications are `NEXUS_PROJECT_INSTRUCTIONS.md`,
-`NEXUS_MASTER_BUILD_PROMPT.md`, and `BRAIN.md`.
+Contributor and coding-agent instructions are in `AGENTS.md`; memory architecture is
+governed by `BRAIN.md`, execution order by `ROADMAP.md`, and accepted design decisions
+by `docs/adr/`. Current state and the next step are in `CODEX_HANDOFF.md`.
 
 ## AegisOps Lab
 

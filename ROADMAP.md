@@ -107,6 +107,29 @@ and free-form multi-agent planning remain deferred.
 
 ## Later Phases
 
-The remaining sequence is governed by `NEXUS_MASTER_BUILD_PROMPT.md`, with the explicitly
-authorized accelerated PatchForge ordering recorded above. No unrelated phase begins
-while PatchForge v1 is being brought online.
+Execution order after PatchForge v1 (this file is the authoritative sequence):
+
+1. AegisOps specialist agents, verifier, and approval-gated remediation with recovery
+   verification, once the single-investigator baseline justifies decomposition
+2. Kubernetes/kind lab, Kubernetes tools, and Kubernetes failure benchmark
+3. SentinelQA: requirements-to-tests, browser/API evidence, bug reports, and a selector/
+   DOM mutation resilience benchmark
+4. Engram v2: temporal validity, supersession, contradiction handling, and validated
+   cross-agent knowledge exchange (see `BRAIN.md`)
+5. Integrated NEXUS loop: AegisOps detects and verifies an incident -> engineering issue
+   -> PatchForge tested fix -> SentinelQA validation -> CI -> approved deployment ->
+   AegisOps verifies recovery -> Engram records the validated lesson
+6. Portfolio polish based only on measured results
+
+No unrelated phase begins while PatchForge v1 is being brought online. Evidence may
+reorder later phases; record such changes here and in an ADR.
+
+## Known Limitations
+
+- Brain v1 is SQLite, single-agent, episodic/procedural only; semantic, reflective,
+  shared, vector, and graph memory are absent. Five scenarios cannot estimate learning
+  effects; the official memoryless/placebo study remains deferred (ADR 0008).
+- Atlas v1 is local single-node: no remote API, scheduler, heartbeat, distributed claim,
+  credential broker, or PostgreSQL backend (ADR 0009).
+- PatchForge has no Runtime or model adapter yet. `DockerSandbox` trusts the
+  operator-selected content-addressed image; image provenance/signing is outside v1.

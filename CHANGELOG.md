@@ -4,6 +4,14 @@ All meaningful changes to NEXUS are recorded here.
 
 ## Unreleased
 
+### Changed
+
+- Repository context slimming: added a concise `AGENTS.md` router (imported by
+  `CLAUDE.md`), compacted `CODEX_HANDOFF.md` to current state only, moved later-phase
+  execution order and known limitations into `ROADMAP.md`, and removed the superseded
+  `NEXUS_PROJECT_INSTRUCTIONS.md`, `NEXUS_MASTER_BUILD_PROMPT.md`, and `PROJECT_STATE.md`.
+  The PatchForge policy fixture now protects `AGENTS.md`. No runtime behavior changed.
+
 ### Added
 
 - PatchForge v1 Milestone D `ToolGateway` with strict typed read, compare-and-swap

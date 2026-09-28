@@ -23,3 +23,15 @@ build/
 
 .DS_Store
 Thumbs.db
+
+# Local agent and scratch artifacts
+CLAUDE.local.md
+.claude/settings.local.json
+*.orig
+*.rej
+*.patch
+*.diff
+
+# Local databases outside .nexus/
+*.sqlite3
+*.db
