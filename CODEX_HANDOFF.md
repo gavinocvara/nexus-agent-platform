@@ -11,7 +11,9 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 - Milestone D release: `16a58f338267237c261233764e167433b3cb28c3`;
   GitHub Actions run `36399394926` passed both jobs.
 - Completed milestone: PatchForge Milestone E - Runtime.
-- Runtime release: the commit containing this file; resolve with
+- Runtime release: `7222297ed9e40224c6bf5558fcf37030b19ba7ee`;
+  GitHub Actions run `36459625231` passed both jobs.
+- Release-verification checkpoint: the commit containing this file; resolve with
   `git rev-parse HEAD`.
 
 ## Completed In Milestone E
@@ -86,6 +88,8 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
   - scenario validation: **5 scenarios validated**.
   - Compose configuration: **passed**.
   - Compose integration: **23 passed in 183.34s**.
+- GitHub Actions run `36459625231` for release commit `7222297`: `validate` and
+  `compose-integration` **passed**.
 - The two full-suite skips are Milestone D hardening fixtures that create `a:b.py`,
   which Windows cannot represent. They remain active on Linux CI. The production path
   rule was not weakened.
@@ -95,9 +99,8 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 ## Exact Next Step
 
-Push the NEXUS 0.14.0 Milestone E release and require both GitHub Actions jobs green.
-After release verification, the exact next task is Milestone F - Attestor. Do not begin
-it in the Milestone E release session.
+Milestone E is released and verified. The exact next task is Milestone F - Attestor.
+Do not begin it in the Milestone E release session.
 
 ## Critical Constraints
 

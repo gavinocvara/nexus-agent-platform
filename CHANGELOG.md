@@ -8,7 +8,7 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
-## 0.14.0 — PatchForge Milestone E: Runtime (release commit)
+## 0.14.0 — PatchForge Milestone E: Runtime (`7222297`)
 
 - Closed deterministic lifecycle from `created` through `closed`, with explicit
   runtime-owned transition records and only the bounded
