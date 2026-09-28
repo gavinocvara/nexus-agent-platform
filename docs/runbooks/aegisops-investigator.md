@@ -4,7 +4,9 @@
 
 `aegisops.investigator` is one read-only agent. It can invoke only the eleven tools in
 the Phase 4 diagnostic registry. It has no shell, filesystem, browser, web search,
-MCP, SQL, Docker, GitHub, lab control, memory, handoff, code execution, or write tool.
+MCP, SQL, Docker, GitHub, lab control, handoff, code execution, or write tool. Brain v1
+memory is off by default and is enabled only through the guarded paths in
+`aegisops-brain-v1.md`.
 It reports diagnoses and read-only next diagnostic steps; it cannot remediate.
 
 ## Configuration
@@ -45,8 +47,9 @@ model errors produce explicit statuses and exit `2`.
 
 ## Live Evaluation
 
-With Compose healthy and the live-agent settings enabled, run preflight and explicitly
-authorize the five-scenario smoke:
+With Compose healthy and the live-agent settings enabled, set
+`NEXUS_AGENT_MODEL=gpt-5.6-sol` (preflight requires the frozen baseline model), then run
+preflight and explicitly authorize the five-scenario smoke:
 
 ```powershell
 py -m nexus.evaluation.aegisops preflight

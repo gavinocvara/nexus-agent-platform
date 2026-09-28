@@ -240,3 +240,36 @@ No further live Phase 7 call is authorized. The official 100-plus-run controlled
 retrieval tuning, memory correction, and Phase 8 remain deferred pending explicit owner
 authorization and a new pre-registered work item.
 
+
+## Addendum: Independent Read-Only Review (2026-09-27, recorded 2026-09-28)
+
+This addendum records an independent parallel-track review of the same ignored
+artifacts. It does not modify the observations, the hashes, or the disposition above.
+No live call was made.
+
+- The rendered memory context was reproduced byte-for-byte from the frozen snapshot with
+  the repository retrieval code (SHA-256
+  `f12eecc7133e8fce2b0e0df98823a9930fa4fff915457401182c81859251b5ce`, 1,677 characters).
+- Path similarity to the stored procedure was measured as ordered agreement between each
+  run's first-use tool order and `candidate_next_steps`. It was no higher in the frozen
+  smoke than in memoryless Phase 6 runs: Kendall tau 0.46 for the smoke versus 0.72 for
+  the 15 baseline runs. No run in any session made an exact duplicate call; repeated tool
+  names were calls for different services or windows. The observed paths are therefore
+  not evidence of replaying the stored procedure.
+- The distinctive observation is first-turn parallel fan-out. Every smoke run issued
+  8-10 diagnostic calls in its first model turn. None of the 20 memoryless Phase 6 runs
+  (baseline and smoke) did so; their first turns issued 1, 5, or 7 calls. The investigator
+  instructions do not state the 12-call budget, SDK parallel tool calls are enabled, and
+  crossing the budget aborts the run. A first batch of 8 followed by a typical second
+  batch therefore exhausts the budget before a final answer turn.
+- The rendered untrusted-memory preamble contains the sentence "Validate every current
+  condition with the registered diagnostic tools." That wrapper text is a candidate cause
+  in its own right, separate from memory content.
+- Competing untested explanations for the wider fan-out: session-to-session variance or
+  provider drift between 2026-09-24 and 2026-09-27; extra context length; the wrapper
+  sentence; and the procedural checklist content.
+- The smallest discriminating design identified is contemporaneous and interleaved:
+  memoryless, the frozen Brain snapshot, a length-matched placebo snapshot, and
+  optionally a wrapper-only arm. It runs 5 scenarios x 2 repetitions per arm and uses
+  first-turn batch size, budget exhaustion, and turns as pre-registered primary outcomes.
+  It is not authorized.

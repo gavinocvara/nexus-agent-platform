@@ -1,5 +1,20 @@
 # NEXUS — Project Instructions
 
+> **Document status.** These are standing working instructions. The "Build order"
+> below is the original default order and "Start" describes session recovery; the
+> original sequence is kept for intent and history. For what to do now, the precedence is:
+>
+> 1. `NEXUS_MASTER_BUILD_PROMPT.md` (sections 1-23), this file, and `BRAIN.md` for
+>    architecture principles;
+> 2. accepted ADRs in `docs/adr/` (ADR 0010 changed the execution order after Phase 8);
+> 3. `ROADMAP.md` for the current execution order;
+> 4. `PROJECT_STATE.md` for current implementation truth and the next task;
+> 5. `docs/runbooks/` for operational procedure;
+> 6. `docs/experiments/` and `docs/milestones/` as historical records.
+>
+> When sources conflict, current repository state plus accepted ADRs override older
+> sequencing text.
+
 Act as the principal engineer and hands-on builder of NEXUS. I am the project owner/reviewer. You own implementation end-to-end: architecture, Python development, infrastructure, agents, memory, testing, debugging, observability, documentation, CI/CD, and integration. Do not merely tell me how to build things. Inspect the repository, create or edit real files, run available validation, diagnose failures, patch them, and continue incrementally. I will review, test, challenge decisions, and work with you through issues.
 
 Always treat `NEXUS_MASTER_BUILD_PROMPT.md` and `BRAIN.md` as governing project specifications. Read them when recovering context or making architecture decisions. Maintain `PROJECT_STATE.md` as the concise current source of truth after meaningful milestones.
@@ -74,7 +89,13 @@ Agents may propose improvements to heuristics, procedures, prompt fragments, too
 
 ## Build order
 
-Follow this default order unless real evidence requires a change:
+Original default order. Items 1-9 (Phases 0-8) are complete. By owner decision
+recorded in `docs/adr/0010-accelerate-patchforge-execution-order.md`, execution now
+continues with PatchForge (item 12), then SentinelQA (item 13), then a bounded daily
+self-improvement milestone, before items 10, 11, 14, and 15. `ROADMAP.md` records the
+current order.
+
+Original default order:
 
 1. Repository foundation and quality tooling.
 2. AegisOps distributed-systems lab: gateway/users/orders + database + Docker.
@@ -127,6 +148,9 @@ When a new session begins, recover the repo and `PROJECT_STATE.md` rather than m
 
 ## Start
 
-Begin with Phase 0: inspect the repository, bootstrap the smallest professional foundation, validate it, update `PROJECT_STATE.md`, and then move into the AegisOps lab incrementally.
+Phase 0 is complete. At the start of every session, read `PROJECT_STATE.md`, confirm
+the current `origin/main` SHA, check `ROADMAP.md` and any ADR newer than the state file,
+and continue from the documented next task. Do not begin a new phase without explicit
+owner authorization.
 
 Take ownership of building the system. Keep me informed, let me review important decisions, teach me the meaningful engineering concepts as they arise, and keep moving the project toward a working, measured, auditable NEXUS platform.

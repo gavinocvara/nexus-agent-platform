@@ -3,7 +3,8 @@
 ## Boundary
 
 Phase 6 measures the frozen `aegisops-memoryless-v1` investigator. It does not add
-memory, agents, tools, remediation, or hidden-reasoning collection. Live output is
+memory, agents, tools, remediation, or hidden-reasoning collection. Brain-enabled
+benchmarking is covered in `aegisops-brain-v1.md`. Live output is
 local and ignored by Git under `.nexus/benchmarks/aegisops/`.
 
 ## Configure Safely
@@ -12,9 +13,13 @@ Put local settings in the ignored `.env` or in the process environment:
 
 ```text
 NEXUS_AGENT_ENABLED=true
-NEXUS_AGENT_MODEL=gpt-5-mini
+NEXUS_AGENT_MODEL=gpt-5.6-sol
 OPENAI_API_KEY=<local secret>
 ```
+
+Preflight requires the frozen baseline model `gpt-5.6-sol` and the frozen 12-call,
+10-turn, 120-second contract. The package default `gpt-5-mini` is for ad-hoc
+investigation only.
 
 Never put the key on a command line, in a committed file, or in a benchmark artifact.
 Optional benchmark settings are `NEXUS_BENCHMARK_ROOT`,
@@ -84,7 +89,7 @@ Session files are:
 
 ```text
 .nexus/benchmarks/aegisops/<session-id>/manifest.json
-.nexus/benchmarks/aegisops/<session-id>/runs/run-001.json
+.nexus/benchmarks/aegisops/<session-id>/runs/run-0001.json
 .nexus/benchmarks/aegisops/<session-id>/summary.json
 .nexus/benchmarks/aegisops/comparisons/*.json
 .nexus/benchmarks/aegisops/baselines/*.json
@@ -114,8 +119,11 @@ After reviewing a genuine, complete, clean-tree live baseline, lock it explicitl
 py -m nexus.evaluation.aegisops lock <session-id> --name aegisops-memoryless-v1
 ```
 
-The lock contains identifiers, schema versions, run count, summary path, and summary
-hash only. Existing lock files are never overwritten.
+New locks use lock schema 2: identifiers, schema versions, run count, a POSIX path
+relative to the benchmark root, and SHA-256 digests of the manifest, summary, and every
+run file. The historical `aegisops-memoryless-v1` lock predates schema 2, keeps its
+original absolute path, and resolves by session ID with its summary digest verified.
+Existing lock files are never overwritten. Brain-enabled sessions cannot be locked.
 
 ## Cleanup
 

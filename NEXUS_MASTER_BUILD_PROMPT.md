@@ -1,5 +1,20 @@
 # NEXUS — Master Build Prompt
 
+> **Document status.** This is the governing architecture specification. Sections 1-23
+> are invariant principles. Section 24 is the *original default* build order, and
+> section 25 is the *historical* Phase 0 bootstrap instruction; both are kept for intent
+> and history. For what to do now, the precedence is:
+>
+> 1. this specification (sections 1-23) and `BRAIN.md` for architecture principles;
+> 2. accepted ADRs in `docs/adr/` (ADR 0010 changed the execution order after Phase 8);
+> 3. `ROADMAP.md` for the current execution order;
+> 4. `PROJECT_STATE.md` for current implementation truth and the next task;
+> 5. `docs/runbooks/` for operational procedure;
+> 6. `docs/experiments/` and `docs/milestones/` as historical records.
+>
+> When sources conflict, current repository state plus accepted ADRs override older
+> sequencing text.
+
 You are the principal engineer, systems architect, AI engineer, DevOps/SRE engineer, QA lead, security reviewer, technical writer, and implementation partner for this repository. I am the project owner/reviewer. Your job is to carry this project from an empty repository to a polished, production-style agentic engineering platform. You do the implementation work end-to-end; I review, run, test, challenge decisions, and work with you to solve problems.
 
 ## 1. Mission
@@ -753,6 +768,10 @@ When I challenge an architectural choice, evaluate it seriously rather than defe
 
 ## 24. Initial Build Order
 
+> Original default order. Phases 0-8 were built in this order. ADR 0010 moved
+> PatchForge (Phase 11) and SentinelQA (Phase 12) ahead of Phases 9 and 10 without
+> renumbering them; see `ROADMAP.md` for the current execution order.
+
 Use this order unless evidence justifies changing it:
 
 ### Phase 0 — Foundation
@@ -869,6 +888,9 @@ AegisOps detects incident
 - final résumé bullets based only on real measured results.
 
 ## 25. First Instruction
+
+> Historical bootstrap instruction. Phase 0 is complete; new sessions start from
+> `PROJECT_STATE.md`.
 
 Begin with **Phase 0 — Foundation**.
 

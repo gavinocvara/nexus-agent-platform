@@ -12,6 +12,36 @@ The key design rule is:
 
 Each agent owns a private memory namespace. Agents do not casually read or rewrite one another’s memories. Useful knowledge crosses agent boundaries only through an auditable promotion and retrieval layer.
 
+## Implementation Status
+
+Everything after this section is the target architecture. What exists today is Brain
+v1, completed in Phase 7 (ADR 0008):
+
+- Implemented: one private namespace, `aegisops.investigator`, with typed episodic
+  and unverified candidate-procedural records. Every record carries provenance, a
+  validity interval, lifecycle and dispute state, and a version. The store is local
+  SQLite under ignored `.nexus/brain/`. The writer accepts only the allowlisted
+  `AgentObservableRun` projection. The modes are `disabled` (the default), `learn`
+  (guarded), and `frozen_eval` (read-only, hash-verified). Brain failures fail closed.
+- Not implemented: working, semantic, reflective, and identity memory classes; the
+  knowledge exchange; promotion; consolidation; vectors or graphs; and cross-agent
+  access.
+- Frozen snapshot rules: evaluation uses a read-only snapshot whose canonical logical
+  SHA-256 is verified before and after every run. Evaluation runs write nothing. A
+  Brain session can never be locked as an official baseline.
+- Demonstrated behavior (negative calibration): retrieval `bounded-lexical-v1` scores
+  records against one generic incident prompt. That prompt always matched the
+  procedural record through its hard-coded trigger terms and never matched the
+  episodic record. Retrieval was therefore a fixed context prefix, not
+  incident-specific recall. The frozen five-scenario smoke completed 0/5
+  investigations. No contemporaneous memoryless or placebo arm was run, so no causal
+  benefit or harm is claimed. Evidence: `docs/experiments/brain-v1-calibration-report.md`.
+- Binding lessons for future agents: every agent gets its own namespace, and no agent
+  reuses AegisOps records. Retrieval must be keyed on concrete task signals at defined
+  points, not on a generic prompt, so `bounded-lexical-v1` must not be copied as-is.
+  Verified outcomes outrank self-reported conclusions. Any memory-behavior claim needs
+  a contemporaneous control, a placebo when context is added, and pre-registration.
+
 ## Why Not One Giant Shared Brain?
 
 A single mutable shared memory store is easy to build but creates serious problems:
@@ -386,7 +416,9 @@ For procedural memory, compare task success before and after a proposed lesson.
 ## Storage Evolution
 
 ### Brain v1
-Use PostgreSQL tables with strong schemas.
+Original plan: PostgreSQL tables with strong schemas. As built, Brain v1 uses a local
+typed SQLite store behind a replaceable storage boundary, so memory survives lab
+database resets and faults. PostgreSQL or Engram storage is deferred.
 
 Add pgvector only when semantic retrieval is useful.
 
@@ -402,6 +434,8 @@ Add explicit relationships and temporal graph capabilities when real queries jus
 Do not begin with a complex graph database merely because the word “memory” sounds like a graph problem.
 
 ## Suggested Repository Shape
+
+Target shape. Brain v1 is implemented as the `src/nexus/brain` package.
 
 ```text
 brain/
