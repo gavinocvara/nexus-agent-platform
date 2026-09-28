@@ -70,9 +70,22 @@
 - Frozen smoke recorded 0/5 completion and 5/5 tool-budget exhaustion with the same
   unverified procedural record retrieved; no causal improvement claim is supported
 
+## Phase 8 — Atlas Thin Control Plane Foundation (Complete)
+
+- Strict typed jobs with source identity, bounded budgets, capabilities, results,
+  failures, approval state, timestamps, revisions, and audit history
+- Closed deterministic lifecycle with explicit review, human decision, terminal
+  closeout, and expired-lease recovery
+- Local transactional SQLite persistence with idempotent commands, optimistic
+  concurrency, canonical snapshots, and append-only audit guards
+- Explicit agent/reviewer policy registry with no ambient tools or unrestricted shell
+- Typed `AgentRuntime`, `JobDispatch`, `PatchResult`, and `ReviewResult` boundaries for
+  future PatchForge and SentinelQA registration
+- No scheduler, network service, deployment, remediation, merge, model call, shared
+  memory, Engram, Kubernetes, or PatchForge business logic
+
 ## Later Phases
 
-The full sequence is governed by `NEXUS_MASTER_BUILD_PROMPT.md`: Brain live calibration,
-Atlas v1, AegisOps remediation, Kubernetes, PatchForge,
-SentinelQA, Engram evolution, and integrated NEXUS workflows. Brain v1 should not
-begin without a genuine baseline unless the project owner explicitly chooses to.
+The remaining sequence is governed by `NEXUS_MASTER_BUILD_PROMPT.md`: AegisOps
+remediation, Kubernetes, PatchForge, SentinelQA, Engram evolution, and integrated
+NEXUS workflows. No later phase begins without explicit project-owner authorization.

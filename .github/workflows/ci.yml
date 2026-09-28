@@ -36,6 +36,9 @@ jobs:
       - name: Validate private Brain boundary
         run: python -m pytest tests/unit/test_brain.py
 
+      - name: Validate Atlas control plane
+        run: python -m pytest tests/unit/test_atlas_*.py
+
       - name: Validate deterministic investigator boundary
         run: python -m pytest tests/unit/test_aegisops_contracts.py tests/unit/test_aegisops_runtime.py tests/unit/test_aegisops_evaluation.py
 

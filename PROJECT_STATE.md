@@ -2,10 +2,12 @@
 
 ## Current Milestone
 
-Phase 7 - Agent-Private Brain v1 is complete with a documented negative behavioral
-calibration and known retrieval limitation. The single targeted learn run and single
-authorized five-scenario frozen smoke are complete. No further live Phase 7 call,
-official controlled study, behavior tuning, or Phase 8 work is authorized.
+Phase 8 - Atlas Thin Control Plane Foundation is complete. Phase 7 Brain v1 is
+accepted complete with its documented negative behavioral calibration and preserved
+frozen evidence.
+Atlas v1 now provides the minimum deterministic job, policy, persistence, approval,
+recovery, and audit boundary needed for a future PatchForge runtime. Phase 9 and
+PatchForge business logic have not begun.
 
 The frozen Phase 5 investigator and official Phase 6 memoryless baseline remain the
 comparison control. Phase 7 does not change the model, investigator instructions,
@@ -14,16 +16,18 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 
 ## Repository
 
-- Phase 7 working clone: `C:\Users\arman\Downloads\nexus-agent-platform\phase7-worktree`
+- Active working clone: `C:\Users\arman\Downloads\nexus-agent-platform\phase7-worktree`
 - Remote: `https://github.com/gavinocvara/nexus-agent-platform.git`
 - Branch: `main`
 - Phase 7 starting point: `52bd5f47dfbf5591e5263911b1c64dab66158d90`
-- Package version: `0.8.1`
+- Package version: `0.9.0`
 - Accepted Phase 6 baseline-record checkpoint: `5c0200d`
 - Phase 7 implementation checkpoint: `a7b6f5c1fbfc1e218cfabb1d78ad8d830e2bc17c`
 - Phase 7 validation handoff: the commit containing this document
 - Post-calibration hardening: `15eff373cd92bcfd37611c3c7d9dd59f4c9e5efc`
 - Frozen-smoke implementation identity: `f77313e7e624b68750578b2b25b90ba8123fab62`
+- Phase 7 postmortem checkpoint: `71de1de99985a52c9cbb59a0b6e1950c83229500`
+- Phase 8 validation checkpoint: the commit containing this document
 
 ## Locked Phase 6 Baseline
 
@@ -83,6 +87,38 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
   hashes and zero writes. Benchmark schema 3 remains backward compatible.
 - `targeted` performs one named evaluator-controlled investigation. Brain smoke and
   baseline commands require frozen read-only storage to prevent within-session learning.
+
+## Atlas v1
+
+- A library-first `nexus.atlas` package defines strict schema-version-1 jobs, task
+  requests, immutable source repository/SHA identity, budgets, capabilities, structured
+  generic and patch results, reviewer output, human decisions, typed failures,
+  timestamps, execution leases, and optimistic revisions.
+- The closed lifecycle is `created -> validated -> queued -> running -> awaiting_review`,
+  followed by `approved -> completed` or `rejected -> failed`. Explicit failure edges
+  exist from every nonterminal execution state. The only recovery edge is
+  `running -> queued` after lease expiry.
+- `AgentPolicy` and `AgentRegistry` require named identities, repository prefixes,
+  maximum budgets, and capability subsets. The Phase 8 vocabulary grants source read,
+  worktree write, bounded test execution, patch creation, review read, or review submit;
+  it has no unrestricted shell, merge, deploy, production remediation, Kubernetes,
+  memory, or credential capability.
+- SQLite at `.nexus/atlas/atlas.sqlite3` stores canonical complete job snapshots,
+  successful command-idempotency records, and typed audit events in one immediate
+  transaction. Optimistic revisions prevent lost updates. Exact command replay returns
+  the original response; conflicting reuse fails.
+- Audit events carry deterministic IDs, per-job sequences, resulting revisions, typed
+  actors, command IDs, timestamps, before/after states, and discriminated event data.
+  SQLite triggers reject update or deletion of audit and command-idempotency records.
+- A durable running lease makes interrupted state inspectable. Only an explicit Atlas
+  system command can requeue an expired lease; startup performs no silent mutation.
+- `AgentRuntimeDescriptor`, `JobDispatch`, and the async `AgentRuntime` protocol are the
+  future runtime registration boundary. `PatchResult` and `ReviewResult` support the
+  planned PatchForge -> SentinelQA -> human approval flow without implementing either
+  agent.
+- Atlas v1 is not a service or orchestrator. It performs no model calls, scheduling,
+  tool execution, repository mutation, merging, deployment, shared-memory access, or
+  free-form multi-agent planning.
 
 ## Experimental Design
 
@@ -157,6 +193,22 @@ py -m pytest -m integration tests/integration
 
 ## Latest Validation
 
+- Phase 8 version 0.9.0 validation on 2026-09-27: the editable package installs and
+  `pip check` passes; all 137 files pass Ruff formatting; Ruff lint passes; strict mypy
+  reports no issues in 77 source files; all 266 non-integration tests pass with 20
+  integration tests deselected. The focused Atlas suite passes all 117 tests.
+- Atlas validation covers every ordered lifecycle state pair, strict model rejection,
+  capability/budget/repository/actor policy, exact idempotent replay and conflict,
+  optimistic concurrency, immutable audit and command rows, durable restart and expired-
+  lease recovery, PatchForge/SentinelQA/human flow contracts, and all frozen Phase 5/7
+  behavior hashes. No live model call was made.
+- With process-local values from `.env.example`, all 20 existing Compose integration
+  tests pass. An earlier attempt omitted those variables after the suite's deliberate
+  volume-reset restart and consequently produced connection-refused failures; restoring
+  the documented environment produced the clean full pass without a code change.
+- All five scenario documents and Compose configuration validate. Compose emitted only
+  the expected warnings when the local PostgreSQL variables were absent during the
+  configuration-only check.
 - Read-only Phase 7 postmortem on 2026-09-27 parsed the frozen canonical snapshot and all
   five durable smoke run records. The procedural record scored 22 from two lexical
   overlaps plus its type bonus; the episodic record had zero overlap and was excluded.
@@ -207,7 +259,7 @@ py -m pytest -m integration tests/integration
   prevented startup. No code was changed for either environmental issue; supplying the
   documented process-local values produced the clean 20/20 result above.
 
-## Recoverable Phase 7 Checkpoint
+## Preserved Phase 7 Evidence
 
 Complete in this checkpoint:
 
@@ -235,10 +287,8 @@ Deferred and still requiring separate authorization:
 - Any causal test of procedural anchoring requires the already designed, pre-registered
   contemporaneous memoryless and length-matched placebo arms. The official 100-plus-run
   study remains deferred.
-- Phase 8 requires explicit owner authorization after acceptance of this disposition.
-
-Exact continuation point: owner review of the Phase 7 negative-calibration disposition.
-Do not alter the Phase 6 lock, frozen Brain snapshot, protocol JSON, or frozen behavior.
+Phase 7 is accepted complete. Do not alter the Phase 6 lock, frozen Brain snapshot,
+protocol JSON, historical self-report, or frozen behavior while continuing the platform.
 
 ## Independent Review Disposition
 
@@ -276,6 +326,8 @@ requirement is incompatible with the architecture.
 - Frozen Brain snapshots are read-only and checked against an operator-recorded canonical
   SHA-256 before and after every evaluation run.
 - The Phase 6 baseline lock and source session remain immutable historical evidence.
+- Atlas state is local under ignored `.nexus/atlas/`; no job database, task payload,
+  result artifact, review, or approval record is committed.
 
 ## Known Limitations
 
@@ -294,9 +346,13 @@ requirement is incompatible with the architecture.
 - SQLite supports this one-agent local experiment; PostgreSQL/Engram migration is deferred.
 - No semantic, reflective, shared, vector, or graph memory exists in Brain v1.
 - Five scenarios are insufficient for independent learning-effect estimates.
+- Atlas v1 is deliberately single-node. It has no remote API, scheduler, worker heartbeat,
+  distributed claim protocol, credential broker, or PostgreSQL control-plane backend.
 
 ## Next Step
 
-Present the Phase 7 disposition and negative-calibration report for owner acceptance. No
-additional learn run, smoke, official Brain benchmark, large held-out study, Brain
-behavior change, or Phase 8 work is authorized.
+Register a future PatchForge implementation behind `AgentRuntime`, accept only
+`JobDispatch` from a running leased Atlas job, and return the existing typed
+`PatchResult`. SentinelQA review and human approval must remain separate later steps.
+Do not implement PatchForge, begin Phase 9, add unrestricted execution, or alter frozen
+Brain behavior without explicit authorization.

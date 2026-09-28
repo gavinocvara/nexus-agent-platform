@@ -6,6 +6,16 @@ All meaningful changes to NEXUS are recorded here.
 
 ### Added
 
+- Atlas v1 thin control-plane contracts for typed jobs, source revisions, budgets,
+  capabilities, structured generic/patch results, SentinelQA-compatible reviews, human
+  approval, typed failure, execution leases, and runtime dispatch adapters.
+- A closed deterministic job state machine, explicit agent policy registry, transactional
+  SQLite persistence, optimistic revisions, command replay/conflict protection, explicit
+  expired-lease recovery, and append-only typed audit events protected by database
+  triggers.
+- Exhaustive transition-pair tests plus deterministic policy, idempotency, durability,
+  recovery, approval, audit, PatchForge-interface, and frozen-behavior isolation coverage.
+
 - Brain v1 private episodic and procedural memory for `aegisops.investigator`, with
   strict provenance, namespace isolation, lifecycle state, deterministic retrieval,
   prompt-injection framing, secret rejection, and durable SQLite storage.
@@ -101,6 +111,10 @@ All meaningful changes to NEXUS are recorded here.
   and integration tests.
 
 ### Changed
+
+- Advanced the package to version 0.9.0 for the Phase 8 Atlas thin control-plane
+  foundation. Atlas remains a local library and introduces no service, model call,
+  scheduler, unrestricted shell, deployment, remediation, or agent business logic.
 
 - Advanced the package to version 0.8.1 after the targeted Brain calibration. Legacy
   analysis-version-1 summaries now preserve unavailable Phase 7 metrics as `null`, so

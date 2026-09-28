@@ -7,7 +7,9 @@ incident laboratory with isolated evaluator ground truth. Phase 3 adds operation
 metrics, logs, and distributed traces without exposing those answers.
 Phase 4 adds bounded read-only diagnostics, Phase 5 adds one evidence-grounded
 AegisOps investigator, and Phase 6 adds reproducible benchmark history and comparison
-without changing that investigator's behavior.
+without changing that investigator's behavior. Phase 7 adds private Brain v1 memory and
+its frozen negative calibration. Phase 8 adds the Atlas thin control-plane foundation
+for deterministic reviewed agent jobs.
 
 The governing specifications are `NEXUS_PROJECT_INSTRUCTIONS.md`,
 `NEXUS_MASTER_BUILD_PROMPT.md`, and `BRAIN.md`.
@@ -88,6 +90,7 @@ Important variables are:
 - `NEXUS_METRICS_ENABLED`
 - `NEXUS_OTEL_ENABLED`
 - `NEXUS_OTEL_EXPORTER_ENDPOINT`
+- `NEXUS_ATLAS_DATABASE_PATH`
 - `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` for Compose substitution
 
 ## Operations Foundation
@@ -287,3 +290,29 @@ Legacy analysis-version-1 summaries expose Phase 7-only aggregate metrics as una
 not zero. In particular, the historical Phase 6 `abstention_rate` combines genuine
 abstentions with tool-budget failures and must be interpreted alongside the separately
 recorded `tool_budget_failure_rate`.
+
+## Atlas Thin Control Plane
+
+Phase 8 provides a library-first `nexus.atlas` control plane. It does not run models,
+schedule workers, expose a network API, or grant tools. Atlas defines strict jobs,
+source revisions, budgets, capabilities, structured results, reviews, approvals,
+failures, leases, and typed audit events around this deterministic path:
+
+```text
+created -> validated -> queued -> running -> awaiting_review
+        -> approved -> completed
+        -> rejected -> failed
+```
+
+Every successful command atomically updates a canonical job snapshot, appends one typed
+audit event, and stores an idempotent command response in local SQLite. Exact command
+replay returns the original response; conflicting reuse and stale revisions fail. A
+running job can return to `queued` only through an explicit system command after its
+durable lease expires.
+
+Agent policies allow only named capabilities. Atlas v1 includes source read, worktree
+write, bounded test execution, patch creation, and review capabilities; it has no
+unrestricted shell, merge, deployment, production remediation, Kubernetes, or memory
+permission. `AgentRuntime`, `JobDispatch`, `PatchResult`, and `ReviewResult` form the
+future PatchForge/SentinelQA integration boundary. See
+`docs/adr/0009-atlas-thin-control-plane-foundation.md`.
