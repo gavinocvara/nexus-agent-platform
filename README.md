@@ -331,6 +331,20 @@ usage are runtime-attested and cross-checked by `PatchResult`. A successful resu
 only `patch_proposed`; PatchForge cannot approve, merge, deploy, or push to `main`.
 
 The repository profile defines argument-vector commands and a mandatory digest-pinned,
-networkless, secretless, non-root, resource-bounded sandbox policy. Workspace and Docker
-execution are the next milestones and are not claimed by the contract layer. See
+networkless, secretless, non-root, resource-bounded sandbox policy. Workspace isolation
+is implemented below; Docker execution remains the next milestone. See
 `docs/adr/0010-patchforge-v1-trustworthy-engineering-agent.md`.
+
+### Disposable Workspaces
+
+`WorkspaceManager` provisions a fresh local worktree at the task's exact source SHA and
+binds it to the canonical operator-owned repository profile. Git metadata lives in a
+separate bare control directory, so the execution worktree has no `.git` file or
+directory to expose to the future sandbox.
+
+All Git operations use fixed argument vectors, sanitized noninteractive configuration,
+disabled hooks and automatic line-ending conversion, explicit time/output bounds, and
+no shell. The manager derives deterministic binary diffs, stores a durable expiring
+lease, cleans up idempotently, and reaps only UUID-named expired workspaces with valid
+matching markers. Current coverage uses generated synthetic repositories; Docker
+execution is the next milestone.

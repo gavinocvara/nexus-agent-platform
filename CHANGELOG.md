@@ -6,6 +6,12 @@ All meaningful changes to NEXUS are recorded here.
 
 ### Added
 
+- PatchForge v1 Milestone B `WorkspaceManager` with exact-SHA disposable worktrees,
+  runtime-owned bare Git metadata outside the execution tree, deterministic bounded
+  diffs, durable leases, idempotent cleanup, and marker-verified orphan reaping.
+- A no-shell Git runner with sanitized noninteractive configuration, disabled hooks and
+  automatic line-ending conversion, bounded time/output, and synthetic-repository tests.
+
 - PatchForge v1 Milestone A contracts for engineering tasks, run identity, visible
   phase budgets, runtime-attested tool/test/reproduction/check/diff evidence, narrative-
   only agent reports, typed patch outcomes, and deterministic canonical hashes.
@@ -119,6 +125,8 @@ All meaningful changes to NEXUS are recorded here.
   and integration tests.
 
 ### Changed
+
+- Advanced the package to version 0.11.0 for the PatchForge workspace milestone.
 
 - Advanced the package to version 0.10.0 for the PatchForge v1 contract milestone.
 

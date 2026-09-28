@@ -2,11 +2,11 @@
 
 ## Current Milestone
 
-The accelerated PatchForge v1 track is active. Milestone A - Contracts is complete in
-the current checkpoint; Milestone B - WorkspaceManager is next. Atlas-min remains the
-outer job, policy, review, approval, persistence, and audit boundary. No PatchForge
-workspace, sandbox, tool gateway, runtime, model call, GitHub action, or memory behavior
-is claimed yet.
+The accelerated PatchForge v1 track is active. Milestones A - Contracts and B -
+WorkspaceManager are complete in the current checkpoint; Milestone C - SandboxExecutor
+is next. Atlas-min remains the outer job, policy, review, approval, persistence, and
+audit boundary. No PatchForge Docker sandbox, tool gateway, runtime, model call, GitHub
+action, or memory behavior is claimed yet.
 
 Phase 7 Brain v1 remains accepted complete with its documented negative behavioral
 calibration and preserved frozen evidence. Phase 8 Atlas remains complete and unchanged.
@@ -22,7 +22,7 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - Remote: `https://github.com/gavinocvara/nexus-agent-platform.git`
 - Branch: `main`
 - Phase 7 starting point: `52bd5f47dfbf5591e5263911b1c64dab66158d90`
-- Package version: `0.10.0`
+- Package version: `0.11.0`
 - Accepted Phase 6 baseline-record checkpoint: `5c0200d`
 - Phase 7 implementation checkpoint: `a7b6f5c1fbfc1e218cfabb1d78ad8d830e2bc17c`
 - Phase 7 validation handoff: the commit containing this document
@@ -31,6 +31,7 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - Phase 7 postmortem checkpoint: `71de1de99985a52c9cbb59a0b6e1950c83229500`
 - Phase 8 validation checkpoint: the commit containing this document
 - PatchForge v1 contracts checkpoint: the commit containing this document
+- PatchForge v1 workspace checkpoint: the commit containing this document
 
 ## Locked Phase 6 Baseline
 
@@ -146,6 +147,25 @@ budget, 10-turn budget, memoryless default, agent count, or remediation permissi
 - ADR 0010 records the complete accelerated A-through-K design. Milestone A does not
   execute Git, Docker, tools, tests from target repositories, or a model.
 
+## PatchForge v1 WorkspaceManager
+
+- `WorkspaceManager` accepts an `EngineeringTask`, the corresponding operator-owned
+  `RepositoryProfile`, a run ID, and an operator-resolved local source repository. It
+  verifies profile ID/hash/URL and checks out the task's exact historical commit.
+- Each UUID-named disposable workspace separates a bare runtime-owned Git directory from
+  the execution worktree. The worktree contains no `.git` file or directory and is the
+  only tree intended for the future sandbox mount.
+- Git runs outside the future sandbox through fixed argument vectors with `shell=False`,
+  a sanitized environment, no system/global configuration, no prompts, disabled hooks,
+  `core.autocrlf=false`, and bounded duration and combined output.
+- Diff inspection covers tracked, untracked, and binary files, emits canonical sorted
+  paths and line statistics, and hashes the bounded binary patch deterministically.
+- Durable markers record source SHA, runtime branch, lifecycle state, and lease expiry.
+  Lease renewal is explicit. Cleanup is idempotent and refuses unmarked, symlinked, or
+  identity-mismatched paths. Reaping removes only expired, marker-verified workspaces.
+- Milestone B tests generate local synthetic Git repositories. Remote cloning, Docker
+  execution, model tools, Git commits/pushes, and GitHub access remain absent.
+
 ## Experimental Design
 
 The byte-hashed protocol in `docs/experiments/brain-v1-protocol.json` pre-registers the
@@ -219,6 +239,19 @@ py -m pytest -m integration tests/integration
 
 ## Latest Validation
 
+- PatchForge Milestone B version 0.11.0 validation on 2026-09-27: the editable package
+  installs and `pip check` passes; all 146 files pass Ruff formatting; Ruff lint passes;
+  strict mypy reports no issues in 82 source files; all 302 non-integration tests pass
+  with 20 integration tests deselected. The explicit focused PatchForge suite passes all
+  36 tests, including 11 synthetic Git workspace tests.
+- Workspace coverage verifies exact historical SHA checkout after the source advances,
+  `.git`-free worktrees, runtime branch identity, clean initial status, deterministic
+  tracked/untracked/binary diff hashes, profile hash binding, bounded Git output, safe
+  failed-provision cleanup, idempotent cleanup, tamper refusal, lease renewal, orphan
+  reaping, and rejection of source repositories nested below the managed root.
+- A local `tests/unit/test_patchforge_*.py` invocation found no file because PowerShell
+  does not expand that glob for pytest. Rerunning the same files explicitly produced the
+  clean 36-test result; GitHub Actions uses Bash and retains the wildcard step.
 - PatchForge Milestone A version 0.10.0 validation on 2026-09-27: the editable package
   installs and `pip check` passes; all 144 files pass Ruff formatting; Ruff lint passes;
   strict mypy reports no issues in 81 source files; all 291 non-integration tests pass
@@ -386,14 +419,14 @@ requirement is incompatible with the architecture.
 - Five scenarios are insufficient for independent learning-effect estimates.
 - Atlas v1 is deliberately single-node. It has no remote API, scheduler, worker heartbeat,
   distributed claim protocol, credential broker, or PostgreSQL control-plane backend.
-- PatchForge Milestone A is contracts only. Runtime ownership prevents model-authored
-  evidence by interface design, but WorkspaceManager, Docker enforcement, ToolGateway,
-  state transitions, and attestation issuance remain to be implemented and tested.
+- PatchForge has no Docker executor yet. Workspace separation prevents `.git` exposure,
+  but network, secret, UID, filesystem, CPU, memory, PID, time, and output sandbox policy
+  will not be runtime-enforced until Milestone C.
 
 ## Next Step
 
-Implement PatchForge Milestone B `WorkspaceManager` against synthetic fixture
-repositories: create a fresh disposable workspace at an exact source SHA, keep Git
-authority outside the future sandbox, create a runtime-owned branch, derive a canonical
-diff, clean up idempotently, and reap only verifiable orphan workspaces. Do not begin
-Docker execution or expose model tools in this milestone.
+Implement PatchForge Milestone C `SandboxExecutor`: a Docker implementation that mounts
+only the `.git`-free worktree and enforces the operator profile's digest-pinned image,
+network/secret/user/filesystem/resource/time/output policy, plus a deterministic
+`FakeSandbox` for unit tests. Do not expose these executors to a model or begin the tool
+gateway in this milestone.

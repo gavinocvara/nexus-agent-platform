@@ -74,6 +74,12 @@ hashing, and cleanup remain runtime-owned outside the execution sandbox. Each ru
 use a fresh disposable workspace. The sandbox receives the workspace content but never
 the host `.git` directory.
 
+Milestone B implements this as a bare Git control directory beside a `.git`-free
+execution worktree. Provisioning verifies the task's repository-profile ID, canonical
+profile hash, repository URL, and exact source commit before activating the workspace.
+A durable expiring marker supports renewal, idempotent cleanup, and conservative orphan
+reaping without deleting unmarked or identity-mismatched directories.
+
 Repository commands are immutable argument vectors from an operator-owned
 `RepositoryProfile`; repository text cannot introduce commands. Every execution sandbox
 must use a digest-pinned image, no network, no secrets, a non-root UID/GID, a read-only

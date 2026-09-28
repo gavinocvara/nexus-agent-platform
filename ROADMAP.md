@@ -88,9 +88,9 @@
 
 - **A. Contracts (Complete):** strict tasks, identities, phase budgets, runtime evidence,
   patch results, operator policy, sandbox requirements, and canonical hashes
-- **B. WorkspaceManager (Next):** disposable source-SHA workspaces, runtime-owned Git,
+- **B. WorkspaceManager (Complete):** disposable source-SHA workspaces, runtime-owned Git,
   hardened commands, diff, cleanup, and orphan reaping over synthetic repositories
-- **C. SandboxExecutor:** Docker isolation plus deterministic `FakeSandbox`
+- **C. SandboxExecutor (Next):** Docker isolation plus deterministic `FakeSandbox`
 - **D. ToolGateway:** narrow read, write, execution, and control tools
 - **E. Runtime:** closed phased workflow with bounded implementation loops and reserved
   finalization capacity
