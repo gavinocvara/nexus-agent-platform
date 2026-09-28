@@ -1,5 +1,6 @@
 """Disposable PatchForge workspace and hardened Git authority tests."""
 
+import stat
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -187,6 +188,27 @@ def test_cleanup_is_idempotent_but_refuses_unmanaged_directories(tmp_path: Path)
     with pytest.raises(WorkspaceError, match="marker"):
         manager.cleanup(unmanaged_id)
     assert unmanaged.exists()
+
+
+def test_cleanup_removes_readonly_runtime_git_objects(tmp_path: Path) -> None:
+    source, source_sha = _repository(tmp_path / "source")
+    manager = WorkspaceManager(tmp_path / "workspaces", clock=lambda: NOW)
+    profile = _profile()
+    run_id = UUID(int=120)
+    handle = manager.provision(
+        _task(source_sha, profile),
+        profile,
+        run_id,
+        source,
+        lease_duration=timedelta(minutes=5),
+    )
+    object_file = next(
+        path for path in (handle.git_directory / "objects").rglob("*") if path.is_file()
+    )
+    object_file.chmod(stat.S_IREAD)
+
+    assert manager.cleanup(run_id) is True
+    assert not handle.root.exists()
 
 
 def test_expired_lease_reaper_removes_only_verified_workspaces(tmp_path: Path) -> None:

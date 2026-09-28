@@ -6,12 +6,13 @@ from enum import StrEnum
 from typing import Literal, Protocol, runtime_checkable
 from uuid import UUID
 
-from pydantic import AwareDatetime, Field, JsonValue, model_validator
+from pydantic import AwareDatetime, Field, model_validator
 
 from nexus.atlas.models import StrictModel
 from nexus.patchforge.canonical import canonical_sha256
 from nexus.patchforge.gateway import (
     BUDGET_FAILURE_CODES,
+    EmptyArguments,
     ExecutionOutput,
     FailureOutput,
     GatewayBudgetError,
@@ -21,6 +22,8 @@ from nexus.patchforge.gateway import (
     PhaseRequestOutput,
     ReportOutput,
     SubmitReportArguments,
+    ToolArguments,
+    parse_tool_arguments,
 )
 from nexus.patchforge.models import (
     AgentReport,
@@ -160,7 +163,17 @@ class RuntimeToolAction(StrictModel):
     """One model-authored tool request; parallel action batches do not exist in v1."""
 
     tool_name: ToolName
-    arguments: dict[str, JsonValue] = Field(default_factory=dict, max_length=100)
+    arguments: ToolArguments = Field(default_factory=EmptyArguments)
+
+    @model_validator(mode="after")
+    def validate_argument_contract(self) -> "RuntimeToolAction":
+        parsed = parse_tool_arguments(
+            self.tool_name,
+            self.arguments.model_dump(mode="python"),
+        )
+        if type(parsed) is not type(self.arguments):
+            raise ValueError("Runtime action arguments do not match the selected tool")
+        return self
 
 
 class RuntimeTurn(StrictModel):
@@ -482,7 +495,7 @@ class PatchForgeRuntime:
                         self._renew_workspace()
                     result = self.gateway.invoke(
                         action.tool_name,
-                        action.arguments,
+                        action.arguments.model_dump(mode="python"),
                         phase=self.lifecycle.phase,
                     )
                     self._results.append(result)
@@ -555,8 +568,9 @@ class PatchForgeRuntime:
         if isinstance(output, ReportOutput):
             if action.tool_name is not ToolName.SUBMIT_REPORT:
                 raise RuntimeTransitionError("Report evidence came from another tool")
-            request = SubmitReportArguments.model_validate(action.arguments)
-            self._report = request.report
+            if not isinstance(action.arguments, SubmitReportArguments):
+                raise RuntimeTransitionError("Report action arguments are not typed")
+            self._report = action.arguments.report
             self.lifecycle.report()
 
     @staticmethod

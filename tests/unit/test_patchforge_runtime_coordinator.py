@@ -1,7 +1,9 @@
 """Deterministic PatchForge Runtime coordinator tests."""
 
+import subprocess
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from pathlib import Path
 from uuid import UUID
 
@@ -11,13 +13,19 @@ from pydantic import ValidationError
 from nexus.atlas.models import SourceRevision
 from nexus.patchforge.canonical import canonical_sha256
 from nexus.patchforge.gateway import (
+    AdvancePhaseArguments,
     FailureOutput,
     GatewayRequestError,
     GatewayResult,
+    GitDiffArguments,
+    ListTreeArguments,
     PhaseRequestOutput,
+    ReadFileRangeArguments,
     ReportOutput,
     StatusOutput,
+    SubmitReportArguments,
     ToolGateway,
+    WritePatchArguments,
 )
 from nexus.patchforge.models import (
     AgentReport,
@@ -32,16 +40,24 @@ from nexus.patchforge.models import (
     ToolCallStatus,
     ToolName,
 )
-from nexus.patchforge.policy import PatchForgePolicy
+from nexus.patchforge.policy import (
+    CommandPurpose,
+    PatchForgePolicy,
+    RepositoryProfile,
+    SandboxCommand,
+    SandboxPolicy,
+)
 from nexus.patchforge.runtime import (
     PatchForgeRuntime,
     RuntimeCancelledError,
     RuntimeToolAction,
     RuntimeTurn,
 )
+from nexus.patchforge.sandbox import FakeSandbox, FakeSandboxPlan, SandboxStatus
 from nexus.patchforge.workspace import (
     WorkspaceError,
     WorkspaceHandle,
+    WorkspaceManager,
     WorkspaceRecord,
     WorkspaceState,
 )
@@ -268,7 +284,7 @@ class FakeGateway:
 def _advance(target: PatchForgePhase) -> RuntimeToolAction:
     return RuntimeToolAction(
         tool_name=ToolName.ADVANCE_PHASE,
-        arguments={"target_phase": target.value},
+        arguments=AdvancePhaseArguments(target_phase=target),
     )
 
 
@@ -280,7 +296,7 @@ def _report() -> RuntimeToolAction:
     )
     return RuntimeToolAction(
         tool_name=ToolName.SUBMIT_REPORT,
-        arguments={"report": report.model_dump(mode="json")},
+        arguments=SubmitReportArguments(report=report),
     )
 
 
@@ -340,7 +356,10 @@ def test_happy_path_uses_one_action_at_a_time_and_always_cleans_up() -> None:
 def test_every_lease_renewal_is_immediately_followed_by_gateway_refresh() -> None:
     actions = [
         RuntimeToolAction(tool_name=ToolName.GIT_STATUS),
-        RuntimeToolAction(tool_name=ToolName.GIT_DIFF),
+        RuntimeToolAction(
+            tool_name=ToolName.GIT_DIFF,
+            arguments=GitDiffArguments(),
+        ),
         *_happy_actions()[1:],
     ]
     runtime, gateway, manager, events = _runtime(actions=actions)
@@ -486,3 +505,227 @@ def test_runtime_tool_action_is_strict_and_has_no_parallel_shape() -> None:
                 "parallel_actions": [],
             }
         )
+
+
+def _git(repository: Path, *arguments: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(repository), *arguments],
+        check=True,
+        capture_output=True,
+        stdin=subprocess.DEVNULL,
+        shell=False,
+    )
+    return result.stdout.decode("utf-8").strip()
+
+
+def _real_repository(path: Path) -> tuple[Path, str]:
+    path.mkdir()
+    subprocess.run(
+        ["git", "init", "--initial-branch=main", str(path)],
+        check=True,
+        capture_output=True,
+        stdin=subprocess.DEVNULL,
+        shell=False,
+    )
+    _git(path, "config", "user.name", "Runtime Fixture")
+    _git(path, "config", "user.email", "runtime@example.invalid")
+    (path / "calculator.py").write_text(
+        "def subtract(a, b):\n    return a + b\n",
+        encoding="utf-8",
+    )
+    (path / "tests").mkdir()
+    (path / "tests" / "test_calculator.py").write_text(
+        "from calculator import subtract\n\ndef test_subtract():\n    assert subtract(5, 2) == 3\n",
+        encoding="utf-8",
+    )
+    _git(path, "add", ".")
+    _git(path, "commit", "-m", "fixture: broken subtraction")
+    return path, _git(path, "rev-parse", "HEAD")
+
+
+def _real_profile() -> RepositoryProfile:
+    commands = {
+        purpose: SandboxCommand(
+            executable="python",
+            arguments=["-m", "pytest", purpose.value],
+            timeout_seconds=30,
+            max_output_bytes=100_000,
+        )
+        for purpose in CommandPurpose
+    }
+    return RepositoryProfile(
+        profile_id="fixture.python",
+        profile_version=1,
+        repository_url="https://example.invalid/repository",
+        sandbox=SandboxPolicy(
+            image=f"sha256:{'d' * 64}",
+            run_as_user="10001:10001",
+            cpu_limit_millis=1000,
+            memory_limit_mb=256,
+            pids_limit=64,
+            default_timeout_seconds=60,
+            max_output_bytes=100_000,
+        ),
+        commands=commands,
+        test_path_prefixes=["tests"],
+    )
+
+
+def test_real_gateway_workspace_and_fake_sandbox_complete_closed_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source, source_sha = _real_repository(tmp_path / "source")
+    profile = _real_profile()
+    task = _task().model_copy(
+        update={
+            "source": SourceRevision(
+                repository_url="https://example.invalid/repository",
+                commit_sha=source_sha,
+            ),
+            "repository_profile_sha256": canonical_sha256(profile),
+        }
+    )
+    identity = _identity(task).model_copy(
+        update={
+            "source": task.source,
+            "repository_profile_sha256": canonical_sha256(profile),
+            "task_sha256": canonical_sha256(task),
+        }
+    )
+    budgets = _budgets()
+    policy = PatchForgePolicy(
+        repository_profile_id=profile.profile_id,
+        repository_profile_sha256=canonical_sha256(profile),
+        allowed_tools=list(ToolName),
+        budgets=budgets,
+        max_changed_files=20,
+        max_diff_bytes=100_000,
+        allow_test_file_changes=True,
+    )
+    manager = WorkspaceManager(tmp_path / "workspaces", clock=lambda: NOW)
+    handle = manager.provision(
+        task,
+        profile,
+        identity.run_id,
+        source,
+        lease_duration=timedelta(minutes=5),
+    )
+    execution_ids = iter([UUID(int=201), UUID(int=202), UUID(int=203)])
+    sandbox = FakeSandbox(
+        [
+            FakeSandboxPlan(
+                expected_command_sha256=canonical_sha256(
+                    profile.commands[CommandPurpose.REPRODUCTION]
+                ),
+                status=SandboxStatus.FAILED,
+                exit_code=1,
+                stderr=b"assert 7 == 3\n",
+                error_code="command_failed",
+            ),
+            FakeSandboxPlan(
+                expected_command_sha256=canonical_sha256(
+                    profile.commands[CommandPurpose.TARGETED_TESTS]
+                ),
+                status=SandboxStatus.SUCCEEDED,
+                exit_code=0,
+                stdout=b"1 passed\n",
+            ),
+            FakeSandboxPlan(
+                expected_command_sha256=canonical_sha256(
+                    profile.commands[CommandPurpose.FULL_TEST_SUITE]
+                ),
+                status=SandboxStatus.SUCCEEDED,
+                exit_code=0,
+                stdout=b"1 passed\n",
+            ),
+        ],
+        clock=lambda: NOW,
+        id_factory=lambda: next(execution_ids),
+    )
+    gateway = ToolGateway(
+        identity=identity,
+        task=task,
+        profile=profile,
+        policy=policy,
+        workspace=handle,
+        workspace_manager=manager,
+        sandbox=sandbox,
+        clock=lambda: NOW,
+    )
+    refresh_calls = 0
+    original_refresh = gateway.refresh_workspace
+
+    def track_refresh(workspace: WorkspaceHandle) -> None:
+        nonlocal refresh_calls
+        refresh_calls += 1
+        original_refresh(workspace)
+
+    monkeypatch.setattr(gateway, "refresh_workspace", track_refresh)
+    original = (handle.worktree / "calculator.py").read_bytes()
+    fixed = "def subtract(a, b):\n    return a - b\n"
+    actions: list[RuntimeToolAction | Exception] = [
+        RuntimeToolAction(
+            tool_name=ToolName.LIST_TREE,
+            arguments=ListTreeArguments(),
+        ),
+        _advance(PatchForgePhase.HYPOTHESIS),
+        RuntimeToolAction(
+            tool_name=ToolName.READ_FILE_RANGE,
+            arguments=ReadFileRangeArguments(
+                path="calculator.py",
+                start_line=1,
+                end_line=2,
+            ),
+        ),
+        _advance(PatchForgePhase.REPRODUCE),
+        RuntimeToolAction(tool_name=ToolName.RUN_TARGETED_TESTS),
+        _advance(PatchForgePhase.IMPLEMENT),
+        RuntimeToolAction(
+            tool_name=ToolName.WRITE_PATCH,
+            arguments=WritePatchArguments(
+                path="calculator.py",
+                expected_sha256=sha256(original).hexdigest(),
+                content=fixed,
+            ),
+        ),
+        _advance(PatchForgePhase.TARGETED_VALIDATE),
+        RuntimeToolAction(tool_name=ToolName.RUN_TARGETED_TESTS),
+        _advance(PatchForgePhase.FULL_VALIDATE),
+        RuntimeToolAction(tool_name=ToolName.RUN_TEST_SUITE),
+        _advance(PatchForgePhase.SELF_REVIEW),
+        RuntimeToolAction(tool_name=ToolName.INSPECT_DIFF),
+        _advance(PatchForgePhase.FINALIZE),
+        RuntimeToolAction(
+            tool_name=ToolName.GIT_DIFF,
+            arguments=GitDiffArguments(max_output_bytes=100_000),
+        ),
+        _report(),
+    ]
+    runtime = PatchForgeRuntime(
+        gateway=gateway,
+        workspace_manager=manager,
+        engine=ScriptedEngine(actions),
+        lease_duration=timedelta(minutes=5),
+        clock=lambda: NOW,
+    )
+
+    completion = runtime.execute()
+
+    assert completion.snapshot.phase is PatchForgePhase.CLOSED
+    assert completion.snapshot.failure is None
+    assert completion.report is not None
+    assert completion.workspace_cleaned is True
+    assert len(completion.executions) == 3
+    assert len(completion.lease_renewals) == refresh_calls == 8
+    assert [request.command for request in sandbox.requests] == [
+        profile.commands[CommandPurpose.REPRODUCTION],
+        profile.commands[CommandPurpose.TARGETED_TESTS],
+        profile.commands[CommandPurpose.FULL_TEST_SUITE],
+    ]
+    assert any(
+        item.record.phase is PatchForgePhase.FINALIZE and item.record.tool_name is ToolName.GIT_DIFF
+        for item in completion.gateway_results
+    )
+    assert completion.gateway_results[-1].record.tool_name is ToolName.SUBMIT_REPORT
+    assert not handle.root.exists()

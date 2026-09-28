@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import stat
 import subprocess
 import threading
 from collections.abc import Callable, Sequence
@@ -544,7 +545,19 @@ class WorkspaceManager:
         record = self._read_record(resolved)
         if record.workspace_id != expected_id or record.run_id != expected_id:
             raise WorkspaceError("Workspace marker identity does not match its directory")
-        shutil.rmtree(resolved)
+
+        def remove_readonly(
+            function: Callable[..., object],
+            path: str,
+            exception: BaseException,
+        ) -> None:
+            candidate = Path(path).resolve()
+            if not isinstance(exception, PermissionError) or not candidate.is_relative_to(resolved):
+                raise exception
+            os.chmod(candidate, stat.S_IREAD | stat.S_IWRITE)
+            function(path)
+
+        shutil.rmtree(resolved, onexc=remove_readonly)
 
     def _write_record(self, target: Path, record: WorkspaceRecord) -> None:
         marker = target / WORKSPACE_MARKER

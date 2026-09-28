@@ -157,6 +157,19 @@ ToolArguments = (
 )
 
 
+def parse_tool_arguments(
+    tool_name: ToolName,
+    arguments: Mapping[str, object],
+) -> StrictModel:
+    """Parse one tool's arguments against its exact strict contract."""
+
+    argument_type = _ARGUMENT_TYPES[tool_name]
+    try:
+        return argument_type.model_validate(dict(arguments))
+    except Exception as exc:
+        raise GatewayRequestError("Tool arguments failed strict validation") from exc
+
+
 class TreeEntry(StrictModel):
     path: RepositoryPath
     kind: Literal["file", "directory"]
@@ -480,11 +493,7 @@ class ToolGateway:
         *,
         phase: PatchForgePhase,
     ) -> GatewayResult:
-        argument_type = _ARGUMENT_TYPES[tool_name]
-        try:
-            parsed = argument_type.model_validate(dict(arguments))
-        except Exception as exc:
-            raise GatewayRequestError("Tool arguments failed strict validation") from exc
+        parsed = parse_tool_arguments(tool_name, arguments)
         self._check_budget(tool_name, phase)
         call_id = self._id_factory()
         started_at = self._now()
