@@ -224,6 +224,49 @@ Error codes are stable (`publish_credentials_missing`, `publish_base_moved`,
 `publish_ref_mismatch`, `publish_pull_request_mismatch`, `gates_not_passed`, `patch_mismatch`,
 `already_published`, ...) and never include response bodies or the token.
 
+## First live exercises (owner-run, not yet performed)
+
+No real GitHub or Slack call has been made. Run these once, in this order, before relying
+on either integration. Neither is part of a cycle, and neither is run by the scheduler.
+
+**GitHub publisher.** The first real publication must not be a real change:
+`exercise-github` publishes one purpose-built file (`integration-exercise/
+nexus-publisher-<id>.md` on branch `nexus/integration-exercise/<id>`) through the production
+publisher and withdraws it. Without `--confirm-live` it only prints the plan.
+
+```bash
+git fetch origin && git checkout <default branch> && git pull --ff-only   # base must be local
+export NEXUS_SOFTWARE_ENGINEER_REPOSITORY_URL=https://github.com/<owner>/<repo>
+export NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN=...   # fine-grained: this repository only,
+                                                  # Contents + Pull requests read/write
+NEXUS_SOFTWARE_ENGINEER_ENABLED=true python -m nexus.software_engineer exercise-github
+NEXUS_SOFTWARE_ENGINEER_ENABLED=true python -m nexus.software_engineer exercise-github --confirm-live
+```
+
+It records eight checks in `<state_root>/exercises/<id>.json` and exits 0 only when all
+passed and nothing remains: `repository_identity` (token and repository), `base_available_locally`,
+`bundle_rederived` (local blob and tree integrity), `moved_base_refused` (refused before
+any write), `draft_published` (remote blob, tree, commit, reference, and pull-request
+integrity), `draft_not_merged` (open, draft, not merged, no auto-merge, head is the
+verified commit), `duplicate_refused` (the existing branch is refused before any write),
+and `withdrawn` (pull request closed, branch deleted). If `cleaned_up` is false, close the
+pull request and delete the branch by hand; the record names both. The exercise found one
+defect before any live run: the publisher could not read GitHub's empty `204` reply to a
+branch deletion, so every real withdrawal would have reported failure.
+
+**Slack owner commands.** Host `serve-slack` (above) behind HTTPS, then:
+
+1. Run a `dry_run` cycle that produces an approval request (a plan changes nothing).
+2. From a Slack account that is *not* the owner, send `/nexus reject latest test`:
+   expect `Refused: not_owner.` and no decision file.
+3. As the owner, send `/nexus bogus`: expect `Refused: command_unparsable.`
+4. As the owner, send `/nexus revise latest live exercise`: expect `Recorded REVISE`, a
+   decision under `<state_root>/decisions/`, and an owner-decision memory.
+5. Send the same command again: expect `Refused: already_decided.` (a replay of the
+   captured request would be `replayed`; `tests/unit/test_software_engineer_slack_commands.py`
+   covers stale, forged, replayed, and oversized requests, which Slack itself cannot send).
+6. Confirm nothing was published and the checkout is unchanged: Slack only records.
+
 ## Single run and interrupted runs
 
 One cycle runs per state root. A cycle takes `.nexus/software_engineer/run.lock` before
@@ -262,4 +305,4 @@ Test repair (blocked by SentinelQA-lite's byte-level specification rule); memory
 consolidation; a hosted deployment of the Slack receiver (today it runs wherever the
 owner starts it). No real GitHub or Slack call has
 been made yet: the publisher, issue source, and Slack receiver are exercised only against
-fakes in tests. See ADR 0012.
+fakes in tests; the owner-run exercises above are prepared but not performed. See ADR 0012.

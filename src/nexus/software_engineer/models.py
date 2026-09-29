@@ -404,7 +404,9 @@ class PublishedChange(StrictModel):
     cycle_id: UUID
     request_id: UUID | None = None
     decision_id: UUID | None = None
-    authority: Literal["owner_decision", "autonomous_low_risk"]
+    authority: Literal["owner_decision", "autonomous_low_risk", "integration_exercise"]
+    """``integration_exercise``: an owner-run check of the publisher itself, publishing a
+    purpose-built harmless file and withdrawing it; never a change the engineer made."""
     provider: Literal["github"]
     repository: Annotated[str, StringConstraints(min_length=3, max_length=200)]
     base_branch: Annotated[str, StringConstraints(min_length=1, max_length=255)]
@@ -429,6 +431,11 @@ class PublishedChange(StrictModel):
                 raise ValueError("A publication under an owner decision names the decision")
             if self.published_by.actor_type is not ActorType.HUMAN:
                 raise ValueError("An owner-decided publication is published by the human owner")
+        elif self.authority == "integration_exercise":
+            if self.request_id is not None or self.decision_id is not None:
+                raise ValueError("An integration exercise answers no approval request")
+            if self.published_by.actor_type is not ActorType.HUMAN:
+                raise ValueError("An integration exercise is run by the human owner")
         elif self.published_by.actor_type is not ActorType.AGENT:
             raise ValueError("An autonomous publication is published by the agent")
         return self

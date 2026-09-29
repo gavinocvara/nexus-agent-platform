@@ -107,10 +107,19 @@ class PublishSubmission:
     cycle_id: UUID
     diff_sha256: str
     published_by: ActorIdentity
-    authority: Literal["owner_decision", "autonomous_low_risk"]
+    authority: Literal["owner_decision", "autonomous_low_risk", "integration_exercise"]
     request_id: UUID | None = None
     decision_id: UUID | None = None
     allow_moved_base: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class PullRequestState:
+    state: str
+    draft: bool
+    merged: bool
+    auto_merge: bool
+    head_sha: str
 
 
 class Publisher(Protocol):
@@ -613,6 +622,40 @@ class GitHubDraftPullRequestPublisher:
                 published_at=self.clock(),
             )
 
+    # -- read-only inspection (used by the owner-run integration exercise) -----------------
+
+    def default_branch_head(self) -> tuple[str, str]:
+        """``(default branch, head SHA)`` of the repository, read-only."""
+
+        with self._session() as session:
+            repo = self._get(session, f"/repos/{self.repository}")
+            branch = _string(repo, "default_branch", "repos")
+            ref = self._get(session, f"/repos/{self.repository}/git/ref/heads/{branch}")
+            return branch, _string(_mapping(ref, "object", "git/ref"), "sha", "git/ref")
+
+    def pull_request_state(self, number: int) -> PullRequestState:
+        with self._session() as session:
+            pull = self._get(session, f"/repos/{self.repository}/pulls/{number}")
+            merged = pull.get("merged")
+            draft = pull.get("draft")
+            return PullRequestState(
+                state=_string(pull, "state", "pulls"),
+                draft=draft is True,
+                merged=merged is True,
+                auto_merge=pull.get("auto_merge") is not None,
+                head_sha=_string(_mapping(pull, "head", "pulls"), "sha", "pulls"),
+            )
+
+    def branch_exists(self, branch: str) -> bool:
+        with self._session() as session:
+            status, _ = self._request(
+                session,
+                "GET",
+                f"/repos/{self.repository}/git/ref/heads/{branch}",
+                ok=(200, 404),
+            )
+            return status == 200
+
     def withdraw(self, published: PublishedChange, *, reason: str) -> None:
         """Close the draft pull request and delete its branch. Nothing else is touched."""
 
@@ -672,7 +715,8 @@ class GitHubDraftPullRequestPublisher:
             raise PublishError("transport_error", f"{stem} {type(exc).__name__}") from exc
         code = response.status_code
         if code in ok:
-            if code == 404:
+            # 204 No Content (a deleted reference) and an expected 404 carry no JSON body.
+            if code in (204, 404):
                 return code, {}
             try:
                 payload = response.json()
@@ -802,6 +846,7 @@ __all__ = [
     "PublishError",
     "PublishSubmission",
     "Publisher",
+    "PullRequestState",
     "RecordingPublisher",
     "agent_publisher_identity",
     "bundle_from_branch",

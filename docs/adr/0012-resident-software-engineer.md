@@ -271,6 +271,19 @@ number and URL, authority, publisher identity) is persisted, attached to the cha
 remembered as a validated fact with the decision as provenance. Rollback of a published
 change is `withdraw`: close the pull request, delete the branch.
 
+### Integration exercise (0.27.0)
+
+The first real publication should prove the publisher, not ship engineering work.
+`exercise-github` (owner-run, dry run unless `--confirm-live`) publishes one harmless file
+under the `integration_exercise` authority: a publication by the human owner that answers
+no approval request, which `PublishedChange` accepts only in that shape. It proves
+repository identity, local and remote object integrity, the moved-base and duplicate
+refusals, that the draft is open, unmerged, and without auto-merge, and that withdrawal
+closes the pull request and deletes the branch, and it records all eight checks without
+the token. Building it against a GitHub-shaped fake found that the publisher could not
+read the bodiless `204` GitHub returns for a deleted branch, so every real withdrawal
+would have failed.
+
 ### Issue intake (after 0.24.0)
 
 Open GitHub issues are the first network read the engineer makes, and it is opt-in

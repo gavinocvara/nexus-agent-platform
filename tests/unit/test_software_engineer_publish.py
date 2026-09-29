@@ -5,7 +5,8 @@ from __future__ import annotations
 import base64
 import json
 import os
-from collections.abc import Mapping, Sequence
+import subprocess
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from hashlib import sha1, sha256
@@ -36,6 +37,7 @@ from nexus.software_engineer.executor import (
     COMMIT_AUTHOR_NAME,
     PatchForgeExecutor,
 )
+from nexus.software_engineer.exercise import PublisherExerciseRecord, run_publisher_exercise
 from nexus.software_engineer.inspect import CandidateGenerator, RepositoryInspector
 from nexus.software_engineer.memory import EngineerMemory, EngineerMemoryStore, EpistemicStatus
 from nexus.software_engineer.models import (
@@ -200,7 +202,7 @@ class FakeGitHub:
         *,
         base_sha: str,
         base_tree: str,
-        tree_sha: str,
+        tree_sha: str | Callable[[Mapping[str, object]], str],
         base_head: str | None = None,
         existing_branches: Sequence[str] = (),
         draft_supported: bool = True,
@@ -223,6 +225,8 @@ class FakeGitHub:
         self.pulls: list[Mapping[str, object]] = []
         self.patches: list[tuple[int, Mapping[str, object]]] = []
         self.requests: list[httpx.Request] = []
+        self.pull_states: dict[int, dict[str, object]] = {}
+        self.fail_close = False
 
     def client(self, headers: Mapping[str, str]) -> httpx.Client:
         return httpx.Client(
@@ -259,7 +263,8 @@ class FakeGitHub:
             return httpx.Response(201, json={"sha": sha})
         if method == "POST" and path == "/git/trees":
             self.trees.append(body)
-            return httpx.Response(201, json={"sha": self.tree_sha})
+            tree = self.tree_sha(body) if callable(self.tree_sha) else self.tree_sha
+            return httpx.Response(201, json={"sha": tree})
         if method == "POST" and path == "/git/commits":
             self.commits.append(body)
             sha = sha1(json.dumps(body, sort_keys=True).encode()).hexdigest()
@@ -298,6 +303,13 @@ class FakeGitHub:
             self.pulls.append(body)
             number = len(self.pulls)
             head = self.pull_head_tamper or self.refs[f"heads/{body['head']}"]
+            self.pull_states[number] = {
+                "state": "open",
+                "draft": True,
+                "merged": False,
+                "auto_merge": None,
+                "head": {"ref": body["head"], "sha": head},
+            }
             return httpx.Response(
                 201,
                 json={
@@ -309,8 +321,18 @@ class FakeGitHub:
                 },
             )
         if method == "PATCH" and path.startswith("/pulls/"):
-            self.patches.append((int(path.removeprefix("/pulls/")), body))
+            if self.fail_close:
+                return httpx.Response(502, json={"message": "Bad gateway"})
+            number = int(path.removeprefix("/pulls/"))
+            self.patches.append((number, body))
+            if number in self.pull_states:
+                self.pull_states[number]["state"] = body.get("state", "open")
             return httpx.Response(200, json={"state": "closed"})
+        if method == "GET" and path.startswith("/pulls/"):
+            number = int(path.removeprefix("/pulls/"))
+            if number not in self.pull_states:
+                return httpx.Response(404, json={"message": "Not Found"})
+            return httpx.Response(200, json=self.pull_states[number])
         return httpx.Response(500, json={"message": f"unexpected {method} {path}"})
 
 
@@ -829,3 +851,123 @@ def test_cli_decide_and_publish_are_explicit_owner_steps(
     assert cli._cycle_publisher(opted_in) is not None
     monkeypatch.delenv("NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN")
     assert cli._cycle_publisher(opted_in) is None
+
+
+# -- owner-run integration exercise ------------------------------------------------------
+
+
+def _exercise_fake(bench: _Workbench, tmp_path: Path, **kwargs: object) -> FakeGitHub:
+    """A fake GitHub whose trees are computed from the posted entries, like the real one."""
+
+    def git(*arguments: str) -> str:
+        environment = {**os.environ, "GIT_INDEX_FILE": str(tmp_path / "exercise-index")}
+        return subprocess.run(
+            ["git", "-C", str(bench.repo), *arguments],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=environment,
+        ).stdout.strip()
+
+    def tree(body: Mapping[str, object]) -> str:
+        git("read-tree", str(body["base_tree"]))
+        for entry in body["tree"]:  # type: ignore[attr-defined]
+            git(
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                f"{entry['mode']},{entry['sha']},{entry['path']}",
+            )
+        return git("write-tree", "--missing-ok")
+
+    head = git("rev-parse", "HEAD")
+    return FakeGitHub(
+        base_sha=head,
+        base_tree=git("rev-parse", f"{head}^{{tree}}"),
+        tree_sha=tree,
+        **kwargs,  # type: ignore[arg-type]
+    )
+
+
+def _exercise(bench: _Workbench, tmp_path: Path, fake: FakeGitHub) -> PublisherExerciseRecord:
+    return run_publisher_exercise(
+        repo_root=bench.repo,
+        publisher=_publisher(fake),
+        git=bench.git,
+        work_root=tmp_path / "exercise-work",
+        owner_id="owner",
+        exercise_id=UUID(int=4242),
+        clock=lambda: LATER,
+    )
+
+
+def test_integration_exercise_proves_every_publisher_boundary_and_cleans_up(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN", TOKEN)
+    bench = _Workbench(tmp_path)
+    fake = _exercise_fake(bench, tmp_path)
+    record = _exercise(bench, tmp_path, fake)
+    assert [(item.name, item.status) for item in record.checks] == [
+        ("repository_identity", "passed"),
+        ("base_available_locally", "passed"),
+        ("bundle_rederived", "passed"),
+        ("moved_base_refused", "passed"),
+        ("draft_published", "passed"),
+        ("draft_not_merged", "passed"),
+        ("duplicate_refused", "passed"),
+        ("withdrawn", "passed"),
+    ], record.checks
+    assert record.passed and record.cleaned_up
+    publication = record.publication
+    assert publication is not None and publication.authority == "integration_exercise"
+    assert publication.published_by.actor_type is ActorType.HUMAN
+    assert publication.request_id is None and publication.decision_id is None
+    # One harmless file, published exactly once; the refusals wrote nothing.
+    assert [item["path"] for item in fake.trees[0]["tree"]] == [record.path]  # type: ignore[index]
+    assert record.path.startswith("integration-exercise/")
+    assert len(fake.blobs) == 1 and len(fake.commits) == 1 and len(fake.pulls) == 1
+    assert fake.pulls[0]["draft"] is True
+    # Withdrawn: the pull request is closed and the branch gone; nothing was merged.
+    assert fake.refs == {} and fake.pull_states[1]["state"] == "closed"
+    assert not any("merge" in str(request.url) for request in fake.requests)
+    # The operator checkout is untouched and the audit record carries no credential.
+    status = bench.git.run(["-C", str(bench.repo), "status", "--porcelain"]).stdout_text()
+    assert status == ""
+    assert TOKEN not in record.model_dump_json()
+
+
+def test_integration_exercise_fails_closed_and_reports_what_remains(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN", TOKEN)
+    bench = _Workbench(tmp_path)
+    # The base the API reports is not in the checkout: nothing is built or written.
+    fake = _exercise_fake(bench, tmp_path)
+    fake.base_head = "a" * 40
+    record = _exercise(bench, tmp_path / "unknown-base", fake)
+    statuses = {item.name: item.status for item in record.checks}
+    assert statuses["base_available_locally"] == "failed"
+    assert statuses["draft_published"] == "not_run" and record.cleaned_up
+    assert not fake.blobs and not fake.refs and not record.passed
+    # Closing the pull request fails: the record says the exercise left something behind.
+    fake = _exercise_fake(bench, tmp_path)
+    fake.fail_close = True
+    record = _exercise(bench, tmp_path / "close-fails", fake)
+    assert {item.name: item.status for item in record.checks}["withdrawn"] == "failed"
+    assert not record.cleaned_up and not record.passed
+
+
+def test_exercise_cli_is_a_dry_run_unless_confirmed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("NEXUS_SOFTWARE_ENGINEER_ENABLED", "true")
+    monkeypatch.setenv("NEXUS_SOFTWARE_ENGINEER_REPOSITORY_URL", "https://github.com/o/r")
+    monkeypatch.delenv("NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN", raising=False)
+    state = ["--state-root", str(tmp_path / "state")]
+    assert cli.main([*state, "exercise-github"]) == 0
+    output = capsys.readouterr().out
+    assert "repository=o/r" in output and "dry run: nothing was sent" in output
+    assert cli.main([*state, "exercise-github", "--confirm-live"]) == 2
+    assert "is not set" in capsys.readouterr().err
+    assert not (tmp_path / "state" / "exercises").exists()

@@ -15,6 +15,7 @@ import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 from nexus.patchforge.engine import EngineBudget, ModelBackedEngine
 from nexus.patchforge.live import API_KEY_VARIABLE, LiveSettings, OpenAIResponsesClient
@@ -24,6 +25,11 @@ from nexus.software_engineer.approval import ApprovalError, decide, publish_appr
 from nexus.software_engineer.config import EngineerDisabledError, SoftwareEngineerSettings
 from nexus.software_engineer.cycle import CandidateExecutor, EngineeringCycle, RunLeaseError
 from nexus.software_engineer.executor import PatchForgeExecutor
+from nexus.software_engineer.exercise import (
+    EXERCISE_BRANCH_PREFIX,
+    EXERCISE_DIRECTORY,
+    run_publisher_exercise,
+)
 from nexus.software_engineer.inspect import RepositoryInspector
 from nexus.software_engineer.issues import GitHubIssueSource
 from nexus.software_engineer.memory import EngineerMemoryStore
@@ -182,6 +188,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="publish even though the default branch moved past the validated base",
     )
+    exercising = commands.add_parser(
+        "exercise-github",
+        help="owner-run check of the publisher: one harmless draft pull request, verified "
+        "and withdrawn",
+    )
+    exercising.add_argument(
+        "--confirm-live",
+        action="store_true",
+        help="call the GitHub API; without it only the plan is printed",
+    )
     serving = commands.add_parser(
         "serve-slack", help="serve signature-verified Slack owner commands (ship/revise/reject)"
     )
@@ -251,6 +267,8 @@ def main(argv: list[str] | None = None) -> int:
     except EngineerDisabledError as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 2
+    if arguments.command == "exercise-github":
+        return _exercise_github(settings, arguments)
     if arguments.command == "publish":
         state_root = Path(arguments.state_root)
         try:
@@ -301,6 +319,49 @@ def main(argv: list[str] | None = None) -> int:
         f"memory_writes={len(record.memory_writes)} notifications={len(record.notifications)}"
     )
     return 0 if record.failure is None else 1
+
+
+def _exercise_github(settings: SoftwareEngineerSettings, arguments: argparse.Namespace) -> int:
+    try:
+        publisher = GitHubDraftPullRequestPublisher(
+            parse_github_repository(settings.repository_url), token_env=settings.github_token_env
+        )
+    except PublishError as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
+    print(
+        f"exercise plan: repository={publisher.repository} "
+        f"branch={EXERCISE_BRANCH_PREFIX}/<id> file={EXERCISE_DIRECTORY}/nexus-publisher-<id>.md "
+        "steps=identity,base,bundle,moved-base-refusal,draft,not-merged,duplicate-refusal,"
+        f"withdraw token_present={_github_token_present(settings)}"
+    )
+    if not arguments.confirm_live:
+        print("dry run: nothing was sent; pass --confirm-live to run it against GitHub")
+        return 0
+    if not _github_token_present(settings):
+        print(f"refused: {settings.github_token_env} is not set", file=sys.stderr)
+        return 2
+    state_root = Path(arguments.state_root)
+    exercise_id = uuid4()
+    record = run_publisher_exercise(
+        repo_root=Path(arguments.repo).resolve(),
+        publisher=publisher,
+        git=GitRunner(state_root / "git-runtime"),
+        work_root=state_root / "exercises" / "work",
+        owner_id=settings.owner_id,
+        exercise_id=exercise_id,
+        clock=lambda: datetime.now(UTC),
+    )
+    target = state_root / "exercises" / f"{exercise_id}.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(record.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    for check in record.checks:
+        print(f"{check.status:8} {check.name:24} {check.detail}")
+    print(
+        f"cleaned_up={record.cleaned_up} record={target} "
+        f"exercise={'passed' if record.passed else 'FAILED'}"
+    )
+    return 0 if record.passed else 1
 
 
 if __name__ == "__main__":
