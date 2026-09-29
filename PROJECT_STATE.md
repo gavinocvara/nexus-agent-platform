@@ -8,12 +8,12 @@ Update it at every checkpoint. Rules live in `AGENTS.md`; execution order in
 
 | Item | Value |
 | --- | --- |
-| Version | `0.26.0` (`pyproject.toml`) |
+| Version | `0.27.0` (`pyproject.toml`) |
 | HEAD | the commit containing this file (`git rev-parse HEAD`) |
-| origin/main | must equal HEAD at a checkpoint (`git rev-parse origin/main`) |
+| Remote | at a checkpoint HEAD equals the pushed branch; 0.27.0 lives on `claude/confident-faraday-1drq98` (a fast-forward of `origin/main` `bcae514`), not yet on `main` |
 | Working tree | clean at the checkpoint (`git status --short` empty) |
 | Toolchain | Python 3.12, Ruff, strict mypy, pytest, Docker Compose |
-| Local setup used for 0.19.0 to 0.26.0 | `uv venv --python 3.12 <outside repo>` then `uv pip install -e ".[dev]"` |
+| Local setup used for 0.19.0 to 0.27.0 | `uv venv --python 3.12 <outside repo>` then `uv pip install -e ".[dev]"` |
 
 ## What exists (architecture status)
 
@@ -48,13 +48,13 @@ byte-identically), `tests/unit/test_sentinelqa_*.py`, and Benchmark v0 agreement
 (`reference` 5/5 passed, `fix_and_edit_tests` 5/5 failed with `specification_modified`,
 zero disagreements).
 
-## Validation record (0.26.0, local, Linux)
+## Validation record (0.27.0, local, Linux)
 
 | Check | Result |
 | --- | --- |
 | `uv pip check` | compatible |
-| `ruff format --check .` / `ruff check .` | clean (182 files) |
-| `mypy` (strict, `nexus` package) | clean (125 files) |
+| `ruff format --check .` / `ruff check .` | clean |
+| `mypy` (strict, `nexus` package) | clean (127 files) |
 | `pytest -q` (unit + service, integration deselected) | see "Test counts" |
 | `python -m nexus.patchforge.e2e_catalog` | 23 scenarios passed, byte-identical |
 | `python -m nexus.patchforge.benchmark_corpus` | passed; SentinelQA agreement 100% |
@@ -64,8 +64,8 @@ zero disagreements).
 | `python -m nexus.software_engineer preflight` | all-off defaults: `enabled=False mode=dry_run prices_set=False max_cost_usd=0.0 model_recipes_allowed=False sandbox=none slack_webhook_present=False github_token_present=False publish_from_cycle=False read_issues=False slack_owner_user_id_set=False` |
 | Secret scan (tracked files, credential shapes) | clean (no credential shapes in tracked files; no .env, .nexus, sqlite, or patch files tracked) |
 | `docker compose config --quiet` | valid |
-| Compose integration (`RUN_INTEGRATION=1`) | not run locally (no Docker daemon); CI job `compose-integration` green on runs 36559485287 and 36560056831 |
-| Live model calls / GitHub or Slack traffic from agent code | none, ever (model recipes tested with a scripted client; publisher, issue source, and Slack receiver tested against fakes) |
+| Compose integration (`RUN_INTEGRATION=1`) | not run locally; CI job `compose-integration` last green at 0.26.0. CI has not run on 0.27.0 (branch pushes do not trigger `ci.yml`) |
+| Live model calls / GitHub or Slack traffic from agent code | none, ever (model recipes tested with a scripted client; publisher, issue source, Slack receiver, and `exercise-github` tested against fakes) |
 | Frozen evidence (`docs/experiments/`, hash pins in `test_atlas_isolation.py`) | unchanged |
 
 ### Test counts
@@ -80,6 +80,7 @@ zero disagreements).
 - 0.24.0: 864 passed, 23 deselected (publisher, approval, and CLI tests added).
 - 0.25.0: 876 passed, 23 deselected (evaluation publication scenarios, issue intake, and Slack command tests added).
 - 0.26.0: 898 passed, 23 deselected (harness tampering, brain, cost accounting, and run-lease tests added).
+- 0.27.0: 934 passed, 23 deselected (runner-integrity canary with real-pytest attacks, ship boundary, memory guards, self-review, lease races, Slack replay, publisher verification, and integration-exercise tests added).
 
 ## Credentials and enablement
 
@@ -98,14 +99,18 @@ No credential is present in this container; nothing here needs one.
 ## Known failures, blockers, debt
 
 - None failing. Publishing has never run against the real GitHub API (only the fake in
-  tests); the first real `decide` + `publish` on this repository is an owner step.
-  SentinelQA's runner lacks a Docker integration proof (deterministic gates use
-  scripted/oracle sandboxes). Test modules are not mypy-checked in CI.
+  tests); the first real publication should be the owner-run `exercise-github
+  --confirm-live` (0.27.0), not a real change. SentinelQA's runner lacks a Docker
+  integration proof; the runner-integrity canary is proven against a real local pytest.
+  Test modules are not mypy-checked in CI.
+- SentinelQA residual risk (ADR 0011): code written to recognise and spare the
+  runner-integrity canary, code that behaves correctly only under test, and tests whose
+  cases come from production data. Closing it needs out-of-process execution.
 - Remote branch `maintenance/repo-hygiene-claude` is unmerged; owner decides.
 - Live PatchForge run: deliberately unexecuted. Justified only after the owner authorizes
   cost; it is now reviewed by SentinelQA end to end.
 
-## Resident Software Engineer status (0.26.0)
+## Resident Software Engineer status (0.27.0)
 
 | Capability | Status |
 | --- | --- |
@@ -125,29 +130,31 @@ No credential is present in this container; nothing here needs one.
 | Controlled judgment evaluation (30 scenarios incl. autonomous draft publication and publisher refusal, CI gate) | **Done** (`evaluation.py`) |
 | Model-backed recipes (type annotation, micro bug fix, defensive check) | **Done** (`PatchForgeExecutor.model_engine_factory`), off until model + confirmation + budgets + prices + cost ceiling + key |
 | Cost accounting (owner prices, enforced `max_cost_usd`, report shows tokens and dollars) | **Done** (`pricing.py`); fail closed without prices |
-| Owner decisions (`decide`) and publication (`publish`) as draft pull requests | **Done** (`approval.py`, `publish.py`, CLI); tree re-derived from the validated patch, remote blob/tree SHAs verified, never merges |
+| Owner decisions (`decide`) and publication (`publish`) as draft pull requests | **Done** (`approval.py`, `publish.py`, CLI); tree re-derived from the validated patch, remote blob/tree SHAs, commit content, reference, and pull-request head verified (0.27.0), never merges |
+| Owner-run publisher integration exercise (`exercise-github`, dry run unless `--confirm-live`) | **Done, not yet run live** (`exercise.py`); eight checks, always withdraws, audit record under `exercises/` |
 | GitHub issue intake (read-only, opt-in, untrusted signals; owner REJECT honoured by the generator) | **Done** (`issues.py`, `inspect.py`) |
-| Slack-delivered owner commands (`serve-slack`: HMAC v0 signature, replay window, owner member id; records through `decide`; never publishes) | **Done** (`slack_commands.py`), hosting is the owner's choice |
+| Slack-delivered owner commands (`serve-slack`: HMAC v0 signature, replay window, persisted replay ledger (0.27.0), owner member id; records through `decide`; never publishes) | **Done** (`slack_commands.py`), hosting is the owner's choice |
 | Autonomous low-risk shipping in production | Possible only with `PUBLISH_FROM_CYCLE=true` + `autonomous_low_risk` + token; off by default; scheduled workflow never gets the token |
 
-## Highest-priority next task: first real publication and Slack smoke test
+## Highest-priority next task: owner-authorized live exercises
 
-1. Owner step (no code): run one `propose` cycle with `local_process` (locally or via the
-   workflow artifact), `decide --verdict ship`, then `publish` with a fine-grained token.
-   Confirm the draft PR's tree equals the local branch, record the PR number and any
-   `publish_*` error code here, and only then consider `PUBLISH_FROM_CYCLE`.
-2. Owner step: host `serve-slack` (or keep the `decide` CLI) and point a Slack slash
-   command at it; the first real Slack decision is a smoke test of the signature path.
-3. The first owner-authorized model-recipe run (a real type or micro-bug fix on this
-   repository) once the owner sets the model, confirmation, budgets, and key.
-4. SentinelQA review of candidate-changed tests so test repair can leave plan-only mode;
-   then memory consolidation.
+1. Owner step: fast-forward `main` to the 0.27.0 branch (or open a PR) so CI runs on it;
+   agents do not push to `main`.
+2. Owner step: `exercise-github` without, then with, `--confirm-live` (runbook, "First
+   live exercises"). Record the exercise id, PR number, and any failed check here. Only
+   then run the first real `decide` + `publish`, and only after that consider
+   `PUBLISH_FROM_CYCLE`.
+3. Owner step: host `serve-slack` and run the six-step Slack exercise in the runbook.
+4. The first owner-authorized model-recipe run once model, confirmation, budgets, prices,
+   cost ceiling, and key are set.
+5. Engineering, deferred with rationale in ADR 0011: out-of-process execution for
+   SentinelQA (the only full answer to canary-aware code); a Docker proof of the runner.
 
 ## Resume commands
 
 ```bash
 python -m pip install -e ".[dev]"            # or: uv venv --python 3.12 && uv pip install -e ".[dev]"
-git rev-parse HEAD origin/main && git status --short
+git rev-parse HEAD @{upstream} origin/main && git status --short
 python -m ruff format --check . && python -m ruff check . && python -m mypy
 python -m pytest -q
 python -m nexus.patchforge.e2e_catalog

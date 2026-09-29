@@ -385,3 +385,12 @@ def _branch_left(publisher: GitHubDraftPullRequestPublisher, branch: str) -> boo
         return publisher.branch_exists(branch)
     except PublishError:
         return True
+
+
+__all__ = [
+    "EXERCISE_BRANCH_PREFIX",
+    "EXERCISE_DIRECTORY",
+    "ExerciseCheck",
+    "PublisherExerciseRecord",
+    "run_publisher_exercise",
+]

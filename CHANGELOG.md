@@ -8,6 +8,47 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
+## 0.27.0 — Production hardening: runner integrity, autonomy boundary, reliability
+
+- SentinelQA-lite: runner-integrity canary (ADR 0011). A broken candidate could pass
+  0.26.0 against a real pytest by manipulating the runner from production code with no
+  locked file or scanned marker touched: an `atexit` handler printing a clean summary
+  and forcing exit 0, `_pytest` reports patched to `passed`, or failures swallowed in
+  `Function.runtest`. Before a pass, SentinelQA now plants a known-failing test beside the
+  locked test modules and requires the full-suite command to report exactly that failure
+  (exit status 1) on the verification tree; a pristine control run separates a silenced
+  runner (`runner_integrity_violated`, rejection) from a profile that cannot report the
+  canary (`runner_integrity_unproven`, inconclusive). `SentinelVerdict` refuses a pass
+  without a demonstrated probe. At most seven runs per review; an honest pass costs one
+  extra full-suite run. Three catalog scenarios (35 total) and real-pytest regressions.
+  Residual risk recorded: code written to recognise and spare the canary.
+- Resident engineer ship boundary: `sentinel_review` is a required gate for autonomous
+  shipping (it was required only on the owner path), and `PatchForgeExecutor.ship`
+  re-checks every gate before the publisher sees a change. Governing paths now include
+  the documents agents take direction from (`docs/adr/`, `ROADMAP.md`,
+  `CODEX_HANDOFF.md`, `PROJECT_STATE.md`, `BRAIN.md`) and evaluation configuration
+  anywhere (`conftest.py`, `pyproject.toml`, harness-shadowing modules).
+- Resident engineer memory: every active owner decision and failed hypothesis is read in
+  full each cycle. In a 50-record trust-ranked window they aged out behind newer facts,
+  so a rejected ask returned and a change whose first attempt failed shipped autonomously
+  on the retry. Blockers name the memory that decided them.
+- Self-review: a deleted file's diff lines were attributed to the previous file (or none),
+  so deleting a whole test file or public module reviewed clear; removed unittest
+  assertions and `pytest.raises` blocks now count, added skip/xfail markers are test
+  weakening, and any concern (not only on critical questions) requires the owner.
+- Run lease: a lease appears with its whole content (no empty-file window), an unreadable
+  lease is stale only when older than a lease can live, and recovery renames the stale
+  lease aside and verifies it, so two recovering cycles cannot both run.
+- Slack owner commands: a persisted replay ledger refuses a signed request seen before in
+  the window (`latest` resolves on arrival, so a replay could decide a newer request), and
+  bodies over 20 KB are refused before buffering.
+- GitHub publisher: the created commit (tree, sole parent, message, identities), the new
+  reference, and the draft pull request's head and base are verified; a bodiless `204`
+  (branch deletion) is no longer an unreadable response, which made every real
+  withdrawal fail. New owner-run `exercise-github` (dry run unless `--confirm-live`)
+  publishes one harmless file, proves eight publisher properties, and withdraws it.
+  No real GitHub or Slack call has been made.
+
 ## 0.26.0 — Harness boundary, persistent brain, single-run lease, enforceable cost
 
 - Resident Software Engineer runtime: one cycle per state root. `run.lock` is taken

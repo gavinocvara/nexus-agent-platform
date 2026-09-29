@@ -46,7 +46,7 @@ from nexus.software_engineer.sandbox import LocalProcessSandbox
 
 NOW = datetime(2026, 9, 29, 12, tzinfo=UTC)
 REVIEW_ID = UUID("21111111-2222-4333-8444-555555555555")
-TOKEN = "0123456789abcdef"
+TAG = "0123456789abcdef"
 
 # Each keeps ``subtract`` broken and silences the runner a different way.
 FORGED_AT_EXIT = (
@@ -118,18 +118,18 @@ def test_canary_goes_beside_the_most_locked_test_modules() -> None:
 
 
 def test_canary_report_must_name_the_planted_module_and_function() -> None:
-    canary = RunnerCanary(directory="tests/unit", token=TOKEN)
-    node = f"tests/unit/test_sentinelqa_canary_{TOKEN}.py::test_sentinelqa_canary_{TOKEN}"
+    canary = RunnerCanary(directory="tests/unit", token=TAG)
+    node = f"tests/unit/test_sentinelqa_canary_{TAG}.py::test_sentinelqa_canary_{TAG}"
     assert canary.reported_failed(f"....\nFAILED {node} - As...\n1 failed, 4 passed\n".encode())
     assert canary.reported_failed(f"FAILED sub/{node}\n".encode())  # rootdir above the tree
     for stdout in (
         f"PASSED {node}\n",
         f"ERROR {node} - ImportError\n",
-        f"FAILED tests/unit/xtest_sentinelqa_canary_{TOKEN}.py::test_sentinelqa_canary_{TOKEN}\n",
+        f"FAILED tests/unit/xtest_sentinelqa_canary_{TAG}.py::test_sentinelqa_canary_{TAG}\n",
         # A decoy of the same name elsewhere, failing honestly, is not the planted canary.
-        f"FAILED src/test_sentinelqa_canary_{TOKEN}.py::test_sentinelqa_canary_{TOKEN}\n",
-        f"FAILED test_sentinelqa_canary_{TOKEN}.py::test_sentinelqa_canary_{TOKEN}\n",
-        f"FAILED tests/test_sentinelqa_canary_{TOKEN}.py::test_sentinelqa_canary_{TOKEN}\n",
+        f"FAILED src/test_sentinelqa_canary_{TAG}.py::test_sentinelqa_canary_{TAG}\n",
+        f"FAILED test_sentinelqa_canary_{TAG}.py::test_sentinelqa_canary_{TAG}\n",
+        f"FAILED tests/test_sentinelqa_canary_{TAG}.py::test_sentinelqa_canary_{TAG}\n",
         "FAILED tests/unit/test_sentinelqa_canary_ffffffffffffffff.py::"
         "test_sentinelqa_canary_ffffffffffffffff\n",
         "1 failed, 4 passed in 0.10s\n",
@@ -138,13 +138,13 @@ def test_canary_report_must_name_the_planted_module_and_function() -> None:
     with pytest.raises(ValueError):
         RunnerCanary(directory="tests", token="not-hex")
     with pytest.raises(ValueError):
-        RunnerCanary(directory="../outside", token=TOKEN)
+        RunnerCanary(directory="../outside", token=TAG)
 
 
 def test_canary_is_planted_only_into_a_real_directory_and_removed(tmp_path: Path) -> None:
     root = tmp_path / "tree"
     (root / "tests").mkdir(parents=True)
-    canary = RunnerCanary(directory="tests", token=TOKEN)
+    canary = RunnerCanary(directory="tests", token=TAG)
     plant_canary(root, canary)
     planted = root / canary.path
     assert planted.read_bytes() == canary.content
@@ -157,10 +157,10 @@ def test_canary_is_planted_only_into_a_real_directory_and_removed(tmp_path: Path
     elsewhere.mkdir()
     (root / "linked").symlink_to(elsewhere, target_is_directory=True)
     with pytest.raises(CanaryError):
-        plant_canary(root, RunnerCanary(directory="linked", token=TOKEN))
+        plant_canary(root, RunnerCanary(directory="linked", token=TAG))
     assert list(elsewhere.iterdir()) == []
     with pytest.raises(CanaryError):
-        plant_canary(root, RunnerCanary(directory="missing", token=TOKEN))
+        plant_canary(root, RunnerCanary(directory="missing", token=TAG))
 
 
 def test_scripted_runs_report_planted_canaries_like_pytest(tmp_path: Path) -> None:
@@ -182,7 +182,7 @@ def test_scripted_runs_report_planted_canaries_like_pytest(tmp_path: Path) -> No
 
     clean = scripted(SandboxStatus.SUCCEEDED, "3 passed in 0.01s")
     assert report_planted_canaries(clean, root) == clean  # nothing planted
-    canary = RunnerCanary(directory="tests", token=TOKEN)
+    canary = RunnerCanary(directory="tests", token=TAG)
     plant_canary(root, canary)
     reported = report_planted_canaries(clean, root)
     assert reported.status is SandboxStatus.FAILED and reported.exit_code == 1
