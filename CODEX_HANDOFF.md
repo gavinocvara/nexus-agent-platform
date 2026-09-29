@@ -7,9 +7,9 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 - Branch `main`; local `HEAD` must equal `origin/main` at every checkpoint
   (`git rev-parse HEAD origin/main`, `git diff HEAD`, `git diff origin/main...HEAD`).
-- NEXUS `0.18.0` (Milestone I deterministic boundary): the release is the commit that
-  set that version; record its SHA and GitHub Actions run here once CI is green. HEAD is
-  the commit containing this file (`git rev-parse HEAD`).
+- NEXUS `0.18.0` (Milestone I deterministic boundary) release
+  `b613072f46a323ddf72c824a9d15ddec3421e588`; GitHub Actions run `36540394002` passed
+  both jobs. HEAD is the commit containing this file (`git rev-parse HEAD`).
 - 0.17.0 Milestone H `693047c` (run `36539315838`) green.
 - 0.16.2 finalization-reserve hardening `1984b8e` (run `36537351468`) green.
 - Verified releases: 0.16.1 Milestone G `9b05cdc` (GitHub Actions run `36494052048`
@@ -74,10 +74,9 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 ## Exact Next Step
 
-1. Confirm 0.18.0 CI is green and record it here and in the CHANGELOG heading.
-2. STOP at the live-model authorization boundary. The owner must explicitly authorize
+1. STOP at the live-model authorization boundary. The owner must explicitly authorize
    the one cost-bearing live run (see "Live Run Command").
-3. After an authorized run: inspect the artifact, record the result in ADR 0010 and
+2. After an authorized run: inspect the artifact, record the result in ADR 0010 and
    the CHANGELOG, then continue to Milestone J - SentinelQA-lite.
 
 ## Live Run Command (owner authorization required; not yet run)

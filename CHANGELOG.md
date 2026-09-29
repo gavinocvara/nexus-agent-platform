@@ -8,7 +8,7 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
-## 0.18.0 — PatchForge Milestone I: model engine boundary
+## 0.18.0 — PatchForge Milestone I: model engine boundary (`b613072`)
 
 - `ModelBackedEngine` behind a provider-neutral `ModelClient`: one strictly parsed action
   per turn, only the phase's tools, JSON-mode argument parsing, escaped and bounded
