@@ -30,7 +30,7 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 ## Validation (0.21.0 local release gate, Linux, Python 3.12.3)
 
 - Ruff format and lint clean; strict mypy clean (117 files).
-- pytest:  passed, 23 deselected (0.20.0: 807; 0.19.0: 744).
+- pytest: 818 passed, 23 deselected (0.20.0: 807; 0.19.0: 744).
 - `python -m nexus.patchforge.e2e_catalog`: 23 scenarios passed, byte-identical replay.
 - `python -m nexus.patchforge.benchmark_corpus`: passed (SentinelQA agreement included).
 - `python -m nexus.sentinelqa`: 29 scenarios passed, byte-identical replay.

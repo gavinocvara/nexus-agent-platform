@@ -72,7 +72,7 @@ zero disagreements).
 - 0.19.0: 744 passed, 23 deselected (SentinelQA adds lock, summary,
   verifier, catalog, and Atlas-flow tests).
 - 0.20.0: 807 passed, 23 deselected (63 resident-engineer tests added).
-- 0.21.0:  passed, 23 deselected (executor, local sandbox, and SentinelQA reproduction tests added).
+- 0.21.0: 818 passed, 23 deselected (executor, local sandbox, and SentinelQA reproduction tests added).
 
 ## Credentials and enablement
 
