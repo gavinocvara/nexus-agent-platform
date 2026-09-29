@@ -66,6 +66,12 @@ from nexus.software_engineer.policy import (
 from nexus.software_engineer.report import build_report, render_approval_request
 from nexus.software_engineer.review import DiffFacts, SelfReviewer, diff_facts
 from nexus.software_engineer.risk import classify_change
+from nexus.software_engineer.runtime import (
+    InterruptedRun,
+    RunLeaseError,
+    acquire_run_lease,
+    release_run_lease,
+)
 from nexus.software_engineer.trust import OwnerCommand, authorize_owner_command
 
 _CYCLE_NAMESPACE = UUID("e3f4a5b6-c7d8-4e9f-a0b1-c2d3e4f5a6b7")
@@ -156,6 +162,7 @@ class _State:
     learned: list[str] = field(default_factory=list)
     memory_reads: int = 0
     decision_reasons: list[str] = field(default_factory=list)
+    interrupted: InterruptedRun | None = None
 
 
 class EngineeringCycle:
@@ -202,7 +209,25 @@ class EngineeringCycle:
     # -- public --------------------------------------------------------------------------
 
     def run(self) -> tuple[CycleRecord, CycleReport]:
-        state = _State()
+        """Run one cycle under the state root's single-run lease.
+
+        A live lease held by another cycle raises ``RunLeaseError`` before anything is
+        observed or written; a stale lease is recovered and recorded as an incident.
+        """
+
+        lease, interrupted = acquire_run_lease(
+            self.state_root,
+            cycle_id=self.cycle_id,
+            now=self._now(),
+            max_runtime_seconds=self.budget.max_runtime_seconds,
+        )
+        try:
+            return self._run(interrupted)
+        finally:
+            release_run_lease(lease)
+
+    def _run(self, interrupted: InterruptedRun | None) -> tuple[CycleRecord, CycleReport]:
+        state = _State(interrupted=interrupted)
         head = "0" * 40
         try:
             head = self.inspector.head_sha()
@@ -451,6 +476,25 @@ class EngineeringCycle:
                 state.memory_writes.append(memory_id)
                 state.memory_summaries.append(summary)
 
+        if state.interrupted is not None:
+            sequence += 1
+            write(
+                observation(
+                    cycle_id=self.cycle_id,
+                    sequence=sequence,
+                    category=MemoryCategory.INCIDENT,
+                    content=(
+                        f"Cycle {state.interrupted.cycle_id} started at "
+                        f"{state.interrupted.started_at.isoformat()} never wrote a record "
+                        f"({state.interrupted.reason}); its lease was recovered by this cycle."
+                    ),
+                    now=now,
+                    confidence=90,
+                    tags=["incident", "interrupted_run"],
+                ),
+                "incident: an interrupted cycle was recovered",
+            )
+            state.learned.append("A previous cycle was interrupted; its lease was recovered.")
         recurred = False
         if state.selected is not None:
             sequence += 1
@@ -869,5 +913,6 @@ __all__ = [
     "EngineeringCycle",
     "ExecutionOutcome",
     "ExecutorError",
+    "RunLeaseError",
     "record_owner_decision",
 ]

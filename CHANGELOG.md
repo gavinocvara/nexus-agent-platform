@@ -6,6 +6,10 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 ## Unreleased
 
+- Resident Software Engineer runtime: one cycle per state root. `run.lock` is taken
+  before observation and released on every exit path; a concurrent run is refused
+  (`concurrent_run`, exit 2) without writing anything; a lease left by a dead cycle is
+  recovered with a `cycles/<id>.interrupted.json` marker and an incident memory.
 - Resident Software Engineer brain: new memory categories `root_cause` and
   `recurring_pattern`; the learn stage records root causes as validated facts (with
   evidence), recurring work as observations when an identical decision was already

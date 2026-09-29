@@ -22,7 +22,7 @@ from nexus.patchforge.runtime import RuntimeEngine
 from nexus.patchforge.workspace import GitRunner
 from nexus.software_engineer.approval import ApprovalError, decide, publish_approved_change
 from nexus.software_engineer.config import EngineerDisabledError, SoftwareEngineerSettings
-from nexus.software_engineer.cycle import CandidateExecutor, EngineeringCycle
+from nexus.software_engineer.cycle import CandidateExecutor, EngineeringCycle, RunLeaseError
 from nexus.software_engineer.executor import PatchForgeExecutor
 from nexus.software_engineer.inspect import RepositoryInspector
 from nexus.software_engineer.issues import GitHubIssueSource
@@ -288,7 +288,11 @@ def main(argv: list[str] | None = None) -> int:
         since=arguments.since,
         state_root=Path(arguments.state_root),
     )
-    record, report = cycle.run()
+    try:
+        record, report = cycle.run()
+    except RunLeaseError as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
     print(report.text)
     print(
         f"cycle={record.cycle_id} decision={record.decision.value} "

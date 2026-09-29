@@ -113,6 +113,16 @@ minor events into one daily report. `SlackWebhookTransport` reads the webhook UR
 configured environment variable at send time and never stores it; records keep only a
 body hash. Delivery failure is evidence, never an exception in the cycle.
 
+### Single-run lease and recovery (after 0.25.0)
+
+`nexus.software_engineer.runtime` gives each state root one cycle at a time: an exclusive
+lease file is created before observation and released on every exit path, a live lease
+held by another process refuses the newcomer with `concurrent_run` before anything is
+written, and a lease whose cycle died (expired past the runtime budget plus grace, or a
+dead process) is recovered with an audit marker and an incident memory. Together with the
+workflow's concurrency group, the budgets, the persisted record on every path, and
+`no_work` as a normal outcome, this is the whole daily runtime contract.
+
 ### Scheduling
 
 `.github/workflows/software-engineer.yml` runs on `workflow_dispatch` and a daily cron,

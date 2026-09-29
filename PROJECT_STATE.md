@@ -117,7 +117,7 @@ No credential is present in this container; nothing here needs one.
 | Self-review from diff facts | Done, deterministic (`review.py`) |
 | Notifier + Slack webhook transport (mocked in tests) | Done (`notify.py`) |
 | Daily report and approval request rendering | Done (`report.py`) |
-| Cycle state machine, persistence, failure handling | Done (`cycle.py`) |
+| Cycle state machine, persistence, failure handling, single-run lease and interrupted-run recovery | Done (`cycle.py`, `runtime.py`) |
 | CLI and scheduled workflow (read-only token, variable-gated) | Done |
 | Executor (PatchForge + SentinelQA + gates on an isolated branch) | **Done** for mechanical and model recipes (`executor.py`, `recipes.py`, `sandbox.py`); ships only through a configured publisher |
 | Controlled judgment evaluation (30 scenarios incl. autonomous draft publication and publisher refusal, CI gate) | **Done** (`evaluation.py`) |

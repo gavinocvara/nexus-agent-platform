@@ -212,6 +212,18 @@ Error codes are stable (`publish_credentials_missing`, `publish_base_moved`,
 `publish_branch_exists`, `publish_tree_mismatch`, `gates_not_passed`, `patch_mismatch`,
 `already_published`, ...) and never include response bodies or the token.
 
+## Single run and interrupted runs
+
+One cycle runs per state root. A cycle takes `.nexus/software_engineer/run.lock` before
+it observes anything and releases it on every exit path; a second `cycle` against the
+same state root refuses with `concurrent_run` (exit 2) and writes nothing. In GitHub
+Actions the `resident-software-engineer` concurrency group gives the same guarantee. A
+lease left by a cycle that died expires after `MAX_RUNTIME_SECONDS` plus five minutes, or
+as soon as its process is gone; the next cycle then writes
+`cycles/<cycle_id>.interrupted.json`, remembers the interruption as an incident, and
+proceeds normally. Nothing else needs cleanup: an interrupted cycle wrote no record, and
+its run directories are inert.
+
 ## Failure recovery
 
 - A failed cycle still writes its record and report and sends
