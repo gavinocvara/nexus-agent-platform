@@ -87,6 +87,7 @@ zero disagreements).
 | Brain v1 | `NEXUS_BRAIN_MODE` | `disabled` | frozen evaluation only |
 | Resident Software Engineer | `NEXUS_SOFTWARE_ENGINEER_ENABLED`, `_MODE`, `_SANDBOX`, `_MODEL`, `_CONFIRM_MODEL_SPEND`, `_MAX_MODEL_CALLS`, `_MAX_OUTPUT_TOKENS`, `_SLACK_WEBHOOK_URL` (secret), `OPENAI_API_KEY` (secret) | off, `dry_run`, `none`, unset, `false`, `0`, `0`, unset, unset | GitHub Actions variables gate the scheduled workflow; `propose` + `local_process` lets mechanical recipes produce verified branches in the uploaded artifact |
 | Resident Software Engineer publishing | `NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN` (local env only; fine-grained, this repo, contents + pull requests write), `_PUBLISH_FROM_CYCLE` | unset, `false` | Used only by the owner-run `publish` command after `decide --verdict ship`; the scheduled workflow never receives it |
+| Resident Software Engineer Slack commands | `NEXUS_SOFTWARE_ENGINEER_SLACK_SIGNING_SECRET` (secret), `_SLACK_OWNER_USER_ID`, `_SLACK_REPLAY_WINDOW_SECONDS` | unset, unset, `300` | `serve-slack` refuses to start without both; decisions only, never publication |
 | Resident Software Engineer issue intake | `NEXUS_SOFTWARE_ENGINEER_READ_ISSUES`, `_MAX_ISSUES`, `_GITHUB_READ_TOKEN` (optional, `issues: read`) | `false`, `20`, unset | The workflow passes `github.token` (permissions `contents: read`, `issues: read`); issues are untrusted signals |
 
 No credential is present in this container; nothing here needs one.
@@ -122,20 +123,21 @@ No credential is present in this container; nothing here needs one.
 | Model-backed recipes (type annotation, micro bug fix, defensive check) | **Done** (`PatchForgeExecutor.model_engine_factory`), off until model + confirmation + budgets + key |
 | Owner decisions (`decide`) and publication (`publish`) as draft pull requests | **Done** (`approval.py`, `publish.py`, CLI); tree re-derived from the validated patch, remote blob/tree SHAs verified, never merges |
 | GitHub issue intake (read-only, opt-in, untrusted signals; owner REJECT honoured by the generator) | **Done** (`issues.py`, `inspect.py`) |
-| Slack-delivered owner commands | Not built (`decide` CLI today) |
+| Slack-delivered owner commands (`serve-slack`: HMAC v0 signature, replay window, owner member id; records through `decide`; never publishes) | **Done** (`slack_commands.py`), hosting is the owner's choice |
 | Autonomous low-risk shipping in production | Possible only with `PUBLISH_FROM_CYCLE=true` + `autonomous_low_risk` + token; off by default; scheduled workflow never gets the token |
 
-## Highest-priority next task: first real publication, then Slack commands
+## Highest-priority next task: first real publication and Slack smoke test
 
 1. Owner step (no code): run one `propose` cycle with `local_process` (locally or via the
    workflow artifact), `decide --verdict ship`, then `publish` with a fine-grained token.
    Confirm the draft PR's tree equals the local branch, record the PR number and any
    `publish_*` error code here, and only then consider `PUBLISH_FROM_CYCLE`.
-2. Slack-delivered `OwnerCommand`s with signature verification, replacing the `decide`
-   CLI; the publisher and approval flow stay unchanged behind it.
+2. Owner step: host `serve-slack` (or keep the `decide` CLI) and point a Slack slash
+   command at it; the first real Slack decision is a smoke test of the signature path.
 3. The first owner-authorized model-recipe run (a real type or micro-bug fix on this
    repository) once the owner sets the model, confirmation, budgets, and key.
-4. SentinelQA review of candidate-changed tests so test repair can leave plan-only mode.
+4. SentinelQA review of candidate-changed tests so test repair can leave plan-only mode;
+   then memory consolidation and price tables.
 
 ## Resume commands
 

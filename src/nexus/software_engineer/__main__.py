@@ -41,6 +41,7 @@ from nexus.software_engineer.publish import (
     parse_github_repository,
 )
 from nexus.software_engineer.sandbox import LocalProcessSandbox
+from nexus.software_engineer.slack_commands import SlackCommandHandler, create_app
 
 
 def _issue_source(settings: SoftwareEngineerSettings) -> GitHubIssueSource | None:
@@ -91,6 +92,17 @@ def _model_engine_factory(
         )
 
     return build
+
+
+def _slack_handler(settings: SoftwareEngineerSettings, state_root: Path) -> SlackCommandHandler:
+    return SlackCommandHandler(
+        state_root=state_root,
+        memory=EngineerMemoryStore(settings.memory_path),
+        owner_id=settings.owner_id,
+        slack_owner_user_id=settings.slack_owner_user_id,
+        signing_secret_env=settings.slack_signing_secret_env,
+        window_seconds=settings.slack_replay_window_seconds,
+    )
 
 
 def _github_token_present(settings: SoftwareEngineerSettings) -> bool:
@@ -169,6 +181,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="publish even though the default branch moved past the validated base",
     )
+    serving = commands.add_parser(
+        "serve-slack", help="serve signature-verified Slack owner commands (ship/revise/reject)"
+    )
+    serving.add_argument("--host", default="127.0.0.1")
+    serving.add_argument("--port", type=int, default=8787)
     arguments = parser.parse_args(argv)
     settings = SoftwareEngineerSettings()
     if arguments.state_root is None:
@@ -183,11 +200,24 @@ def main(argv: list[str] | None = None) -> int:
             f"github_token_present={_github_token_present(settings)} "
             f"publish_from_cycle={settings.publish_from_cycle} "
             f"read_issues={settings.read_issues} "
+            f"slack_owner_user_id_set={settings.slack_owner_user_id is not None} "
             f"state_root={settings.state_root} memory_path={settings.memory_path} "
             f"max_runtime_seconds={settings.max_runtime_seconds} "
             f"max_changed_files={settings.max_changed_files} "
             f"max_diff_bytes={settings.max_diff_bytes}"
         )
+        return 0
+    if arguments.command == "serve-slack":
+        if settings.slack_owner_user_id is None:
+            print("refused: set NEXUS_SOFTWARE_ENGINEER_SLACK_OWNER_USER_ID first", file=sys.stderr)
+            return 2
+        if not os.environ.get(settings.slack_signing_secret_env, "").strip():
+            print(f"refused: {settings.slack_signing_secret_env} is not set", file=sys.stderr)
+            return 2
+        import uvicorn
+
+        app = create_app(_slack_handler(settings, Path(arguments.state_root)))
+        uvicorn.run(app, host=arguments.host, port=arguments.port, log_level="warning")
         return 0
     if arguments.command == "decide":
         try:

@@ -19,6 +19,7 @@ from nexus.software_engineer.models import CycleBudget, CycleMode
 from nexus.software_engineer.publish import GITHUB_TOKEN_ENV_DEFAULT
 
 SLACK_WEBHOOK_ENV_DEFAULT = "NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL"
+SLACK_SIGNING_SECRET_ENV_DEFAULT = "NEXUS_SOFTWARE_ENGINEER_SLACK_SIGNING_SECRET"
 
 
 class EngineerDisabledError(RuntimeError):
@@ -73,6 +74,18 @@ class SoftwareEngineerSettings(BaseSettings):
 
     slack_channel_label: str = Field(default="#nexus-engineering", min_length=1, max_length=100)
 
+    slack_signing_secret_env: str = Field(
+        default=SLACK_SIGNING_SECRET_ENV_DEFAULT, min_length=1, max_length=100
+    )
+    """Name of the variable holding the Slack app signing secret that authenticates slash
+    commands. Read per request, never stored."""
+
+    slack_owner_user_id: str | None = Field(default=None, min_length=1, max_length=50)
+    """The one Slack member id whose ``/nexus`` commands count as the owner's. Unset means
+    no Slack command is ever accepted."""
+
+    slack_replay_window_seconds: int = Field(default=300, ge=30, le=900)
+
     github_token_env: str = Field(default=GITHUB_TOKEN_ENV_DEFAULT, min_length=1, max_length=100)
     """Name of the environment variable holding a fine-grained GitHub token that may create
     branches and draft pull requests on the repository (contents and pull requests: write,
@@ -100,7 +113,7 @@ class SoftwareEngineerSettings(BaseSettings):
     schedule_cron: str = Field(default="17 6 * * *", min_length=9, max_length=100)
     """Documented intent only; the GitHub Actions workflow owns the real schedule."""
 
-    @field_validator("model", mode="before")
+    @field_validator("model", "slack_owner_user_id", mode="before")
     @classmethod
     def empty_model_means_none(cls, value: object) -> object:
         """CI passes unset variables as empty strings; an empty model is no model."""
@@ -144,6 +157,7 @@ class SoftwareEngineerSettings(BaseSettings):
 __all__ = [
     "GITHUB_READ_TOKEN_ENV_DEFAULT",
     "GITHUB_TOKEN_ENV_DEFAULT",
+    "SLACK_SIGNING_SECRET_ENV_DEFAULT",
     "SLACK_WEBHOOK_ENV_DEFAULT",
     "EngineerDisabledError",
     "SoftwareEngineerSettings",

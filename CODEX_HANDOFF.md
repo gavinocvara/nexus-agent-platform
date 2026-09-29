@@ -55,9 +55,9 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 1. Owner step, no code: one `propose` + `local_process` cycle, `decide --verdict ship`,
    `publish` with a fine-grained token; verify the draft PR and record the outcome in
    `PROJECT_STATE.md`. Do not enable `PUBLISH_FROM_CYCLE` before that.
-2. Then Slack-delivered `OwnerCommand`s (signature-verified) replacing the `decide` CLI;
-   the first owner-authorized model-recipe run; SentinelQA review of candidate-changed
-   tests; GitHub issue intake. The live PatchForge run stays owner-authorized only.
+2. Owner steps: host `serve-slack` for Slack decisions; set `READ_ISSUES=true` when
+   wanted. Then the first owner-authorized model-recipe run and SentinelQA review of
+   candidate-changed tests. The live PatchForge run stays owner-authorized only.
 
 ## Active Issues
 

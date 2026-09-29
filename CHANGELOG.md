@@ -6,6 +6,13 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 ## Unreleased
 
+- Resident Software Engineer: owner decisions through Slack slash commands
+  (`nexus.software_engineer.slack_commands`, `serve-slack`). `/nexus ship|revise|reject
+  [cycle|latest] <reason>` is accepted only with a valid Slack `v0` HMAC signature (secret
+  from the environment, per request), inside the replay window, and from the configured
+  owner member id; it records the decision through the same path as the `decide` CLI, once
+  per request, over the `slack` channel. Slack never publishes. Tests sign real HMACs and
+  drive the FastAPI receiver with a test client.
 - Resident Software Engineer: read-only GitHub issue intake (`nexus.software_engineer.issues`),
   opt-in through `NEXUS_SOFTWARE_ENGINEER_READ_ISSUES`. Open issues (never pull requests)
   become bounded, hashed, instruction-scanned `issue` signals; at most three per cycle

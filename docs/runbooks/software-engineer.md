@@ -27,6 +27,9 @@ with a change is open a draft pull request after the owner says SHIP; a human me
 | `NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN_ENV` | `NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN` | Name of the variable that holds the GitHub token used by `publish`. |
 | `NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN` | unset | Fine-grained token for this repository only: contents and pull requests write, nothing else. Read at publish time, sent as a header, never stored. The scheduled workflow never receives it. |
 | `NEXUS_SOFTWARE_ENGINEER_PUBLISH_FROM_CYCLE` | `false` | Lets an `autonomous_low_risk` cycle open draft pull requests itself when the token is present. Keep it false unless the owner has decided otherwise in a reviewed commit. |
+| `NEXUS_SOFTWARE_ENGINEER_SLACK_SIGNING_SECRET` | unset | Slack app signing secret that authenticates `/nexus` slash commands; read per request, never stored. |
+| `NEXUS_SOFTWARE_ENGINEER_SLACK_OWNER_USER_ID` | unset | The one Slack member id whose commands count as the owner's. Unset means no Slack command is accepted. |
+| `NEXUS_SOFTWARE_ENGINEER_SLACK_REPLAY_WINDOW_SECONDS` | `300` | Maximum age of a signed Slack request. |
 | `NEXUS_SOFTWARE_ENGINEER_READ_ISSUES` | `false` | Read open GitHub issues (never pull requests) as untrusted signals; the engineer's only network read. |
 | `NEXUS_SOFTWARE_ENGINEER_GITHUB_READ_TOKEN` | unset | Optional read-only token for issue intake (`issues: read`); the workflow passes its own token. Never stored. |
 | `NEXUS_SOFTWARE_ENGINEER_MAX_ISSUES` | `20` | Most recently updated open issues read per cycle (1-100). |
@@ -151,6 +154,27 @@ the `cli` channel, records an `OwnerDecision` in
 owner preference. It refuses a cycle without an approval request and a request that was
 already decided. Silence is never a decision; `revise` and `reject` never publish.
 
+### From Slack
+
+The same decision can arrive as a slash command. Create a Slack app with a slash command
+(for example `/nexus`) pointing at `https://<your host>/slack/commands`, then run the
+receiver next to the state root that holds the cycle records:
+
+```bash
+export NEXUS_SOFTWARE_ENGINEER_SLACK_SIGNING_SECRET=...   # from the Slack app
+export NEXUS_SOFTWARE_ENGINEER_SLACK_OWNER_USER_ID=U0...   # your Slack member id
+python -m nexus.software_engineer serve-slack --host 127.0.0.1 --port 8787
+```
+
+Grammar: `/nexus ship|revise|reject [<cycle-id>|latest] <reason>`. Every request must
+carry a valid Slack `v0` HMAC signature (checked with the signing secret from the
+environment) inside the replay window, and come from the configured owner member id;
+anything else is refused with a stable code (`signature_invalid`, `timestamp_stale`,
+`not_owner`, `already_decided`, ...) and records nothing. A SHIP from Slack records the
+decision only: publishing remains the owner-run `publish` step, so a compromised Slack
+account can at most say "ship" about an already-validated draft, never open or merge one.
+The receiver never reads secrets from Slack messages and never echoes them.
+
 ## Publishing an approved change
 
 ```bash
@@ -204,7 +228,8 @@ sends `rollback_occurred`. An owner can do the same by hand at any time.
 
 ## Not yet built
 
-Slack-delivered owner commands (today: the `decide` CLI); test repair (blocked by
-SentinelQA-lite's byte-level specification rule); GitHub issue intake; memory
-consolidation; price tables for cost accounting. No real GitHub call has been made yet:
-the publisher is exercised only against a fake API in tests. See ADR 0012.
+Test repair (blocked by SentinelQA-lite's byte-level specification rule); memory
+consolidation; price tables for cost accounting; a hosted deployment of the Slack
+receiver (today it runs wherever the owner starts it). No real GitHub or Slack call has
+been made yet: the publisher, issue source, and Slack receiver are exercised only against
+fakes in tests. See ADR 0012.

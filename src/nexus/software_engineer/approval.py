@@ -13,6 +13,7 @@ import os
 from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
+from typing import Literal
 from uuid import UUID, uuid5
 
 from nexus.atlas.models import ActorIdentity, ActorType
@@ -121,6 +122,7 @@ def decide(
     verdict: OwnerVerdict,
     reason: str,
     now: datetime,
+    channel: Literal["cli", "slack"] = "cli",
 ) -> OwnerDecision:
     """Record the human owner's answer to the cycle's approval request. Once."""
 
@@ -135,12 +137,13 @@ def decide(
         raise ApprovalError("reason_required")
     command = OwnerCommand(
         command_id=uuid5(
-            _APPROVAL_NAMESPACE, f"{request.request_id}:{verdict.value}:{now.isoformat()}"
+            _APPROVAL_NAMESPACE,
+            f"{request.request_id}:{verdict.value}:{channel}:{now.isoformat()}",
         ),
         request_id=request.request_id,
         verdict=verdict,
         issued_by=ActorIdentity(actor_type=ActorType.HUMAN, actor_id=owner_id),
-        channel="cli",
+        channel=channel,
         reason=text[:500],
         issued_at=now,
     )

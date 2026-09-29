@@ -211,11 +211,22 @@ derived from untrusted text, which the risk classifier and policy therefore keep
 autonomous shipping. Owner rejections are remembered as preferences and zero the same ask
 on later days, so a rejected issue is context, not a daily request.
 
+### Owner commands through Slack (after 0.24.0)
+
+`SlackCommandHandler` accepts `/nexus ship|revise|reject [cycle|latest] <reason>` only
+after three checks: Slack's `v0` HMAC signature verified with the signing secret read from
+the environment per request, a timestamp inside the replay window, and the configured
+owner member id. It then records the decision through the same `decide` path as the CLI,
+over the `slack` channel, once per request. Slack never publishes: SHIP from Slack is a
+recorded decision, and the draft pull request still needs the owner-run `publish` step (or
+the opted-in autonomous path), so a compromised Slack account cannot open or merge
+anything. `serve-slack` runs the receiver as a minimal FastAPI app wherever the owner
+chooses; the engineer never reads secrets from Slack messages and never echoes them.
+
 ## Deferred
 
 - Any publisher that fast-forwards `main`; the engineer will not merge. Issue comments and
-  reactions as owner signals stay outside the trust boundary until commands arrive through
-  a signature-verified channel.
+  reactions as owner signals stay outside the trust boundary.
 - Test repair and any recipe that must change tests wait for SentinelQA to review
   candidate-added or changed tests; today they remain approval-only plans.
 - Price tables for cost accounting; until then token and call budgets bound spending.
