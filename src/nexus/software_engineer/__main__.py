@@ -15,15 +15,18 @@ from pathlib import Path
 
 from nexus.patchforge.workspace import GitRunner
 from nexus.software_engineer.config import EngineerDisabledError, SoftwareEngineerSettings
-from nexus.software_engineer.cycle import EngineeringCycle
+from nexus.software_engineer.cycle import CandidateExecutor, EngineeringCycle
+from nexus.software_engineer.executor import PatchForgeExecutor
 from nexus.software_engineer.inspect import RepositoryInspector
 from nexus.software_engineer.memory import EngineerMemoryStore
+from nexus.software_engineer.models import CycleMode
 from nexus.software_engineer.notify import (
     NotificationTransport,
     Notifier,
     NullTransport,
     SlackWebhookTransport,
 )
+from nexus.software_engineer.sandbox import LocalProcessSandbox
 
 
 def _inspector(arguments: argparse.Namespace) -> RepositoryInspector:
@@ -34,6 +37,23 @@ def _inspector(arguments: argparse.Namespace) -> RepositoryInspector:
         git=git,
         clock=lambda: datetime.now(UTC),
         artifacts_dir=Path(arguments.artifacts).resolve() if arguments.artifacts else None,
+    )
+
+
+def _executor(
+    settings: SoftwareEngineerSettings, arguments: argparse.Namespace
+) -> CandidateExecutor | None:
+    """A real executor only outside dry run and only with an explicitly enabled sandbox."""
+
+    if settings.mode is CycleMode.DRY_RUN or settings.sandbox != "local_process":
+        return None
+    state_root = Path(arguments.state_root)
+    return PatchForgeExecutor(
+        repo_root=Path(arguments.repo).resolve(),
+        repository_url=settings.repository_url,
+        sandbox=LocalProcessSandbox(allow_local_process=True),
+        run_root=state_root / "runs",
+        git=GitRunner(state_root / "git-runtime"),
     )
 
 
@@ -63,7 +83,8 @@ def main(argv: list[str] | None = None) -> int:
         slack = bool(os.environ.get(settings.slack_webhook_env, "").strip())
         print(
             f"enabled={settings.enabled} mode={settings.mode.value} owner={settings.owner_id} "
-            f"model={settings.model or 'none'} slack_webhook_present={slack} "
+            f"model={settings.model or 'none'} sandbox={settings.sandbox} "
+            f"slack_webhook_present={slack} "
             f"state_root={settings.state_root} memory_path={settings.memory_path} "
             f"max_runtime_seconds={settings.max_runtime_seconds} "
             f"max_changed_files={settings.max_changed_files} "
@@ -91,6 +112,7 @@ def main(argv: list[str] | None = None) -> int:
         inspector=_inspector(arguments),
         memory=EngineerMemoryStore(settings.memory_path),
         notifier=notifier,
+        executor=_executor(settings, arguments),
         clock=lambda: datetime.now(UTC),
         since=arguments.since,
         state_root=Path(arguments.state_root),

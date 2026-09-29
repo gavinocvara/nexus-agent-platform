@@ -356,13 +356,17 @@ class SentinelQAVerifier:
                 SentinelFindingCode.EVIDENCE_INCOMPLETE,
                 f"The {tree.value} {purpose.value} run ended with {run.status.value}.",
             )
-        if run.counts is None:
+        if run.counts is None and purpose in _VERIFICATION_PURPOSES:
             raise self._stop(
                 findings,
                 SentinelFindingCode.EVIDENCE_INCOMPLETE,
                 f"The {tree.value} {purpose.value} run produced no parseable test summary.",
             )
-        if run.status is ExecutionStatus.PASSED and (run.counts.failed or run.counts.errors):
+        if (
+            run.counts is not None
+            and run.status is ExecutionStatus.PASSED
+            and (run.counts.failed or run.counts.errors)
+        ):
             raise self._stop(
                 findings,
                 SentinelFindingCode.EVIDENCE_INCOMPLETE,

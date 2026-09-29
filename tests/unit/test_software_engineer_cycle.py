@@ -73,6 +73,8 @@ README_PATCH = b"""diff --git a/README.md b/README.md
 class FakeExecutor:
     """A deterministic executor that pretends to have produced and validated a change."""
 
+    can_ship = True
+
     def __init__(
         self,
         *,

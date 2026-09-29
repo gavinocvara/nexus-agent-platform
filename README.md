@@ -19,7 +19,7 @@ against a baseline before adoption.
 | Atlas | Thin v1 | Local control plane: typed jobs, policy, review, approval, audit | ADR 0009 |
 | PatchForge | In progress | Contracts through Benchmark v0 plus an opt-in model engine boundary | ADR 0010 |
 | SentinelQA-lite | Built | Independent verification against the pristine specification; fail-closed verdicts gate Atlas approval | ADR 0011, `docs/runbooks/sentinelqa.md` |
-| Resident Software Engineer | Foundation (disabled by default) | Bounded daily cycle: inspect, rank, plan, risk-classify, self-review, ask the owner; private memory; Slack notifier | ADR 0012, `docs/runbooks/software-engineer.md` |
+| Resident Software Engineer | Foundation + mechanical recipes (disabled by default) | Bounded daily cycle: inspect, rank, plan, run PatchForge + SentinelQA for formatting and lint fixes, risk-classify, self-review, ask the owner; private memory; Slack notifier; nothing is published | ADR 0012, `docs/runbooks/software-engineer.md` |
 | Engram | Planned | Shared validated knowledge | `ROADMAP.md` |
 
 Lab request path:

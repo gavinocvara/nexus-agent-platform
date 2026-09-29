@@ -258,3 +258,28 @@ def test_verdict_contract_refuses_a_pass_without_evidence(
         SentinelVerdict.model_validate({**verdict.model_dump(), "verdict": ReviewVerdict.FAILED})
     digest = sha256(b"x").hexdigest()
     assert len(digest) == 64
+
+
+def test_reproduction_commands_need_no_pytest_summary(tmp_path: Path, candidate: E2ERun) -> None:
+    """Reproduction may be any operator check (for example a formatter); only the targeted
+    and full-suite runs must report pytest counts."""
+
+    from nexus.patchforge.policy import CommandPurpose
+    from nexus.patchforge.sandbox import SandboxStatus
+    from nexus.sentinelqa.catalog import baseline_plans, verification_plans
+    from nexus.sentinelqa.harness import spec_plan
+
+    profile = candidate.scenario.profile
+    plans = [
+        spec_plan(
+            profile,
+            CommandPurpose.REPRODUCTION,
+            SandboxStatus.FAILED,
+            summary="Would reformat: calculator.py\n1 file would be reformatted",
+        ),
+        *baseline_plans(profile)[1:],
+        *verification_plans(profile),
+    ]
+    verdict = _review(tmp_path, candidate, sandbox=FakeSandbox(plans, clock=lambda: NOW))
+    assert verdict.verdict is ReviewVerdict.PASSED
+    assert verdict.runs[0].counts is None and verdict.runs[1].counts is not None

@@ -82,6 +82,7 @@ class ShipPolicy:
         usage: CycleUsage,
         request: ApprovalRequest | None = None,
         owner_decision: OwnerDecision | None = None,
+        plan_only: bool = False,
     ) -> PolicyDecision:
         reasons: list[str] = []
         exceeded = usage.exceeded(self.budget)
@@ -92,12 +93,19 @@ class ShipPolicy:
         valid, gate_reason = gates_passed(gates, REQUIRED_GATES_FOR_AUTONOMOUS_SHIP)
         if owner_decision is not None:
             return self._after_owner(owner_decision, request, valid, gate_reason)
-        if self.mode is CycleMode.DRY_RUN and not any(
-            item.status in {GateStatus.FAILED, GateStatus.ERROR} for item in gates
-        ):
+        failed = any(item.status in {GateStatus.FAILED, GateStatus.ERROR} for item in gates)
+        if self.mode is CycleMode.DRY_RUN and not failed:
             return PolicyDecision(
                 CycleDecision.REQUEST_APPROVAL,
                 ("dry run: this is a plan, nothing was executed", f"{risk.level.value} risk"),
+            )
+        if plan_only and not failed:
+            return PolicyDecision(
+                CycleDecision.REQUEST_APPROVAL,
+                (
+                    "no change was produced: this is a plan for the owner",
+                    f"{risk.level.value} risk",
+                ),
             )
         if not valid:
             reasons.append(gate_reason)

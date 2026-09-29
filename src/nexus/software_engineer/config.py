@@ -8,6 +8,7 @@ governing settings: the engineer reads them and never writes them.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -31,6 +32,15 @@ class SoftwareEngineerSettings(BaseSettings):
     mode: CycleMode = CycleMode.DRY_RUN
     owner_id: Identifier = "owner"
     """Atlas human actor id whose decisions the engineer accepts."""
+
+    repository_url: str = Field(
+        default="https://github.com/gavinocvara/nexus-agent-platform", min_length=8, max_length=500
+    )
+    """Operator identity of the repository the engineer maintains (no credentials)."""
+
+    sandbox: Literal["none", "local_process"] = "none"
+    """``local_process`` runs operator commands as bounded local processes; only for
+    ephemeral, credential-free runners. ``none`` leaves the engineer in plan-only mode."""
 
     state_root: Path = Path(".nexus/software_engineer")
     memory_path: Path = Path(".nexus/software_engineer/memory.sqlite3")

@@ -91,6 +91,11 @@ class ExecutionOutcome:
 class CandidateExecutor(Protocol):
     """Produces, ships, and rolls back a change for one candidate."""
 
+    @property
+    def can_ship(self) -> bool:
+        """Whether a publisher exists; without one every validated change is proposed."""
+        ...
+
     def execute(
         self, candidate: EngineeringCandidate, *, cycle_id: UUID, budget: CycleBudget
     ) -> ExecutionOutcome: ...
@@ -106,6 +111,8 @@ class ExecutorError(RuntimeError):
 
 class DryRunExecutor:
     """Plans only. It never touches the tree, so it can never ship or roll back."""
+
+    can_ship = False
 
     def execute(
         self, candidate: EngineeringCandidate, *, cycle_id: UUID, budget: CycleBudget
@@ -347,7 +354,13 @@ class EngineeringCycle:
             gates=state.outcome.gates,
             self_review=state.review,
             usage=self.usage,
+            plan_only=state.outcome.change is None,
         )
+        if policy.decision is CycleDecision.SHIP and not self.executor.can_ship:
+            policy = PolicyDecision(
+                CycleDecision.REQUEST_APPROVAL,
+                (*policy.reasons, "no publisher is configured, so the owner applies the change"),
+            )
         state.policy = policy
         state.decision_reasons.extend(policy.reasons)
         if policy.decision is CycleDecision.REQUEST_APPROVAL:

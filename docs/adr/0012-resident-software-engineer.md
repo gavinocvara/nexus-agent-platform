@@ -120,13 +120,39 @@ gates producing a failed hypothesis that blocks a retry, governing paths and hig
 escalating, weakened tests needing a human, budget exhaustion, notifier outage, a dirty
 tree, prompt injection in history, and the disabled-by-default CLI.
 
+### Executor v1: mechanical recipes (0.21.0)
+
+`PatchForgeExecutor` implements `CandidateExecutor` for categories with a mechanical
+recipe: `formatting` (`ruff format`) and `dead_code_removal` (`ruff check --fix`). A recipe
+is an operator-owned `RepositoryProfile` (reproduction = the matching check; formatter =
+the fixing tool; linter, type checker, targeted and full tests) plus a fixed PatchForge
+script. The engine never edits files: the operator's tool makes the change inside the
+sandbox as the profile's formatter command, the rest of the profile validates it, and
+PatchForge's Runtime and Attestor own all evidence. SentinelQA then verifies the attested
+patch against the pristine specification lock captured from the operator checkout's HEAD.
+Gate results are mapped from the attested checks (`ruff_format`, `ruff_lint`, `mypy`,
+`pytest_targeted`, `pytest_full`) and the SentinelQA verdict (`sentinel_review`), each
+with an evidence hash. The candidate is materialized as a commit on a local branch
+`nexus/software-engineer/<cycle>` in a separate clone; the operator checkout is never
+modified. `can_ship` is `False`: without a publisher every validated change becomes an
+approval request, and the owner applies the branch or patch.
+
+`LocalProcessSandbox` exists because ephemeral runners such as GitHub Actions have no
+Docker daemon. It runs only immutable operator-profile commands, without a shell, in a
+`.git`-free worktree, with a scrubbed environment (no secrets; `PYTHONPATH` and `MYPYPATH`
+point at the worktree so the checkout under test, not an installed copy, is exercised),
+bounded by timeouts and output limits. It provides no kernel isolation, so it must be
+enabled explicitly (`NEXUS_SOFTWARE_ENGINEER_SANDBOX=local_process`) and is meant only for
+this repository in a disposable, credential-free job. Docker remains the sandbox for
+untrusted repositories.
+
 ## Deferred
 
-- A real `CandidateExecutor` that runs PatchForge on an isolated branch with this
-  repository as the operator profile, has SentinelQA verify the candidate, runs the full
-  gate set in a sandboxed runner, and ships by fast-forwarding an approved branch. Until it
-  exists the engineer plans and proposes (`dry_run` / `propose`); `autonomous_low_risk`
+- A publisher that pushes an approved candidate branch and fast-forwards `main` with a
+  deliberately supplied write token; until then nothing ships and `autonomous_low_risk`
   is exercised only with scripted executors in tests.
+- Recipes beyond formatting and lint fixes (type-annotation repair, test repair, micro bug
+  fixes) need a model-backed engine and remain approval-only plans.
 - A model-backed investigator for candidate refinement behind the existing `ModelClient`
   boundary, with the same one-action-per-turn parsing PatchForge uses.
 - Owner commands arriving through Slack (today: typed `OwnerCommand` via code/CLI).

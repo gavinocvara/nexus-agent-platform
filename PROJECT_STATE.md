@@ -8,12 +8,12 @@ Update it at every checkpoint. Rules live in `AGENTS.md`; execution order in
 
 | Item | Value |
 | --- | --- |
-| Version | `0.20.0` (`pyproject.toml`) |
+| Version | `0.21.0` (`pyproject.toml`) |
 | HEAD | the commit containing this file (`git rev-parse HEAD`) |
 | origin/main | must equal HEAD at a checkpoint (`git rev-parse origin/main`) |
 | Working tree | clean at the checkpoint (`git status --short` empty) |
 | Toolchain | Python 3.12, Ruff, strict mypy, pytest, Docker Compose |
-| Local setup used for 0.19.0 and 0.20.0 | `uv venv --python 3.12 <outside repo>` then `uv pip install -e ".[dev]"` |
+| Local setup used for 0.19.0 to 0.21.0 | `uv venv --python 3.12 <outside repo>` then `uv pip install -e ".[dev]"` |
 
 ## What exists (architecture status)
 
@@ -27,7 +27,7 @@ Update it at every checkpoint. Rules live in `AGENTS.md`; execution order in
 | PatchForge I (model engine boundary) | Built; live run not executed | `nexus.patchforge.engine`, `nexus.patchforge.live` |
 | PatchForge J (SentinelQA-lite) | Complete (0.19.0, CI run 36546322678 green) | `nexus.sentinelqa`, ADR 0011, `docs/runbooks/sentinelqa.md` |
 | PatchForge K (GitHub intake, branch push, draft PR) | Not started | — |
-| Resident Software Engineer | **Foundation complete in 0.20.0**, disabled by default; executor next | `nexus.software_engineer`, ADR 0012, `docs/runbooks/software-engineer.md` |
+| Resident Software Engineer | **Foundation (0.20.0, CI run 36549244409 green) + executor v1 for mechanical recipes (0.21.0)**, disabled by default | `nexus.software_engineer`, ADR 0012, `docs/runbooks/software-engineer.md` |
 | Engram, Kubernetes, AegisOps remediation | Deferred | `ROADMAP.md` |
 
 ## SentinelQA-lite (0.19.0) in one paragraph
@@ -48,19 +48,19 @@ byte-identically), `tests/unit/test_sentinelqa_*.py`, and Benchmark v0 agreement
 (`reference` 5/5 passed, `fix_and_edit_tests` 5/5 failed with `specification_modified`,
 zero disagreements).
 
-## Validation record (0.20.0, local, Linux)
+## Validation record (0.21.0, local, Linux)
 
 | Check | Result |
 | --- | --- |
 | `uv pip check` | compatible |
 | `ruff format --check .` / `ruff check .` | clean (182 files) |
-| `mypy` (strict, `nexus` package) | clean (114 files) |
+| `mypy` (strict, `nexus` package) | clean (117 files) |
 | `pytest -q` (unit + service, integration deselected) | see "Test counts" |
 | `python -m nexus.patchforge.e2e_catalog` | 23 scenarios passed, byte-identical |
 | `python -m nexus.patchforge.benchmark_corpus` | passed; SentinelQA agreement 100% |
 | `python -m nexus.sentinelqa` | 29 scenarios passed, byte-identical |
 | `python -m nexus.lab.scenarios validate` | 5 scenarios |
-| `python -m nexus.software_engineer preflight` | `enabled=False mode=dry_run slack_webhook_present=False` |
+| `python -m nexus.software_engineer preflight` | `enabled=False mode=dry_run sandbox=none slack_webhook_present=False` |
 | `docker compose config --quiet` | valid |
 | Compose integration (`RUN_INTEGRATION=1`) | not run locally (no Docker daemon); CI job `compose-integration` |
 | Live model calls | none, ever, in this repository's history |
@@ -72,6 +72,7 @@ zero disagreements).
 - 0.19.0: 744 passed, 23 deselected (SentinelQA adds lock, summary,
   verifier, catalog, and Atlas-flow tests).
 - 0.20.0: 807 passed, 23 deselected (63 resident-engineer tests added).
+- 0.21.0:  passed, 23 deselected (executor, local sandbox, and SentinelQA reproduction tests added).
 
 ## Credentials and enablement
 
@@ -80,16 +81,16 @@ zero disagreements).
 | AegisOps live investigator | `NEXUS_AGENT_ENABLED`, `OPENAI_API_KEY` | off | key only in ignored `.env` |
 | PatchForge live run | `NEXUS_PATCHFORGE_LIVE_ENABLED`, `OPENAI_API_KEY`, `--confirm-live` | off | owner authorization required; now SentinelQA-reviewed |
 | Brain v1 | `NEXUS_BRAIN_MODE` | `disabled` | frozen evaluation only |
-| Resident Software Engineer | `NEXUS_SOFTWARE_ENGINEER_ENABLED`, `NEXUS_SOFTWARE_ENGINEER_MODE`, `NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL` (secret) | off, `dry_run`, unset | GitHub Actions variable `NEXUS_SOFTWARE_ENGINEER_ENABLED=true` gates the scheduled workflow |
+| Resident Software Engineer | `NEXUS_SOFTWARE_ENGINEER_ENABLED`, `NEXUS_SOFTWARE_ENGINEER_MODE`, `NEXUS_SOFTWARE_ENGINEER_SANDBOX`, `NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL` (secret) | off, `dry_run`, `none`, unset | GitHub Actions variables gate the scheduled workflow; `propose` + `local_process` lets mechanical recipes produce verified branches in the uploaded artifact |
 
 No credential is present in this container; nothing here needs one.
 
 ## Known failures, blockers, debt
 
-- None failing. The resident engineer plans and proposes but cannot produce code changes
-  until its executor exists. SentinelQA's runner lacks a Docker integration proof
-  (deterministic gates use scripted/oracle sandboxes). Test modules are not mypy-checked
-  in CI.
+- None failing. The resident engineer produces verified branches only for mechanical
+  recipes (formatting, lint fixes) and cannot publish them (no publisher). SentinelQA's
+  runner lacks a Docker integration proof (deterministic gates use scripted/oracle
+  sandboxes). Test modules are not mypy-checked in CI.
 - Remote branch `maintenance/repo-hygiene-claude` is unmerged; owner decides.
 - Live PatchForge run: deliberately unexecuted. Justified only after the owner authorizes
   cost; it is now reviewed by SentinelQA end to end.
@@ -110,24 +111,23 @@ No credential is present in this container; nothing here needs one.
 | Daily report and approval request rendering | Done (`report.py`) |
 | Cycle state machine, persistence, failure handling | Done (`cycle.py`) |
 | CLI and scheduled workflow (read-only token, variable-gated) | Done |
-| Executor (PatchForge + SentinelQA + gates on an isolated branch; ship by fast-forward) | **Not built**; `DryRunExecutor` only |
+| Executor (PatchForge + SentinelQA + gates on an isolated branch) | **Done for mechanical recipes** (`executor.py`, `recipes.py`, `sandbox.py`); no publisher, so it never ships |
 | Model-backed investigation | Not built (no model configured; budgets zero) |
 | Slack-delivered owner commands | Not built (typed `OwnerCommand` via code) |
-| Autonomous low-risk shipping in production | Disabled; exercised only with scripted executors in tests |
+| Autonomous low-risk shipping in production | Disabled; needs a publisher with a deliberately supplied write token; exercised only with scripted executors in tests |
 
-## Highest-priority next task: resident engineer executor
+## Highest-priority next task: publisher and model-backed recipes
 
-1. `CandidateExecutor` implementation: provision an isolated branch from HEAD, build a
-   `RepositoryProfile` for this repository (commands: ruff format check, ruff check,
-   mypy, pytest full/targeted; test prefixes `tests`; protected paths = governing
-   paths), run PatchForge for the candidate, capture the `SpecificationLock` first and have
-   SentinelQA verify the result, map gates to `GateResult`s with evidence hashes, and
-   return a `ChangeSummary` with a rollback reference. `ship` fast-forwards only an
-   approved branch; `rollback` reverts by commit.
-2. Wire the executor in `__main__` behind `mode != dry_run`; keep the workflow's default
-   mode `dry_run`.
-3. Adversarial evaluation of the executor: injected issue text, request to weaken safety
-   controls, flaky test, unrelated failing test, merge conflict, dirty tree.
+1. Publisher: push an approved candidate branch and open a draft PR (never merge) with a
+   deliberately supplied write token, only after an `OwnerDecision(ship)`; record the
+   PR reference in the change summary and memory. Keep the workflow token read-only by
+   default; a separate, owner-enabled workflow would hold the write token.
+2. Model-backed recipes behind `ModelClient` (PatchForge's `ModelBackedEngine`) for
+   type-annotation repair and test repair, with zero budgets by default, then extend
+   the adversarial evaluation (injection in issue text, safety-weakening requests, flaky
+   and unrelated failing tests, merge conflicts).
+3. Slack-delivered `OwnerCommand`s with signature verification, replacing the code/CLI
+   path for approvals.
 
 ## Resume commands
 

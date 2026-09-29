@@ -8,6 +8,35 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
+## 0.21.0 — Resident Software Engineer executor v1 (mechanical recipes)
+
+- `PatchForgeExecutor`: for candidates whose category has a mechanical recipe
+  (`formatting` -> `ruff format`, `dead_code_removal` -> `ruff check --fix`) it provisions a
+  disposable PatchForge workspace from the operator checkout, runs the recipe's fixed
+  script through the real ToolGateway, Runtime, and Attestor (reproduce with the matching
+  check, let the operator's tool make the change, validate with formatter, linter, type
+  checker, targeted and full tests, report), has SentinelQA verify the attested patch
+  against the pristine specification lock, maps the attested checks and the verdict to
+  gate results with evidence hashes, and materializes the candidate as a commit on a
+  local `nexus/software-engineer/<cycle>` branch in a separate clone. It cannot ship: no
+  publisher exists, so the policy turns every validated change into an approval request.
+- `LocalProcessSandbox`: a `SandboxExecutor` for ephemeral, credential-free runners with
+  no Docker daemon. Explicit enablement (`NEXUS_SOFTWARE_ENGINEER_SANDBOX=local_process`),
+  immutable operator commands only, no shell, `.git`-free worktrees, a scrubbed
+  environment (no secrets; `PYTHONPATH`/`MYPYPATH` point at the worktree), timeout and
+  output bounds. It has no container isolation and is documented as such.
+- Ship policy: a run that produced no change but failed no gate is a plan and becomes an
+  approval request; a ship decision without a publisher becomes an approval request.
+- SentinelQA: only the targeted and full-suite runs must report pytest counts;
+  reproduction may be any operator check (for example a formatter check).
+- Settings: `NEXUS_SOFTWARE_ENGINEER_REPOSITORY_URL`, `NEXUS_SOFTWARE_ENGINEER_SANDBOX`;
+  the scheduled workflow passes the sandbox variable through.
+- Tests: the executor over fixture repositories (formatting and lint-fix recipes produce
+  verified branches; a recipe that breaks a test is not proposed; a SentinelQA
+  disagreement fails the review gate; categories without a recipe return a plan; a
+  propose-mode cycle turns the verified branch into an approval request) and the local
+  sandbox (enablement, scrubbed environment, interpreter mapping, bounds, Git refusal).
+
 ## 0.20.0 — Resident Software Engineer foundation
 
 - New `nexus.software_engineer` package (ADR 0012), disabled by default

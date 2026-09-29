@@ -31,6 +31,9 @@ jobs:
       NEXUS_SOFTWARE_ENGINEER_ENABLED: "true"
       NEXUS_SOFTWARE_ENGINEER_MODE: ${{ inputs.mode || vars.NEXUS_SOFTWARE_ENGINEER_MODE || 'dry_run' }}
       NEXUS_SOFTWARE_ENGINEER_OWNER_ID: ${{ vars.NEXUS_SOFTWARE_ENGINEER_OWNER_ID || 'owner' }}
+      # The runner is ephemeral and holds no credentials beyond the read-only token, so
+      # mechanical recipes may run as bounded local processes when the mode allows changes.
+      NEXUS_SOFTWARE_ENGINEER_SANDBOX: ${{ vars.NEXUS_SOFTWARE_ENGINEER_SANDBOX || 'none' }}
       NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL: ${{ secrets.NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL }}
 
     steps:

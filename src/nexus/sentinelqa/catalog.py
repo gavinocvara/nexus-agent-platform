@@ -570,12 +570,18 @@ def executor_unavailable() -> SentinelScenario:
 
 
 def no_test_summary() -> SentinelScenario:
+    """A test run whose output carries no pytest summary is not evidence. Reproduction
+    commands may be any operator check and need no summary; test runs always do."""
+
     profile = _profile()
     return SentinelScenario(
         name="no_test_summary",
         candidate=patch_proposed(),
         plans=[
-            spec_plan(profile, CommandPurpose.REPRODUCTION, SandboxStatus.FAILED, summary="Killed"),
+            spec_plan(profile, CommandPurpose.REPRODUCTION, SandboxStatus.FAILED),
+            spec_plan(
+                profile, CommandPurpose.TARGETED_TESTS, SandboxStatus.FAILED, summary="Killed"
+            ),
         ],
         expected_verdict=ReviewVerdict.INCONCLUSIVE,
         expected_findings=(Code.EVIDENCE_INCOMPLETE.value,),
