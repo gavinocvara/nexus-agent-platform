@@ -224,10 +224,9 @@ Error codes are stable (`publish_credentials_missing`, `publish_base_moved`,
 `publish_ref_mismatch`, `publish_pull_request_mismatch`, `gates_not_passed`, `patch_mismatch`,
 `already_published`, ...) and never include response bodies or the token.
 
-## First live exercises (owner-run, not yet performed)
+## First live exercises (owner-run; GitHub done, Slack pending)
 
-No real GitHub or Slack call has been made. Run these once, in this order, before relying
-on either integration. Neither is part of a cycle, and neither is run by the scheduler.
+Run these once, in this order, before relying on either integration. Neither is part of a cycle, and neither is run by the scheduler.
 
 **GitHub publisher.** The first real publication must not be a real change:
 `exercise-github` publishes one purpose-built file (`integration-exercise/
@@ -252,7 +251,10 @@ verified commit), `duplicate_refused` (the existing branch is refused before any
 and `withdrawn` (pull request closed, branch deleted). If `cleaned_up` is false, close the
 pull request and delete the branch by hand; the record names both. The exercise found one
 defect before any live run: the publisher could not read GitHub's empty `204` reply to a
-branch deletion, so every real withdrawal would have reported failure.
+branch deletion, so every real withdrawal would have reported failure. The first live
+run then failed on Windows because a relative `work_root` made `git -C <scratch> apply`
+miss the patch; fixed in `6ea5a92`. The next live run passed all eight checks with
+`cleaned_up=True` (draft PR #4 closed unmerged, exercise branch deleted).
 
 **Slack owner commands.** Host `serve-slack` (above) behind HTTPS, then:
 
@@ -303,6 +305,6 @@ sends `rollback_occurred`. An owner can do the same by hand at any time.
 
 Test repair (blocked by SentinelQA-lite's byte-level specification rule); memory
 consolidation; a hosted deployment of the Slack receiver (today it runs wherever the
-owner starts it). No real GitHub or Slack call has
-been made yet: the publisher, issue source, and Slack receiver are exercised only against
-fakes in tests; the owner-run exercises above are prepared but not performed. See ADR 0012.
+owner starts it). The publisher has passed the live GitHub exercise; no real `publish`
+of an engineering change has been made. The issue source and Slack receiver are exercised
+only against fakes in tests; the Slack exercise above is not performed. See ADR 0012.

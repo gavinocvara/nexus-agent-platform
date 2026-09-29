@@ -10,9 +10,9 @@ Git and `CHANGELOG.md`, rules in `AGENTS.md`, the long-form resume state in
 | --- | --- |
 | Version | `0.27.0` (`pyproject.toml`) |
 | Branch | `main` (0.27.0 landed via PR #1 and PR #2; `main` push rules: `AGENTS.md` Invariants) |
-| origin/main | `b382922` (merge of PR #2) plus the handoff-correction PR that contains this file |
+| origin/main | `6ea5a92` (publisher relative-`work_root` fix) plus the docs checkpoint containing this file |
 | Working tree | clean at the checkpoint (`git status --short` empty) |
-| CI | green on `main`: run `36629573824` (PR #1 head) and run `36630698127` (`b382922`, push to `main`), both jobs `validate` and `compose-integration` passed. |
+| CI | green on `main` at `6ea5a92`: run `36641561380` (`validate`, `compose-integration`). |
 
 Landed on `main`: PR #1 (0.27.0 production hardening, merge `7fa0f29`) and PR #2 (README
 reflects 0.27.0, portable Makefile, AegisOps runbook corrections, merge `b382922`).
@@ -57,7 +57,7 @@ self-review fixes, `89c3370` race-safe run lease, `b4afb04` `exercise-github` + 
 | Persistent brain | Unchanged architecture; guard memories read in full; knowledge never authority. |
 | Scheduler | Unchanged, disabled (repository variable unset); read-only token; reversible by unsetting. |
 | Slack | Receiver hardened; no real Slack call ever made. |
-| GitHub publisher | Hardened; no real GitHub call ever made; `exercise-github` prepared, not run. |
+| GitHub publisher | Validated against the real GitHub API: the first `exercise-github --confirm-live` (after fix `6ea5a92`) passed all 8 checks, `cleaned_up=True`; exercise PR #4 was draft only, closed, never merged; branch `nexus/integration-exercise/c4b393f1d868` deleted. No real `decide` + `publish` yet. |
 | Model spend | Off; no live call ever made. |
 
 ## Known operational risks
@@ -72,16 +72,14 @@ self-review fixes, `89c3370` race-safe run lease, `b4afb04` `exercise-github` + 
 
 ## Owner decisions required (nothing below has been done)
 
-1. Authorize the first live GitHub exercise: `exercise-github --confirm-live` with a
-   fine-grained token (this repository; Contents + Pull requests read/write). Runbook
-   "First live exercises".
-2. Authorize hosting `serve-slack` and the six-step Slack exercise.
+1. Authorize hosting `serve-slack` and the six-step Slack exercise.
+2. Authorize the first real `decide` + `publish` (still before any `PUBLISH_FROM_CYCLE`).
 3. Remote branches: `maintenance/repo-hygiene-claude` is unmerged;
    `maintenance/context-slimming` and `claude/confident-faraday-1drq98` are fully merged. Owner decides
    whether to delete them.
 
-No live GitHub exercise, Slack exercise, live model-backed cycle, or unattended
-scheduling has been run.
+Done: the live GitHub publisher exercise (above). Not yet run: Slack exercise, live
+model-backed cycle, real `publish`, unattended scheduling.
 
 ## Exact next task
 
