@@ -8,7 +8,7 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
-## 0.17.0 — PatchForge Milestone H: Benchmark v0
+## 0.17.0 — PatchForge Milestone H: Benchmark v0 (`693047c`)
 
 - Five synthetic defects with evaluator-only ground truth (`nexus.patchforge.benchmark`,
   `nexus.patchforge.benchmark_corpus`).

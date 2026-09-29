@@ -33,6 +33,7 @@ from nexus.patchforge.policy import PatchForgePolicy, RepositoryProfile
 from nexus.patchforge.runtime import (
     PatchForgeRuntime,
     RuntimeCompletion,
+    RuntimeEngine,
     RuntimeToolAction,
     RuntimeTurn,
 )
@@ -99,6 +100,10 @@ class E2EScenario:
     fail_cleanup: bool = False
     fail_lease_renewal_at: int | None = None
     sandbox_factory: SandboxFactory | None = None
+    engine_factory: Callable[[Path], RuntimeEngine] | None = None
+    """Replace the scripted engine (for example with a model-backed one); gets the worktree."""
+    engine_kind: str = "scripted"
+    engine_version: str = "e2e-v1"
     expected_phase_reached: PatchForgePhase = PatchForgePhase.CLOSED
     expected_implementation_loops: int = 0
     expected_findings: Sequence[str] = ()
@@ -197,7 +202,10 @@ class E2ERun:
         identity = result.identity
         check(identity.memory_mode == "disabled", "memory enabled")
         check(identity.parallel_tool_calls is False, "parallel tool calls enabled")
-        check(identity.engine_kind == "scripted", "non-scripted engine")
+        check(
+            identity.engine_kind == self.scenario.engine_kind,
+            "engine identity differs from the scenario",
+        )
         return problems
 
 
@@ -343,8 +351,8 @@ class PatchForgeE2EHarness:
             repository_profile_id=profile.profile_id,
             repository_profile_sha256=profile_sha,
             task_sha256=canonical_sha256(task),
-            engine_kind="scripted",
-            engine_version="e2e-v1",
+            engine_kind=scenario.engine_kind,
+            engine_version=scenario.engine_version,
             created_at=self.now,
         )
         policy = PatchForgePolicy(
@@ -392,7 +400,11 @@ class PatchForgeE2EHarness:
         runtime = PatchForgeRuntime(
             gateway=gateway,
             workspace_manager=manager,
-            engine=ScriptedEngine(scenario.steps, handle.worktree),
+            engine=(
+                scenario.engine_factory(handle.worktree)
+                if scenario.engine_factory is not None
+                else ScriptedEngine(scenario.steps, handle.worktree)
+            ),
             lease_duration=timedelta(minutes=5),
             clock=clock,
         )

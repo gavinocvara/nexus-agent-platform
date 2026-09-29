@@ -176,6 +176,19 @@ def parse_tool_arguments(
         raise GatewayRequestError("Tool arguments failed strict validation") from exc
 
 
+def parse_tool_arguments_json(tool_name: ToolName, text: str) -> StrictModel:
+    """Parse model-authored JSON arguments against the same strict contract.
+
+    JSON mode accepts the JSON encodings of enums and UUIDs that Python mode rejects.
+    """
+
+    argument_type = _ARGUMENT_TYPES[tool_name]
+    try:
+        return argument_type.model_validate_json(text)
+    except Exception as exc:
+        raise GatewayRequestError("Tool arguments failed strict validation") from exc
+
+
 class TreeEntry(StrictModel):
     path: RepositoryPath
     kind: Literal["file", "directory"]
@@ -419,6 +432,12 @@ _COMMAND_BY_TOOL = {
     ToolName.RUN_TYPECHECK: CommandPurpose.TYPECHECK,
 }
 EXECUTION_TOOLS = frozenset(_COMMAND_BY_TOOL)
+
+
+def tools_allowed_in(phase: PatchForgePhase) -> tuple[ToolName, ...]:
+    """The tools the gateway permits in a phase, in stable enum order."""
+
+    return tuple(tool for tool in ToolName if phase in _PHASES_BY_TOOL[tool])
 
 
 def command_purpose_for(tool_name: ToolName, phase: PatchForgePhase) -> CommandPurpose:
