@@ -9,11 +9,13 @@ Git and `CHANGELOG.md`, rules in `AGENTS.md`, the long-form resume state in
 | Item | Value |
 | --- | --- |
 | Version | `0.27.0` (`pyproject.toml`) |
-| Branch | `claude/confident-faraday-1drq98` (session-designated; agents never push to `main`) |
-| HEAD | the commit containing this file; must equal `origin/claude/confident-faraday-1drq98` |
-| origin/main | `bcae514` (0.26.0), unchanged; this branch is a fast-forward of it |
+| Branch | `main` (0.27.0 landed via PR #1 and PR #2; agents never push to `main`, changes go through PRs) |
+| origin/main | `b382922` (merge of PR #2) plus the handoff-correction PR that contains this file |
 | Working tree | clean at the checkpoint (`git status --short` empty) |
-| CI | not run: `ci.yml` runs on pull requests and pushes to `main` only. The local gate below is the evidence until the owner opens a PR or fast-forwards `main`. |
+| CI | green on `main`: run `36629573824` (PR #1 head) and run `36630698127` (`b382922`, push to `main`), both jobs `validate` and `compose-integration` passed. |
+
+Landed on `main`: PR #1 (0.27.0 production hardening, merge `7fa0f29`) and PR #2 (README
+reflects 0.27.0, portable Makefile, AegisOps runbook corrections, merge `b382922`).
 
 Commits in this run, oldest first: `d2d55ec` SentinelQA runner-integrity canary,
 `004d43c` autonomy requires SentinelQA + governance docs and eval config governing,
@@ -44,8 +46,7 @@ self-review fixes, `89c3370` race-safe run lease, `b4afb04` `exercise-github` + 
 - Secret scan of tracked files: no file has a credential-shaped line the 0.26.0 base did
   not already have (deliberate test fixtures and env-variable references only); no
   `.env`, `.nexus/`, sqlite, patch, or bundle file tracked.
-- Not run locally: Compose integration (CI job `compose-integration`), and CI itself
-  (see Checkpoint).
+- Compose integration was not run locally; CI job `compose-integration` passed on `main`.
 
 ## Subsystem status
 
@@ -71,17 +72,20 @@ self-review fixes, `89c3370` race-safe run lease, `b4afb04` `exercise-github` + 
 
 ## Owner decisions required (nothing below has been done)
 
-1. Fast-forward `main` to this branch (or open a PR) so CI (`validate`,
-   `compose-integration`) runs on 0.27.0.
-2. Authorize the first live GitHub exercise: `exercise-github --confirm-live` with a
+1. Authorize the first live GitHub exercise: `exercise-github --confirm-live` with a
    fine-grained token (this repository; Contents + Pull requests read/write). Runbook
    "First live exercises".
-3. Authorize hosting `serve-slack` and the six-step Slack exercise.
-4. Remote branch `maintenance/repo-hygiene-claude` is unmerged; owner decides.
+2. Authorize hosting `serve-slack` and the six-step Slack exercise.
+3. Remote branches: `maintenance/repo-hygiene-claude` is unmerged;
+   `maintenance/context-slimming` and `claude/confident-faraday-1drq98` are fully merged. Owner decides
+   whether to delete them.
+
+No live GitHub exercise, Slack exercise, live model-backed cycle, or unattended
+scheduling has been run.
 
 ## Exact next task
 
-Owner steps 1-3 above. Engineering next, only if the owner wants it: out-of-process
+Owner steps 1-2 above. Engineering next, only if the owner wants it: out-of-process
 execution for SentinelQA (the only full answer to canary-aware code; see ADR 0011
 "alternatives"), then a Docker proof of the runner. Files: `src/nexus/sentinelqa/
 {verifier,executor,canary}.py`, `tests/unit/test_sentinelqa_runner_integrity.py`.
@@ -99,7 +103,7 @@ execution for SentinelQA (the only full answer to canary-aware code; see ADR 001
 
 ```bash
 uv venv --python 3.12 <outside repo> && uv pip install -e ".[dev]"
-git rev-parse HEAD @{upstream} && git status --short
+git rev-parse HEAD origin/main && git status --short
 python -m ruff format --check . && python -m ruff check . && python -m mypy
 python -m pytest -q
 python -m nexus.patchforge.e2e_catalog && python -m nexus.patchforge.benchmark_corpus
