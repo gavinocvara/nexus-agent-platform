@@ -5,7 +5,9 @@
 `aegisops.investigator` is one read-only agent. It can invoke only the eleven tools in
 the Phase 4 diagnostic registry. It has no shell, filesystem, browser, web search,
 MCP, SQL, Docker, GitHub, lab control, memory, handoff, code execution, or write tool.
-It reports diagnoses and read-only next diagnostic steps; it cannot remediate.
+It reports diagnoses and read-only next diagnostic steps; it cannot remediate. Brain v1
+memory exists as a separate, guarded context path, but it is disabled by default
+(`NEXUS_BRAIN_MODE=disabled`); see `aegisops-brain-v1.md`.
 
 ## Configuration
 

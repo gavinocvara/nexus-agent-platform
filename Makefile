@@ -1,30 +1,36 @@
-.PHONY: compose-clean compose-down compose-up format install-dev integration lint scenarios test typecheck validate
+.PHONY: compose-clean compose-down compose-up format format-check install-dev integration lint scenarios test typecheck validate
+
+# Override on Windows with: make PYTHON=py <target>
+PYTHON ?= python
 
 install-dev:
-	py -m pip install -e ".[dev]"
+	$(PYTHON) -m pip install -e ".[dev]"
 
 format:
-	py -m ruff format .
+	$(PYTHON) -m ruff format .
+
+format-check:
+	$(PYTHON) -m ruff format --check .
 
 lint:
-	py -m ruff check .
+	$(PYTHON) -m ruff check .
 
 typecheck:
-	py -m mypy
+	$(PYTHON) -m mypy
 
 test:
-	py -m pytest
+	$(PYTHON) -m pytest
 
-validate: lint typecheck test
+validate: format-check lint typecheck test scenarios
 
 scenarios:
-	py -m nexus.lab.scenarios validate
+	$(PYTHON) -m nexus.lab.scenarios validate
 
 compose-up:
 	docker compose up --build --detach --wait
 
 integration:
-	py -m pytest -m integration tests/integration
+	$(PYTHON) -m pytest -m integration tests/integration
 
 compose-down:
 	docker compose down
