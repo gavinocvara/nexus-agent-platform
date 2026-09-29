@@ -8,46 +8,48 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 - Branch `main`; local `HEAD` must equal `origin/main` at every checkpoint
   (`git rev-parse HEAD origin/main`, `git diff HEAD`, `git diff origin/main...HEAD`).
-- NEXUS `0.24.0` (resident Software Engineer owner-approved draft pull requests) is the
+- NEXUS `0.25.0` (resident Software Engineer Slack decisions and issue intake) is the
   commit containing this file (`git rev-parse HEAD`). Record its CI run in
   `PROJECT_STATE.md` once green.
-- Previous: `2632597` marker-scanner fix (run `36554057081` green); 0.23.0 model
-  recipes `035e0f5` (run `36553508853` green); 0.22.0 evaluation `f10a5ef` (run `36552400237`); 0.21.0
+- Previous: `bcb04ae` Slack commands, `5bdbfc2` issue intake, `ebca518` Git-date CI fix,
+  `6dea458` evaluation scenarios, 0.24.0 publisher `6210fb4` (its CI run `36557239380`
+  failed on the Git 2.55 date format fixed in `ebca518`); `2632597` marker-scanner fix
+  (run `36554057081` green); 0.23.0 model recipes `035e0f5` (run `36553508853` green); 0.22.0 evaluation `f10a5ef` (run `36552400237`); 0.21.0
   executor v1 `aad015d` + `fddcf16`; 0.20.0 foundation `c045de8`; 0.19.0 SentinelQA-lite
   `09b8c99`; 0.18.0 `b613072`. All green.
 
-## Completed Unit: owner-approved draft pull requests (0.24.0)
+## Completed Units since 0.23.0 (0.24.0 and 0.25.0)
 
-- `nexus.software_engineer.publish`: `Publisher` protocol, `GitHubDraftPullRequestPublisher`
-  (REST: blobs, tree, commit, ref, draft PR; blob and tree SHAs verified against local
-  objects; moved base, existing branch, rejected drafts, bad credentials fail closed;
-  self-created branch deleted on failure; never merges), `bundle_from_branch` (re-applies
-  the validated patch on the base in a scratch clone and compares `git write-tree`),
-  `render_pull_request`, `RecordingPublisher` for tests.
-- `nexus.software_engineer.approval` + CLI `decide` / `publish`: typed `OwnerDecision`
-  once per request; publication only for SHIP by the configured owner with every gate
-  passed, once; `PublishedChange` persisted under `publications/` and remembered as a
-  validated fact.
-- `PatchForgeExecutor(publisher=...)`: `can_ship`, `ship` (only the change it produced),
-  `rollback` withdraws a published change. CLI wires a cycle publisher only with
-  `PUBLISH_FROM_CYCLE=true` + `autonomous_low_risk` + token; the workflow never gets the
-  token and now uploads the branch clone and evidence (hidden paths included).
-- `contains_credential` (trust module) adds GitHub/Slack/cloud secret shapes to every
-  memory, notification, report, and pull-request text check.
+- 0.25.0: `slack_commands.py` + `serve-slack` (Slack `v0` HMAC, replay window, owner
+  member id; records through `decide`; never publishes); `issues.py` read-only issue
+  intake as untrusted signals (opt-in `READ_ISSUES`, workflow `issues: read`); owner
+  REJECT honoured by the candidate generator; evaluation catalog at 30 scenarios with
+  publication cases; Git author dates normalized across Git versions.
+- 0.24.0: `publish.py` (`GitHubDraftPullRequestPublisher`: blobs, tree, commit, ref,
+  draft PR; blob and tree SHAs verified against local objects; moved base, existing
+  branch, rejected drafts, bad credentials fail closed; never merges),
+  `bundle_from_branch` (re-applies the validated patch and compares `git write-tree`),
+  `approval.py` + CLI `decide` / `publish` (typed `OwnerDecision` once per request;
+  publication only for SHIP with every gate passed, once), `PatchForgeExecutor(publisher)`
+  (`ship` only its own change, `rollback` withdraws), `contains_credential`, workflow
+  artifact with branch clone. Details in `CHANGELOG.md` and ADR 0012.
 
-## Validation (0.24.0 local release gate, Linux, Python 3.12.3)
+## Validation (0.25.0 local release gate, Linux, Python 3.12.3)
 
-- Ruff format and lint clean; strict mypy clean (120 files).
-- pytest: 864 passed, 23 deselected (0.23.0: 854 passed, 23 deselected).
+- Ruff format and lint clean; strict mypy clean (122 files); `uv pip check` compatible.
+- pytest: 876 passed, 23 deselected (0.24.0: 864; 0.23.0: 854).
 - `python -m nexus.patchforge.e2e_catalog`: 23 scenarios passed, byte-identical replay.
 - `python -m nexus.patchforge.benchmark_corpus`: passed (SentinelQA agreement included).
 - `python -m nexus.sentinelqa`: 29 scenarios passed, byte-identical replay.
 - `python -m nexus.software_engineer.evaluation`: 30 scenarios passed, byte-identical.
 - `python -m nexus.lab.scenarios validate`: 5 scenarios. `docker compose config`: valid.
 - `python -m nexus.software_engineer preflight`: `enabled=False mode=dry_run sandbox=none
-  github_token_present=False publish_from_cycle=False`.
+  github_token_present=False publish_from_cycle=False read_issues=False
+  slack_owner_user_id_set=False`.
+- Real dry-run cycle over this repository (scratch state): `decision=no_work`, 56 signals,
+  2 report-only candidates, no memory writes.
 - Not run locally: Compose integration (no Docker daemon); CI's `compose-integration`
-  job is the integration gate. No real GitHub or model call was made. Frozen
+  job is the integration gate. No real GitHub, Slack, or model call was made. Frozen
   `docs/experiments/` unchanged.
 
 ## Exact Next Step
@@ -61,8 +63,9 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 ## Active Issues
 
-- Publishing is untested against the real GitHub API (fake API only); the first real run
-  may surface API-shape differences (draft support on the plan, date normalization).
+- Publishing, issue intake, and the Slack receiver are untested against the real
+  services (fakes only); the first real runs are owner steps and may surface API-shape
+  differences (draft support on the plan, rate limits, Slack retries).
 - SentinelQA's runner has no Docker integration proof yet.
 - Test modules are not type-checked in CI and carry pre-existing strict-mypy noise.
 - Remote branch `maintenance/repo-hygiene-claude` is unmerged and untouched; owner decides.

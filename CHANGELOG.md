@@ -6,6 +6,10 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.25.0 — Resident Software Engineer owner channels: Slack decisions and issue intake
+
 - Resident Software Engineer: owner decisions through Slack slash commands
   (`nexus.software_engineer.slack_commands`, `serve-slack`). `/nexus ship|revise|reject
   [cycle|latest] <reason>` is accepted only with a valid Slack `v0` HMAC signature (secret
