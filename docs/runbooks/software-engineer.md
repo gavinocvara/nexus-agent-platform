@@ -207,15 +207,21 @@ NEXUS_SOFTWARE_ENGINEER_ENABLED=true python -m nexus.software_engineer publish -
    default branch still points at the validated base (`--allow-moved-base` overrides,
    and the record keeps both SHAs), that the base exists remotely, and that the branch
    does not; uploads each blob and checks its SHA against the local one; creates the
-   tree and checks it against the local tree SHA; creates the commit and the branch
-   reference; opens a **draft** pull request whose body carries the approval request,
-   the decision, and the evidence hashes. If the repository rejects drafts the branch is
-   deleted again. It never merges and never touches the base branch.
+   tree and checks it against the local tree SHA; creates the commit and checks what it
+   contains (exactly the verified tree, the validated base as its only parent, the message,
+   author, committer, and date that were sent; the SHA itself may differ if GitHub signs
+   it); creates the branch reference and checks it points at that commit; opens a
+   **draft** pull request whose body carries the approval request, the decision, and the
+   evidence hashes, and checks that its head is that commit and its base the default
+   branch. If the repository rejects drafts, or the pull request shows anything else, the
+   pull request is closed and the branch deleted again. It never merges and never touches
+   the base branch.
 5. The `PublishedChange` is written to `.nexus/software_engineer/publications/<request_id>.json`
    and remembered as a validated fact with the decision id as provenance.
 
 Error codes are stable (`publish_credentials_missing`, `publish_base_moved`,
-`publish_branch_exists`, `publish_tree_mismatch`, `gates_not_passed`, `patch_mismatch`,
+`publish_branch_exists`, `publish_tree_mismatch`, `publish_commit_mismatch`,
+`publish_ref_mismatch`, `publish_pull_request_mismatch`, `gates_not_passed`, `patch_mismatch`,
 `already_published`, ...) and never include response bodies or the token.
 
 ## Single run and interrupted runs

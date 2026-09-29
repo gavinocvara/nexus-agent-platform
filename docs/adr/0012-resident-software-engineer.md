@@ -237,7 +237,11 @@ the scheduled workflow never receives the token.
 Before any request reaches GitHub, `bundle_from_branch` proves the candidate commit is
 exactly the validated patch applied to the validated base (re-apply in a scratch clone,
 compare `git write-tree`). The publisher then verifies every uploaded blob's SHA and the
-created tree's SHA against the local objects before the branch reference exists, refuses
+created tree's SHA against the local objects before the branch reference exists, and
+(since 0.27.0) the created commit's content (tree, sole parent, message, author,
+committer, date; not its SHA, which GitHub may sign), the new reference's target, and the
+draft pull request's head and base, closing the pull request and deleting the branch on
+any mismatch; refuses
 a moved default branch unless the owner allows it, refuses an existing branch, deletes
 its own branch if the repository rejects drafts, and never touches the base branch. The
 token is read from the environment at publish time, sent only as a header, and absent

@@ -205,6 +205,8 @@ class FakeGitHub:
         existing_branches: Sequence[str] = (),
         draft_supported: bool = True,
         unauthorized: bool = False,
+        commit_tamper: Mapping[str, object] | None = None,
+        pull_head_tamper: str | None = None,
     ) -> None:
         self.base_sha = base_sha
         self.base_tree = base_tree
@@ -213,6 +215,8 @@ class FakeGitHub:
         self.refs: dict[str, str] = {f"heads/{name}": "f" * 40 for name in existing_branches}
         self.draft_supported = draft_supported
         self.unauthorized = unauthorized
+        self.commit_tamper = dict(commit_tamper or {})
+        self.pull_head_tamper = pull_head_tamper
         self.blobs: dict[str, bytes] = {}
         self.trees: list[Mapping[str, object]] = []
         self.commits: list[Mapping[str, object]] = []
@@ -259,13 +263,30 @@ class FakeGitHub:
         if method == "POST" and path == "/git/commits":
             self.commits.append(body)
             sha = sha1(json.dumps(body, sort_keys=True).encode()).hexdigest()
-            return httpx.Response(201, json={"sha": sha})
+            # GitHub echoes what the commit contains; UTC dates come back with ``Z``.
+            echoed = {
+                "sha": sha,
+                "tree": {"sha": body["tree"]},
+                "parents": [{"sha": parent} for parent in body["parents"]],  # type: ignore[attr-defined]
+                "message": body["message"],
+                **{
+                    role: {
+                        **body[role],  # type: ignore[dict-item]
+                        "date": str(body[role]["date"]).replace("+00:00", "Z"),  # type: ignore[index]
+                    }
+                    for role in ("author", "committer")
+                },
+                "verification": {"verified": False, "reason": "unsigned"},
+            }
+            return httpx.Response(201, json={**echoed, **self.commit_tamper})
         if method == "POST" and path == "/git/refs":
             ref = str(body["ref"]).removeprefix("refs/")
             if ref in self.refs:
                 return httpx.Response(422, json={"message": "Reference already exists"})
             self.refs[ref] = str(body["sha"])
-            return httpx.Response(201, json={"ref": body["ref"]})
+            return httpx.Response(
+                201, json={"ref": body["ref"], "object": {"type": "commit", "sha": body["sha"]}}
+            )
         if method == "DELETE" and path.startswith("/git/refs/"):
             self.refs.pop(path.removeprefix("/git/refs/"), None)
             return httpx.Response(204)
@@ -276,12 +297,15 @@ class FakeGitHub:
                 )
             self.pulls.append(body)
             number = len(self.pulls)
+            head = self.pull_head_tamper or self.refs[f"heads/{body['head']}"]
             return httpx.Response(
                 201,
                 json={
                     "number": number,
                     "html_url": f"https://github.invalid/example/fixture/pull/{number}",
                     "draft": True,
+                    "head": {"ref": body["head"], "sha": head},
+                    "base": {"ref": body["base"], "sha": self.base_head},
                 },
             )
         if method == "PATCH" and path.startswith("/pulls/"):
@@ -536,6 +560,26 @@ def test_github_publisher_fails_closed(tmp_path: Path, monkeypatch: pytest.Monke
     with pytest.raises(ApprovalError, match="publish_tree_mismatch"):
         bench.publish(_publisher(fake))
     assert fake.trees and not fake.commits and not fake.refs and not fake.pulls
+
+    # The API created a commit that is not the verified one (another tree, another parent,
+    # another message or author): no ref is ever pointed at it.
+    for tamper in (
+        {"tree": {"sha": "d" * 40}},
+        {"parents": [{"sha": "e" * 40}]},
+        {"parents": [{"sha": record.change.base_sha}, {"sha": "e" * 40}]},
+        {"message": "Something else entirely"},
+        {"author": {"name": "Mallory", "email": "m@example.invalid", "date": "2026-01-01T00:00Z"}},
+    ):
+        fake = _fake_for(bench, commit_tamper=tamper)
+        with pytest.raises(ApprovalError, match="publish_commit_mismatch"):
+            bench.publish(_publisher(fake))
+        assert fake.commits and not fake.refs and not fake.pulls, tamper
+
+    # The pull request does not show the verified commit: it is closed, the branch deleted.
+    fake = _fake_for(bench, pull_head_tamper="c" * 40)
+    with pytest.raises(ApprovalError, match="publish_pull_request_mismatch"):
+        bench.publish(_publisher(fake))
+    assert fake.refs == {} and [state for _, state in fake.patches] == [{"state": "closed"}]
 
     # Drafts unsupported: the branch the publisher created is deleted again.
     fake = _fake_for(bench, draft_supported=False)
