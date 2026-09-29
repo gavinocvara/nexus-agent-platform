@@ -8,7 +8,7 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
-## 0.16.2 — PatchForge finalization-reserve hardening
+## 0.16.2 — PatchForge finalization-reserve hardening (`1984b8e`)
 
 - A finalize-phase call refused because it would take the report's reserved call or
   output no longer destroys the report. The gateway raises `GatewayReserveRefusal`;

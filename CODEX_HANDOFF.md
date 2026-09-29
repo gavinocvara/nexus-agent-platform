@@ -7,12 +7,11 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 - Branch `main`; local `HEAD` must equal `origin/main` at every checkpoint
   (`git rev-parse HEAD origin/main`, `git diff HEAD`, `git diff origin/main...HEAD`).
-- NEXUS `0.16.2` (finalization-reserve hardening). HEAD is the commit containing this
-  file; its parent is `93e9430` (Milestone G verification).
+- NEXUS `0.16.2` (finalization-reserve hardening), release
+  `1984b8e09fe1d4766b55271ef88844e3b8647eaf`; GitHub Actions run `36537351468` passed
+  both jobs. HEAD is the commit containing this file (`git rev-parse HEAD`).
 - Verified releases: 0.16.1 Milestone G `9b05cdc` (GitHub Actions run `36494052048`
   green); 0.15.0 Milestone F `d6d39d3` (run `36491013537` green).
-- 0.16.2 GitHub Actions: pending. Record the run here, and the SHA in the CHANGELOG
-  0.16.2 heading, once green.
 
 ## Completed Unit: Finalization-Reserve Hardening (0.16.2)
 
@@ -40,9 +39,7 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 ## Exact Next Step
 
-1. Confirm GitHub Actions is green for 0.16.2 and record it (CHANGELOG heading and this
-   file); fix first if red.
-2. Begin Milestone H - Benchmark v0 (`ROADMAP.md`): a small synthetic defect corpus plus
+1. Begin Milestone H - Benchmark v0 (`ROADMAP.md`): a small synthetic defect corpus plus
    a reproducible harness built on `nexus.patchforge.e2e`. No live model calls.
 
 ## Active Issues
