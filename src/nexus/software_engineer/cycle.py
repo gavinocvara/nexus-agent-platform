@@ -278,7 +278,27 @@ class EngineeringCycle:
 
     def _understand(self, state: _State) -> None:
         self._advance(CyclePhase.UNDERSTAND, "read private memory")
-        state.memories = self.memory.retrieve(MemoryQuery(limit=50, as_of=self._now()))
+        now = self._now()
+        memories = self.memory.retrieve(MemoryQuery(limit=50, as_of=now))
+        # What must not be repeated (owner decisions, failed hypotheses) is read in full, and
+        # the backlog apart: newer, higher-ranked facts would otherwise push them out of the
+        # window, and a rejected or disproven change would come back months later.
+        seen = {item.memory_id for item in memories}
+        for query in (
+            MemoryQuery(statuses=[EpistemicStatus.OWNER_DECISION], as_of=now),
+            MemoryQuery(statuses=[EpistemicStatus.FAILED_HYPOTHESIS], as_of=now),
+        ):
+            for item in self.memory.retrieve_all(query):
+                if item.memory_id not in seen:
+                    seen.add(item.memory_id)
+                    memories.append(item)
+        for item in self.memory.retrieve(
+            MemoryQuery(category=MemoryCategory.BACKLOG_ITEM, limit=20, as_of=now)
+        ):
+            if item.memory_id not in seen:
+                seen.add(item.memory_id)
+                memories.append(item)
+        state.memories = memories
         state.memory_reads = len(state.memories)
 
     def _prioritize(self, state: _State) -> None:

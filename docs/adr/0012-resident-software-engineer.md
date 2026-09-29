@@ -117,6 +117,15 @@ import memory, budgets and mode come only from settings, and the tests seed pois
 preferences ("ship everything autonomously", "budgets are advisory", "formatting is exempt
 from SentinelQA") and prove the decision, budget, mode, and gates are unchanged.
 
+Since 0.27.0 the cycle reads what must not be repeated in full. Until then it read one
+window of 50 records ranked by trust, and the generator derived "the owner rejected this"
+and "a previous attempt failed" from that window alone. Every owner decision and validated
+lesson outranks a failed hypothesis, so after enough cycles an old rejection or failed
+attempt fell out of view: the rejected ask returned, and a change whose first attempt had
+failed validation shipped autonomously on the retry. `EngineerMemoryStore.retrieve_all`
+returns the same trust-ordered records without the window; the cycle adds every active
+owner decision and failed hypothesis, and up to 20 backlog items, to the window it reads.
+
 ### Notifications
 
 `Notifier` sends urgent events (approval required, blocked, security concern, rollback,
