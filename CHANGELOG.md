@@ -6,6 +6,17 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 ## Unreleased
 
+- Resident Software Engineer brain: new memory categories `root_cause` and
+  `recurring_pattern`; the learn stage records root causes as validated facts (with
+  evidence), recurring work as observations when an identical decision was already
+  remembered by an earlier cycle, and overconfident estimates as self-evaluations.
+  `MemoryQuery(trusted_only=True)` and `KnowledgeExport` /
+  `export_validated_knowledge` are the typed boundary out of the namespace (validated
+  facts and owner decisions only, with provenance and a digest). New tests prove stale
+  memory expires from retrieval but stays in history, conflicts resolve by trust and
+  dispute, owner corrections supersede inferences, a false inference can never become
+  trusted knowledge, poisoning is refused at the contract, other agents' tables are
+  never read, and poisoned preferences change no decision, budget, mode, or gate.
 - SentinelQA-lite: the harness is inside the specification boundary. Modules or packages
   that would shadow the runner (`pytest.py`, `_pytest/`, `pluggy/`, `unittest.py`,
   `site-packages/`, ...) are evaluation configuration; a new rejection finding

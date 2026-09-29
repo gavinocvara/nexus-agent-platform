@@ -219,6 +219,7 @@ Error codes are stable (`publish_credentials_missing`, `publish_base_moved`,
   `decision_reasons`, fix the cause, and re-run; nothing needs cleanup.
 - A dirty working tree blocks execution outside `dry_run`; commit or clean it.
 - Memory problems: the store is a single SQLite file. Inspect with `EngineerMemoryStore(path).load_all()`; correct a wrong record with `correct`, retire one with `invalidate`. Never edit rows by hand.
+- Sharing knowledge: `export_validated_knowledge(store, now=...)` is the only export; it carries active validated facts and owner decisions with provenance and a digest, never inferences or observations. Memory never changes mode, budgets, gates, or policy; those come from settings and reviewed code only.
 - Notification problems are recorded per attempt (`error_code`); they never change a
   decision.
 

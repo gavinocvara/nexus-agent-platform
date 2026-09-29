@@ -451,23 +451,48 @@ class EngineeringCycle:
                 state.memory_writes.append(memory_id)
                 state.memory_summaries.append(summary)
 
+        recurred = False
         if state.selected is not None:
+            sequence += 1
+            decision_memory = observation(
+                cycle_id=self.cycle_id,
+                sequence=sequence,
+                category=MemoryCategory.DECISION,
+                content=(
+                    f"{state.selected.title}: decision {decision.value} because "
+                    + "; ".join(state.decision_reasons[:3])
+                ),
+                now=now,
+                confidence=70,
+                tags=["decision", decision.value],
+            )
+            _, written_now = self.memory.remember(decision_memory)
+            if written_now:
+                state.memory_writes.append(decision_memory.memory_id)
+                state.memory_summaries.append(f"decision record for '{state.selected.title}'")
+            else:
+                # The identical decision was already remembered by an earlier cycle: the
+                # same work keeps coming back, which is knowledge in its own right.
+                recurred = True
+        if recurred and state.selected is not None:
             sequence += 1
             write(
                 observation(
                     cycle_id=self.cycle_id,
                     sequence=sequence,
-                    category=MemoryCategory.DECISION,
+                    category=MemoryCategory.RECURRING_PATTERN,
                     content=(
-                        f"{state.selected.title}: decision {decision.value} because "
-                        + "; ".join(state.decision_reasons[:3])
+                        f"{state.selected.title}: recurred with the same outcome "
+                        f"({decision.value}) in more than one cycle; likely a recurring "
+                        "issue pattern rather than a one-off."
                     ),
                     now=now,
-                    confidence=70,
-                    tags=["decision", decision.value],
+                    confidence=60,
+                    tags=["recurring", state.selected.category.value],
                 ),
-                f"decision record for '{state.selected.title}'",
+                f"recurring pattern for '{state.selected.title}'",
             )
+            state.learned.append(f"{state.selected.title} is a recurring pattern.")
         outcome = state.outcome
         if state.selected is not None and outcome is not None:
             evidence = [item.evidence_sha256 for item in outcome.gates if item.evidence_sha256]
@@ -518,6 +543,50 @@ class EngineeringCycle:
                     "failed hypothesis recorded",
                 )
                 state.learned.append(f"{state.selected.title} did not survive validation.")
+                if state.selected.estimate.confidence >= 70:
+                    sequence += 1
+                    write(
+                        observation(
+                            cycle_id=self.cycle_id,
+                            sequence=sequence,
+                            category=MemoryCategory.SELF_EVALUATION,
+                            content=(
+                                f"{state.selected.title}: estimated "
+                                f"{state.selected.estimate.confidence}% confidence for a "
+                                f"{state.selected.category.value} change, but validation "
+                                "failed; the estimate was overconfident."
+                            ),
+                            now=now,
+                            confidence=70,
+                            tags=["overconfident", state.selected.category.value],
+                        ),
+                        "self-evaluation: overconfident estimate",
+                    )
+            if (
+                outcome.root_cause_evidence
+                and passed
+                and decision in {CycleDecision.SHIP, CycleDecision.REQUEST_APPROVAL}
+            ):
+                sequence += 1
+                write(
+                    observation(
+                        cycle_id=self.cycle_id,
+                        sequence=sequence,
+                        category=MemoryCategory.ROOT_CAUSE,
+                        content=(
+                            f"{state.selected.title}: root cause demonstrated; the reproduction "
+                            "failed before the change and passed after it, and every gate "
+                            f"passed ({state.selected.category.value})."
+                        ),
+                        now=now,
+                        confidence=85,
+                        tags=["root_cause", state.selected.category.value],
+                        status=EpistemicStatus.VALIDATED_FACT,
+                        evidence_sha256=evidence[:20],
+                        source=MemorySource.VALIDATION_EVIDENCE,
+                    ),
+                    "root cause recorded as validated fact",
+                )
         for candidate in state.candidates:
             if state.selected is not None and candidate.candidate_id == state.selected.candidate_id:
                 continue

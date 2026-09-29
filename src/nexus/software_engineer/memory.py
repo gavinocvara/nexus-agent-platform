@@ -45,6 +45,8 @@ class MemoryCategory(StrEnum):
     INCIDENT = "incident"
     BACKLOG_ITEM = "backlog_item"
     SELF_EVALUATION = "self_evaluation"
+    ROOT_CAUSE = "root_cause"
+    RECURRING_PATTERN = "recurring_pattern"
 
 
 class EpistemicStatus(StrEnum):
@@ -144,6 +146,35 @@ class MemoryQuery(StrictModel):
     statuses: list[EpistemicStatus] = Field(default_factory=list, max_length=5)
     as_of: AwareDatetime | None = None
     limit: int = Field(default=20, ge=1, le=200)
+    trusted_only: bool = False
+    """Only validated facts and owner decisions; inferences and observations stay out."""
+
+
+class KnowledgeExport(StrictModel):
+    """The only shape in which the engineer's knowledge leaves its namespace.
+
+    It carries trustworthy, active records only (validated facts and owner decisions),
+    each with its provenance, plus a digest of the exported set. Inferences, observations,
+    and failed hypotheses never cross the boundary.
+    """
+
+    schema_version: Literal[1] = 1
+    namespace: Literal["software_engineer.resident"] = MEMORY_NAMESPACE
+    exported_at: AwareDatetime
+    records: list[EngineerMemory] = Field(default_factory=list, max_length=500)
+    export_sha256: Sha256
+
+    @model_validator(mode="after")
+    def validate_export(self) -> KnowledgeExport:
+        for item in self.records:
+            if not item.is_trustworthy or item.lifecycle is not MemoryLifecycle.ACTIVE:
+                raise ValueError("Only active validated facts and owner decisions are exported")
+            if item.namespace != MEMORY_NAMESPACE:
+                raise ValueError("Export carries a foreign namespace")
+        expected = canonical_sha256({"records": [canonical_json(item) for item in self.records]})
+        if expected != self.export_sha256:
+            raise ValueError("Export digest does not match its records")
+        return self
 
 
 _SELECT_ONE = "SELECT record_json FROM engineer_memories WHERE namespace = ? AND memory_id = ?"
@@ -275,6 +306,8 @@ class EngineerMemoryStore:
                 )
             )
         ]
+        if query.trusted_only:
+            records = [item for item in records if item.is_trustworthy]
         records.sort(
             key=lambda item: (
                 -_STATUS_WEIGHT[item.status],
@@ -377,6 +410,20 @@ class EngineerMemoryStore:
             raise MemoryStoreError("Engineer memory connection failed") from exc
 
 
+def export_validated_knowledge(store: EngineerMemoryStore, *, now: datetime) -> KnowledgeExport:
+    """Typed exchange boundary: trustworthy knowledge with provenance, nothing else."""
+
+    records = store.retrieve(
+        MemoryQuery(limit=200, as_of=now, trusted_only=True),
+    )
+    records = sorted(records, key=lambda item: str(item.memory_id))
+    return KnowledgeExport(
+        exported_at=now,
+        records=records,
+        export_sha256=canonical_sha256({"records": [canonical_json(item) for item in records]}),
+    )
+
+
 def observation(
     *,
     cycle_id: UUID,
@@ -417,6 +464,8 @@ __all__ = [
     "EngineerMemory",
     "EngineerMemoryStore",
     "EpistemicStatus",
+    "KnowledgeExport",
+    "export_validated_knowledge",
     "MemoryCategory",
     "MemoryLifecycle",
     "MemoryProvenance",

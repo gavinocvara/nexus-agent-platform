@@ -268,11 +268,15 @@ def test_dry_run_turns_a_failing_test_into_an_approval_request_without_touching_
     assert git.run(["-C", str(repo), "status", "--porcelain"]).stdout == b""
     decisions = memory.retrieve(MemoryQuery(category=MemoryCategory.DECISION))
     assert len(decisions) == 1 and decisions[0].status is EpistemicStatus.OBSERVATION
-    # A second identical cycle learns nothing new: memory deduplicates claims.
+    # A second identical cycle deduplicates every claim; the only new knowledge is that
+    # the same work came back, recorded once as a recurring pattern.
     again, _, _, _ = _cycle(tmp_path / "again", CycleMode.DRY_RUN, artifacts=artifacts)
     again.memory = memory
     second, _ = again.run()
-    assert second.memory_writes == []
+    assert len(second.memory_writes) == 1
+    recurring = memory.retrieve(MemoryQuery(category=MemoryCategory.RECURRING_PATTERN))
+    assert [item.memory_id for item in recurring] == second.memory_writes
+    assert recurring[0].status is EpistemicStatus.OBSERVATION
 
 
 def test_autonomous_mode_ships_a_validated_low_risk_change_and_learns_a_validated_fact(
@@ -293,7 +297,11 @@ def test_autonomous_mode_ships_a_validated_low_risk_change_and_learns_a_validate
     assert record.change is not None and record.change.changed_files == ["README.md"]
     assert record.usage.tool_calls >= 4 and record.usage.changed_files == 1
     facts = memory.retrieve(MemoryQuery(statuses=[EpistemicStatus.VALIDATED_FACT]))
-    assert len(facts) == 1 and facts[0].provenance.evidence_sha256
+    assert {item.category for item in facts} == {
+        MemoryCategory.ENGINEERING_LESSON,
+        MemoryCategory.ROOT_CAUSE,
+    }
+    assert all(item.provenance.evidence_sha256 for item in facts)
     assert "Fixed" in report.text and "Fix README typo" in report.text
     assert transport.sent[-1].event is NotificationEvent.DAILY_REPORT
     assert "Shipped: Fix README typo" in transport.sent[-1].body

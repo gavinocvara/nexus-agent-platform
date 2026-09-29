@@ -112,7 +112,7 @@ No credential is present in this container; nothing here needs one.
 | Risk classifier with governing paths and uncertainty escalation | Done (`risk.py`) |
 | Ship policy (ship / request approval / abandon / blocked; owner decisions; silence never approves) | Done (`policy.py`) |
 | Trust boundary (untrusted text scanning, owner command authorization) | Done (`trust.py`) |
-| Private memory (categories, epistemic status, provenance, dedup, correction, invalidation) | Done (`memory.py`) |
+| Private memory (categories incl. root cause and recurring pattern, epistemic status, provenance, dedup, correction, invalidation, trusted-only retrieval, typed `KnowledgeExport`; learns root causes, recurrence, self-evaluations; never authority) | Done (`memory.py`, `cycle.py`, `tests/unit/test_software_engineer_brain.py`) |
 | Repository inspection and candidate generation | Done, artifact-driven (`inspect.py`) |
 | Self-review from diff facts | Done, deterministic (`review.py`) |
 | Notifier + Slack webhook transport (mocked in tests) | Done (`notify.py`) |
