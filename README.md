@@ -17,9 +17,9 @@ against a baseline before adoption.
 | Benchmarking | Built | Reproducible sessions, comparison, immutable baseline locks | ADR 0007, `docs/runbooks/aegisops-benchmarking.md` |
 | Brain v1 | Built (negative calibration) | Private per-agent memory, default off | `BRAIN.md`, ADR 0008, `docs/runbooks/aegisops-brain-v1.md` |
 | Atlas | Thin v1 | Local control plane: typed jobs, policy, review, approval, audit | ADR 0009 |
-| PatchForge | In progress | Contracts through Benchmark v0 plus an opt-in model engine boundary | ADR 0010 |
-| SentinelQA-lite | Built | Independent verification against the pristine specification; fail-closed verdicts gate Atlas approval | ADR 0011, `docs/runbooks/sentinelqa.md` |
-| Resident Software Engineer | Built through publication (disabled by default) | Bounded daily cycle: inspect, rank, plan, run PatchForge + SentinelQA for mechanical and model-backed recipes, risk-classify, self-review, ask the owner; private memory; Slack notifier; after the owner's SHIP, a verified draft pull request (never a merge) | ADR 0012, `docs/runbooks/software-engineer.md` |
+| PatchForge | Built (A-H, J); live run not executed | Contracts through Benchmark v0 plus an opt-in model engine boundary | ADR 0010 |
+| SentinelQA-lite | Built | Independent verification against the pristine specification (content-locked tests, harness boundary, runner-integrity canary); fail-closed verdicts gate Atlas approval | ADR 0011, `docs/runbooks/sentinelqa.md` |
+| Resident Software Engineer | Built, disabled by default | Bounded daily cycle: inspect, rank, run PatchForge + SentinelQA for mechanical and model-backed recipes, risk-classify, self-review, ask the owner; private provenance-backed memory; owner decisions by CLI or signed Slack command; verified draft pull requests only (never a merge) | ADR 0012, `docs/runbooks/software-engineer.md` |
 | Engram | Planned | Shared validated knowledge | `ROADMAP.md` |
 
 Lab request path:
@@ -51,9 +51,15 @@ python -m ruff check .
 python -m mypy
 python -m pytest                        # unit and service tests; integration is opt-in
 python -m nexus.lab.scenarios validate
+python -m nexus.patchforge.e2e_catalog      # deterministic gates, no model, no network
+python -m nexus.patchforge.benchmark_corpus
+python -m nexus.sentinelqa
+python -m nexus.software_engineer.evaluation
 ```
 
-This mirrors the `validate` job in `.github/workflows/ci.yml`.
+`make validate` runs the first five (`make PYTHON=py validate` on Windows). Together they
+mirror the `validate` job in `.github/workflows/ci.yml`; `compose-integration` runs the
+integration suite against the Compose stack.
 
 ## Local Stack
 
@@ -102,15 +108,21 @@ Alloy. None of these is safe for a normal deployment.
   pushes to `main`; Atlas review and human approval stay outside the agent.
 - SentinelQA verifies every proposal against the original tests, locked by content hash
   at the source commit. A candidate that changes, deletes, skips, or reconfigures the
-  specification is rejected; evidence that cannot be trusted is inconclusive. Only a
-  passed verdict unlocks human approval.
+  specification is rejected, and before any pass the runner must report a planted
+  failing test, so code that silences the runner is caught. Evidence that cannot be
+  trusted is inconclusive. Only a passed verdict unlocks human approval. Code written to
+  recognise and spare that planted test remains a documented residual risk.
 - Each agent's memory is private. Brain v1 is disabled by default and fails closed.
 - The resident Software Engineer is disabled by default (`NEXUS_SOFTWARE_ENGINEER_ENABLED`),
   runs in `dry_run` mode unless the owner changes it, classifies every change by risk,
-  never ships anything that touches its own governing rules, and treats silence as no
-  decision. Its memory is a private namespace; its Slack and GitHub credentials live only
-  in the environment. The most it can ever do is open a draft pull request whose tree was
-  re-derived from the validated patch; a human merges.
+  never ships anything that touches its own governing rules or the documents agents take
+  direction from, and treats silence as no decision. Autonomous shipping additionally
+  requires a passed SentinelQA review and is off by default. Its memory is a private
+  namespace that carries knowledge, never authority; owner rejections and failed attempts
+  are always recalled. Slack commands are HMAC-verified, replay-protected, and accepted
+  only from the configured owner; they record decisions and never publish. Credentials
+  live only in the environment. The most it can ever do is open a draft pull request
+  whose blobs, tree, commit, branch, and head were verified; a human merges.
 - Secrets, `.env`, and local state under `.nexus/` are never committed.
 
 ## Documentation Map
@@ -128,10 +140,16 @@ Alloy. None of these is safe for a normal deployment.
 
 ## Status
 
-Version `0.19.0`. Phases 0-8 are complete; Brain v1 ended with a documented negative
-calibration. PatchForge v1 Milestones A-H (contracts, workspaces, sandbox, ToolGateway,
-Runtime, Attestor, deterministic E2E, and Benchmark v0) and Milestone J (SentinelQA-lite
-independent verification) are complete. The Milestone I model-engine boundary is built;
-the first live run awaits explicit owner authorization and is now SentinelQA-reviewed.
-See `PROJECT_STATE.md` and `CODEX_HANDOFF.md` for the current checkpoint and
-`ROADMAP.md` for the full sequence.
+Version `0.27.0`. Phases 0-8 are complete; Brain v1 ended with a documented negative
+calibration. PatchForge Milestones A-H and J (SentinelQA-lite) are complete, and the
+resident Software Engineer is built through draft-pull-request publication and Slack
+owner decisions. The local gate for 0.27.0: 934 tests passed (23 integration tests
+deselected), Ruff and strict mypy clean, E2E, Benchmark v0, SentinelQA (35 scenarios), and
+engineer evaluation (30 scenarios) gates passed; CI (`validate`, `compose-integration`) is
+green.
+
+No real GitHub publication, Slack owner decision, or live model call has been made. The
+first controlled GitHub exercise (`python -m nexus.software_engineer exercise-github`,
+a dry run unless `--confirm-live`), the Slack exercise, and the first live PatchForge or
+model-backed run each await explicit owner authorization. See `CODEX_HANDOFF.md` for the
+current checkpoint and `ROADMAP.md` for the full sequence.
