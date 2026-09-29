@@ -8,12 +8,12 @@ Update it at every checkpoint. Rules live in `AGENTS.md`; execution order in
 
 | Item | Value |
 | --- | --- |
-| Version | `0.21.0` (`pyproject.toml`) |
+| Version | `0.22.0` (`pyproject.toml`) |
 | HEAD | the commit containing this file (`git rev-parse HEAD`) |
 | origin/main | must equal HEAD at a checkpoint (`git rev-parse origin/main`) |
 | Working tree | clean at the checkpoint (`git status --short` empty) |
 | Toolchain | Python 3.12, Ruff, strict mypy, pytest, Docker Compose |
-| Local setup used for 0.19.0 to 0.21.0 | `uv venv --python 3.12 <outside repo>` then `uv pip install -e ".[dev]"` |
+| Local setup used for 0.19.0 to 0.22.0 | `uv venv --python 3.12 <outside repo>` then `uv pip install -e ".[dev]"` |
 
 ## What exists (architecture status)
 
@@ -27,7 +27,7 @@ Update it at every checkpoint. Rules live in `AGENTS.md`; execution order in
 | PatchForge I (model engine boundary) | Built; live run not executed | `nexus.patchforge.engine`, `nexus.patchforge.live` |
 | PatchForge J (SentinelQA-lite) | Complete (0.19.0, CI run 36546322678 green) | `nexus.sentinelqa`, ADR 0011, `docs/runbooks/sentinelqa.md` |
 | PatchForge K (GitHub intake, branch push, draft PR) | Not started | — |
-| Resident Software Engineer | **Foundation (0.20.0, CI run 36549244409 green) + executor v1 for mechanical recipes (0.21.0)**, disabled by default | `nexus.software_engineer`, ADR 0012, `docs/runbooks/software-engineer.md` |
+| Resident Software Engineer | **Foundation (0.20.0, CI run 36549244409 green) + executor v1 for mechanical recipes (0.21.0) + controlled judgment evaluation (0.22.0)**, disabled by default | `nexus.software_engineer`, ADR 0012, `docs/runbooks/software-engineer.md` |
 | Engram, Kubernetes, AegisOps remediation | Deferred | `ROADMAP.md` |
 
 ## SentinelQA-lite (0.19.0) in one paragraph
@@ -48,17 +48,18 @@ byte-identically), `tests/unit/test_sentinelqa_*.py`, and Benchmark v0 agreement
 (`reference` 5/5 passed, `fix_and_edit_tests` 5/5 failed with `specification_modified`,
 zero disagreements).
 
-## Validation record (0.21.0, local, Linux)
+## Validation record (0.22.0, local, Linux)
 
 | Check | Result |
 | --- | --- |
 | `uv pip check` | compatible |
 | `ruff format --check .` / `ruff check .` | clean (182 files) |
-| `mypy` (strict, `nexus` package) | clean (117 files) |
+| `mypy` (strict, `nexus` package) | clean (118 files) |
 | `pytest -q` (unit + service, integration deselected) | see "Test counts" |
 | `python -m nexus.patchforge.e2e_catalog` | 23 scenarios passed, byte-identical |
 | `python -m nexus.patchforge.benchmark_corpus` | passed; SentinelQA agreement 100% |
 | `python -m nexus.sentinelqa` | 29 scenarios passed, byte-identical |
+| `python -m nexus.software_engineer.evaluation` | 28 judgment scenarios passed, byte-identical |
 | `python -m nexus.lab.scenarios validate` | 5 scenarios |
 | `python -m nexus.software_engineer preflight` | `enabled=False mode=dry_run sandbox=none slack_webhook_present=False` |
 | `docker compose config --quiet` | valid |
@@ -73,6 +74,7 @@ zero disagreements).
   verifier, catalog, and Atlas-flow tests).
 - 0.20.0: 807 passed, 23 deselected (63 resident-engineer tests added).
 - 0.21.0: 818 passed, 23 deselected (executor, local sandbox, and SentinelQA reproduction tests added).
+- 0.22.0: 849 passed, 23 deselected (evaluation catalog tests added).
 
 ## Credentials and enablement
 
@@ -112,6 +114,7 @@ No credential is present in this container; nothing here needs one.
 | Cycle state machine, persistence, failure handling | Done (`cycle.py`) |
 | CLI and scheduled workflow (read-only token, variable-gated) | Done |
 | Executor (PatchForge + SentinelQA + gates on an isolated branch) | **Done for mechanical recipes** (`executor.py`, `recipes.py`, `sandbox.py`); no publisher, so it never ships |
+| Controlled judgment evaluation (28 scenarios, CI gate) | **Done** (`evaluation.py`) |
 | Model-backed investigation | Not built (no model configured; budgets zero) |
 | Slack-delivered owner commands | Not built (typed `OwnerCommand` via code) |
 | Autonomous low-risk shipping in production | Disabled; needs a publisher with a deliberately supplied write token; exercised only with scripted executors in tests |

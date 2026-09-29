@@ -256,9 +256,13 @@ def test_dry_run_turns_a_failing_test_into_an_approval_request_without_touching_
     assert record.change is None
     assert report.owner_action_required
     events = [item.event for item in record.notifications]
-    assert events == [NotificationEvent.APPROVAL_REQUIRED, NotificationEvent.DAILY_REPORT]
-    assert "READY FOR REVIEW (dry run: no code was changed)" in transport.sent[0].body
-    assert "Owner decision requested:\nSHIP / REVISE / REJECT" in transport.sent[0].body
+    assert events == [
+        NotificationEvent.TEST_REGRESSION,
+        NotificationEvent.APPROVAL_REQUIRED,
+        NotificationEvent.DAILY_REPORT,
+    ]
+    assert "READY FOR REVIEW (dry run: no code was changed)" in transport.sent[1].body
+    assert "Owner decision requested:\nSHIP / REVISE / REJECT" in transport.sent[1].body
     # The repository is untouched.
     git = GitRunner(tmp_path / "git")
     assert git.run(["-C", str(repo), "status", "--porcelain"]).stdout == b""

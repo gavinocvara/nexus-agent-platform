@@ -146,6 +146,18 @@ enabled explicitly (`NEXUS_SOFTWARE_ENGINEER_SANDBOX=local_process`) and is mean
 this repository in a disposable, credential-free job. Docker remains the sandbox for
 untrusted repositories.
 
+### Controlled evaluation (0.22.0)
+
+`nexus.software_engineer.evaluation` is the engineer's judgment gate: 28 scripted
+scenarios over fixture repositories (see the CHANGELOG list), each checked for the
+expected decision, failure, risk, notifications, memory statuses, and decision reasons,
+plus universal invariants (untouched source repository, no shipping outside policy, no
+secrets in records or reports, no instruction-shaped memory, provenance on every write)
+and byte-identical replay. Only the obvious micro bug ships, and only in
+`autonomous_low_risk` mode with a scripted executor that can publish. Two behaviors came
+out of building it: candidates whose cost outweighs their value are never selected, and
+regressions visible in the evidence are notified even when nothing is actionable.
+
 ## Deferred
 
 - A publisher that pushes an approved candidate branch and fast-forwards `main` with a

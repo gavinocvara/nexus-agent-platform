@@ -485,7 +485,11 @@ class CycleUsage(StrictModel):
     diff_bytes: int = Field(default=0, ge=0)
 
     def exceeded(self, budget: CycleBudget) -> list[str]:
-        """Names of the budget dimensions this usage exceeds (empty means within budget)."""
+        """Names of the hard budget dimensions this usage exceeds (empty means within budget).
+
+        Changed files and diff bytes are autonomous-shipping limits, not hard budgets: a
+        larger change is classified as higher risk and proposed to the owner instead.
+        """
 
         exceeded: list[str] = []
         pairs: list[tuple[str, float, float | None]] = [
@@ -496,8 +500,6 @@ class CycleUsage(StrictModel):
             ("input_tokens", self.input_tokens, budget.max_input_tokens),
             ("output_tokens", self.output_tokens, budget.max_output_tokens),
             ("cost_usd", self.cost_usd or 0.0, budget.max_cost_usd),
-            ("changed_files", self.changed_files, budget.max_changed_files),
-            ("diff_bytes", self.diff_bytes, budget.max_diff_bytes),
         ]
         for name, used, limit in pairs:
             if limit is not None and used > limit:

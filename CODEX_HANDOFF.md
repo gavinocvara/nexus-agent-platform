@@ -8,15 +8,21 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 - Branch `main`; local `HEAD` must equal `origin/main` at every checkpoint
   (`git rev-parse HEAD origin/main`, `git diff HEAD`, `git diff origin/main...HEAD`).
-- NEXUS `0.21.0` (resident Software Engineer executor v1) is the commit containing this
-  file (`git rev-parse HEAD`). Record its CI run in `PROJECT_STATE.md` once green.
-- Previous: 0.20.0 foundation `c045de8` (run `36549244409` green); 0.19.0 Milestone J
-  SentinelQA-lite `09b8c99` (run `36546322678` green); 0.18.0 `b613072` (run
-  `36540394002` green).
+- NEXUS `0.22.0` (resident Software Engineer controlled evaluation) is the commit
+  containing this file (`git rev-parse HEAD`). Record its CI run in `PROJECT_STATE.md`
+  once green.
+- Previous: 0.21.0 executor v1 `aad015d` + `fddcf16`; 0.20.0 foundation `c045de8` (run
+  `36549244409` green); 0.19.0 Milestone J SentinelQA-lite `09b8c99` (run
+  `36546322678` green); 0.18.0 `b613072` (run `36540394002` green).
 
-## Completed Unit: Resident Software Engineer executor v1 (0.21.0)
+## Completed Unit: Resident Software Engineer controlled evaluation (0.22.0)
 
-- `PatchForgeExecutor` (mechanical recipes `formatting` and `dead_code_removal`) runs the
+- `nexus.software_engineer.evaluation`: 28 judgment scenarios (every case in the owner's
+  brief) with scripted executors and transports, universal invariants, byte-identical
+  replay, and a CI step. Cycle changes: worthless candidates are never selected; observed
+  regressions are notified; changed files and diff bytes are shipping limits, not hard
+  budgets.
+- 0.21.0: `PatchForgeExecutor` (mechanical recipes `formatting` and `dead_code_removal`) runs the
   real PatchForge path from the operator checkout, has SentinelQA verify the attested
   patch, maps checks and verdict to gates with evidence hashes, and materializes a local
   `nexus/software-engineer/<cycle>` branch. `can_ship` is False: validated changes become
@@ -27,13 +33,14 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 - 0.20.0 (foundation) shipped in `c045de8`: contracts, risk, policy, trust, memory,
   inspection, self-review, notifier, cycle, CLI, scheduled workflow, ADR 0012, runbook.
 
-## Validation (0.21.0 local release gate, Linux, Python 3.12.3)
+## Validation (0.22.0 local release gate, Linux, Python 3.12.3)
 
-- Ruff format and lint clean; strict mypy clean (117 files).
-- pytest: 818 passed, 23 deselected (0.20.0: 807; 0.19.0: 744).
+- Ruff format and lint clean; strict mypy clean (118 files).
+- pytest: 849 passed, 23 deselected (0.21.0: 818; 0.20.0: 807; 0.19.0: 744).
 - `python -m nexus.patchforge.e2e_catalog`: 23 scenarios passed, byte-identical replay.
 - `python -m nexus.patchforge.benchmark_corpus`: passed (SentinelQA agreement included).
 - `python -m nexus.sentinelqa`: 29 scenarios passed, byte-identical replay.
+- `python -m nexus.software_engineer.evaluation`: 28 scenarios passed, byte-identical.
 - `python -m nexus.lab.scenarios validate`: 5 scenarios. `docker compose config`: valid.
 - `python -m nexus.software_engineer preflight`: `enabled=False mode=dry_run sandbox=none`.
 - Not run locally: Compose integration (no Docker daemon). CI's `compose-integration`

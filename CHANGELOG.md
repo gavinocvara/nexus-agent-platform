@@ -8,6 +8,28 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
+## 0.22.0 — Resident Software Engineer controlled evaluation
+
+- `nexus.software_engineer.evaluation`: a 28-scenario judgment catalog run as a CI gate
+  (`python -m nexus.software_engineer.evaluation`), replayed byte for byte. Scenarios:
+  nothing to do, obvious micro bug (the only one that ships, and only autonomously),
+  failing unit test, misleading bug report, unrelated failing test, repeated failed patch
+  (blocked on the second cycle by memory), risky dependency upgrade, security-sensitive
+  change, ambiguous architectural change, unnecessary refactor (never selected),
+  malformed repository, merge conflict, dirty working tree, missing Slack credentials,
+  Slack outage, model outage, timeout, insufficient evidence, conflicting evidence, stale
+  memory, prompt injection in history, a request to weaken safety controls, benchmark
+  regression, cost budget exhaustion, owner rejection / approval / revision, and a
+  validated change without a publisher. Every run also checks that the source repository
+  is untouched, nothing ships outside policy, records and reports carry no secrets, and
+  memory carries no instructions and full provenance.
+- Cycle: candidates whose cost outweighs their value are never selected ("no candidate
+  is worth its cost"); test, gate, and benchmark regressions observed in the evidence are
+  notified as urgent events even when no candidate is actionable.
+- Budgets: changed files and diff bytes are autonomous-shipping limits handled by the risk
+  classifier (a larger change is proposed, not blocked); hard budgets remain runtime,
+  turns, tool calls, model calls, tokens, and cost.
+
 ## 0.21.0 — Resident Software Engineer executor v1 (mechanical recipes)
 
 - `PatchForgeExecutor`: for candidates whose category has a mechanical recipe

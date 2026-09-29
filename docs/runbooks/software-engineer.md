@@ -41,6 +41,14 @@ Executing a recipe needs `NEXUS_SOFTWARE_ENGINEER_MODE=propose` (or
 sandbox is for ephemeral, credential-free runners only: it scrubs the environment and
 bounds each command but has no container isolation.
 
+## Judgment evaluation
+
+`python -m nexus.software_engineer.evaluation` runs the controlled judgment catalog
+(ADR 0012): every scenario in the owner's brief, from an obvious micro bug to a request to
+weaken safety controls, with scripted executors and transports, replayed twice. It prints
+one line per scenario (decision, failure, risk, events, record hash) and fails on any
+unexpected judgment, invariant violation, or non-identical replay. CI runs it.
+
 ## Manual operation
 
 ```bash

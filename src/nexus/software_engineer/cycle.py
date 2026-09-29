@@ -249,6 +249,7 @@ class EngineeringCycle:
             update={"tool_calls": self.usage.tool_calls + self.inspector.calls}
         )
         self._check_budget()
+        self._notify_regressions(state)
 
     def _understand(self, state: _State) -> None:
         self._advance(CyclePhase.UNDERSTAND, "read private memory")
@@ -258,16 +259,25 @@ class EngineeringCycle:
     def _prioritize(self, state: _State) -> None:
         self._advance(CyclePhase.PRIORITIZE, "rank candidates by value, urgency, confidence, cost")
         state.candidates = self.generator.generate(state.signals, state.memories)
+        worthless = 0
         for candidate in state.candidates:
             if candidate.blockers:
+                state.abandoned.append(candidate.candidate_id)
+                continue
+            if candidate.estimate.score <= 0:
+                # Never invent busywork: a candidate whose cost outweighs its value waits.
+                worthless += 1
                 state.abandoned.append(candidate.candidate_id)
                 continue
             state.selected = candidate
             break
         if state.selected is None:
-            state.decision_reasons.append(
-                "no unblocked candidate" if state.candidates else "no candidate was found"
-            )
+            if not state.candidates:
+                state.decision_reasons.append("no candidate was found")
+            elif worthless == len(state.candidates):
+                state.decision_reasons.append("no candidate is worth its cost")
+            else:
+                state.decision_reasons.append("no unblocked candidate")
 
     def _investigate_and_plan(self, state: _State) -> None:
         self._advance(CyclePhase.INVESTIGATE, "confirm the candidate against its evidence")
@@ -687,6 +697,34 @@ class EngineeringCycle:
         exceeded = usage.exceeded(self.budget)
         if exceeded:
             raise _BudgetExhausted(exceeded)
+
+    def _notify_regressions(self, state: _State) -> None:
+        """Tell the owner about regressions the evidence shows, whatever happens next."""
+
+        failures = [item for item in state.signals if item.severity is SignalSeverity.FAILURE]
+        tests = [item for item in failures if item.kind is SignalKind.TEST_RESULTS]
+        gates = [
+            item
+            for item in failures
+            if item.kind in {SignalKind.BENCHMARK, SignalKind.E2E_GATE, SignalKind.SENTINEL_GATE}
+        ]
+        for event, items, title in (
+            (NotificationEvent.TEST_REGRESSION, tests, "Test regression observed"),
+            (
+                NotificationEvent.BENCHMARK_REGRESSION,
+                gates,
+                "Gate or benchmark regression observed",
+            ),
+        ):
+            if items:
+                self.notifier.notify(
+                    Notification(
+                        event=event,
+                        title=title,
+                        body="\n".join(f"- {item.summary}" for item in items)[:4000],
+                        cycle_id=self.cycle_id,
+                    )
+                )
 
     def _notify_failure(self, state: _State, title: str) -> None:
         self.notifier.notify(

@@ -59,6 +59,9 @@ jobs:
           python -m pytest tests/unit/test_software_engineer_*.py
           python -m nexus.software_engineer preflight
 
+      - name: Validate resident Software Engineer judgment
+        run: python -m nexus.software_engineer.evaluation
+
       - name: Validate deterministic investigator boundary
         run: python -m pytest tests/unit/test_aegisops_contracts.py tests/unit/test_aegisops_runtime.py tests/unit/test_aegisops_evaluation.py
 
