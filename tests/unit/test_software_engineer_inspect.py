@@ -161,6 +161,7 @@ def test_candidates_cite_signals_rank_deterministically_and_respect_failed_attem
     )
     informed = generator.generate(signals, [failed, backlog])
     lint_again = next(item for item in informed if item.title == "Fix lint findings")
-    assert lint_again.blockers == ["a previous attempt failed; see memory"]
+    # The blocker names the memory that decided it, so the record is auditable.
+    assert lint_again.blockers == [f"a previous attempt failed; see memory {failed.memory_id}"]
     assert lint_again.estimate.confidence == lint.estimate.confidence - 30
     assert any(item.title.startswith("Backlog: Tighten") for item in informed)

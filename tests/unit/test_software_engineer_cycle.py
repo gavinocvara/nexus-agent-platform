@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid5
 
 import pytest
 
@@ -16,6 +16,7 @@ from nexus.patchforge.workspace import GitRunner
 from nexus.software_engineer import __main__ as cli
 from nexus.software_engineer.config import SoftwareEngineerSettings
 from nexus.software_engineer.cycle import (
+    _CYCLE_NAMESPACE,
     EngineeringCycle,
     ExecutionOutcome,
     record_owner_decision,
@@ -441,6 +442,11 @@ def test_an_owner_rejection_is_not_forgotten_under_months_of_newer_decisions(
     second, _ = again.run()
     assert second.approval_request is None, "the rejected ask came back"
     assert second.decision is CycleDecision.NO_WORK, second.decision_reasons
+    rejection = uuid5(_CYCLE_NAMESPACE, f"{UUID(int=500)}:owner-decision")
+    blocked = [item for item in second.candidates if item.blockers]
+    assert blocked and all(
+        any(str(rejection) in blocker for blocker in item.blockers) for item in blocked
+    ), "the blocker must name the owner decision that decided it"
 
 
 @pytest.mark.parametrize(

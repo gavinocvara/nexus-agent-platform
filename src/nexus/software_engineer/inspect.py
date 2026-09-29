@@ -436,15 +436,16 @@ class CandidateGenerator:
         memories: Sequence[EngineerMemory] = (),
     ) -> list[EngineeringCandidate]:
         candidates: list[EngineeringCandidate] = []
+        # Title -> the memory that blocks it, so the record says which memory decided.
         failed_titles = {
-            item.content.split(":", 1)[0].strip().casefold()
+            item.content.split(":", 1)[0].strip().casefold(): item.memory_id
             for item in memories
             if item.status is EpistemicStatus.FAILED_HYPOTHESIS
         }
         # An owner REJECT is remembered as "<title>: owner decided reject (...)"; the same
         # ask must not come back the next morning.
         rejected_titles = {
-            item.content.split(":", 1)[0].strip().casefold()
+            item.content.split(":", 1)[0].strip().casefold(): item.memory_id
             for item in memories
             if item.status is EpistemicStatus.OWNER_DECISION
             and item.category is MemoryCategory.OWNER_PREFERENCE
@@ -524,7 +525,10 @@ class CandidateGenerator:
             if key in failed_titles:
                 candidate = candidate.model_copy(
                     update={
-                        "blockers": [*candidate.blockers, "a previous attempt failed; see memory"],
+                        "blockers": [
+                            *candidate.blockers,
+                            f"a previous attempt failed; see memory {failed_titles[key]}",
+                        ],
                         "estimate": candidate.estimate.model_copy(
                             update={"confidence": max(0, candidate.estimate.confidence - 30)}
                         ),
@@ -535,7 +539,7 @@ class CandidateGenerator:
                     update={
                         "blockers": [
                             *candidate.blockers,
-                            "the owner rejected this before; see memory",
+                            f"the owner rejected this before; see memory {rejected_titles[key]}",
                         ],
                         "estimate": candidate.estimate.model_copy(
                             update={"value": 0, "urgency": 0}
