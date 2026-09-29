@@ -8,9 +8,10 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 - Branch `main`; local `HEAD` must equal `origin/main` at every checkpoint
   (`git rev-parse HEAD origin/main`, `git diff HEAD`, `git diff origin/main...HEAD`).
-- NEXUS `0.25.0` (resident Software Engineer Slack decisions and issue intake) is the
-  commit containing this file (`git rev-parse HEAD`). Record its CI run in
-  `PROJECT_STATE.md` once green.
+- HEAD is the commit containing this file (`git rev-parse HEAD`): `5f79cfe` enforceable
+  cost accounting (CI run `36560056831` green) on top of NEXUS `0.25.0` `cd46730` (CI run
+  `36559485287` green, both jobs). Version stays `0.25.0`; the cost-accounting entry
+  sits under "Unreleased" in `CHANGELOG.md` for the next checkpoint.
 - Previous: `bcb04ae` Slack commands (run `36558831526` green), `5bdbfc2` issue intake
   (run `36558333163` green), `ebca518` Git-date CI fix (run `36558041450` green),
   `6dea458` evaluation scenarios (failed on the same Git-date issue), 0.24.0 publisher `6210fb4` (its CI run `36557239380`

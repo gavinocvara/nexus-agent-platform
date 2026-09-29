@@ -27,7 +27,7 @@ Update it at every checkpoint. Rules live in `AGENTS.md`; execution order in
 | PatchForge I (model engine boundary) | Built; live run not executed | `nexus.patchforge.engine`, `nexus.patchforge.live` |
 | PatchForge J (SentinelQA-lite) | Complete (0.19.0, CI run 36546322678 green) | `nexus.sentinelqa`, ADR 0011, `docs/runbooks/sentinelqa.md` |
 | PatchForge K (GitHub) | Draft-PR publication (0.24.0) and read-only issue intake complete via the resident engineer | `nexus.software_engineer.publish`, `nexus.software_engineer.issues`, ADR 0012 |
-| Resident Software Engineer | **Foundation (0.20.0, CI run 36549244409 green) + executor v1 for mechanical recipes (0.21.0) + controlled judgment evaluation (0.22.0) + model-backed recipes behind explicit spend confirmation (0.23.0) + owner-approved draft pull requests through a verified GitHub publisher (0.24.0) + Slack decisions and read-only issue intake (0.25.0)**, disabled by default | `nexus.software_engineer`, ADR 0012, `docs/runbooks/software-engineer.md` |
+| Resident Software Engineer | **Foundation (0.20.0, CI run 36549244409 green) + executor v1 for mechanical recipes (0.21.0) + controlled judgment evaluation (0.22.0) + model-backed recipes behind explicit spend confirmation (0.23.0) + owner-approved draft pull requests through a verified GitHub publisher (0.24.0) + Slack decisions and read-only issue intake (0.25.0, CI run 36559485287 green) + enforceable cost accounting (`5f79cfe`, CI run 36560056831 green)**, disabled by default | `nexus.software_engineer`, ADR 0012, `docs/runbooks/software-engineer.md` |
 | Engram, Kubernetes, AegisOps remediation | Deferred | `ROADMAP.md` |
 
 ## SentinelQA-lite (0.19.0) in one paragraph
@@ -63,7 +63,7 @@ zero disagreements).
 | `python -m nexus.lab.scenarios validate` | 5 scenarios |
 | `python -m nexus.software_engineer preflight` | `enabled=False mode=dry_run prices_set=False max_cost_usd=0.0 model_recipes_allowed=False sandbox=none slack_webhook_present=False github_token_present=False publish_from_cycle=False read_issues=False slack_owner_user_id_set=False` |
 | `docker compose config --quiet` | valid |
-| Compose integration (`RUN_INTEGRATION=1`) | not run locally (no Docker daemon); CI job `compose-integration` |
+| Compose integration (`RUN_INTEGRATION=1`) | not run locally (no Docker daemon); CI job `compose-integration` green on runs 36559485287 and 36560056831 |
 | Live model calls / GitHub or Slack traffic from agent code | none, ever (model recipes tested with a scripted client; publisher, issue source, and Slack receiver tested against fakes) |
 | Frozen evidence (`docs/experiments/`, hash pins in `test_atlas_isolation.py`) | unchanged |
 
