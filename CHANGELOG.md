@@ -6,6 +6,10 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.26.0 — Harness boundary, persistent brain, single-run lease, enforceable cost
+
 - Resident Software Engineer runtime: one cycle per state root. `run.lock` is taken
   before observation and released on every exit path; a concurrent run is refused
   (`concurrent_run`, exit 2) without writing anything; a lease left by a dead cycle is
