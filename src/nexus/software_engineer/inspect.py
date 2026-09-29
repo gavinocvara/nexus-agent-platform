@@ -157,8 +157,10 @@ class RepositoryInspector:
 
     def _todo_markers(self) -> list[EngineeringSignal]:
         try:
+            # Only comments count: a marker word inside a string, docstring, or this very
+            # pattern is not a task. The first real cycle flagged the scanner itself.
             output = self._git(
-                ["grep", "-n", "-I", "-E", r"\b(TODO|FIXME|XXX)\b", "--", "src", "tests"],
+                ["grep", "-n", "-I", "-E", r"#.*\b(TODO|FIXME|XXX)\b", "--", "src", "tests"],
                 allowed=frozenset({0, 1}),
             )
         except GitCommandError:
@@ -390,7 +392,8 @@ class CandidateGenerator:
                     "and must be investigated before any change.",
                     ChangeCategory.UNKNOWN,
                     [signal.signal_id],
-                    CandidateEstimate(value=20, urgency=10, confidence=30, cost=30),
+                    # Report-only: a marker is context for the owner, never a daily ask.
+                    CandidateEstimate(value=20, urgency=5, confidence=30, cost=40),
                     untrusted=True,
                 )
             )

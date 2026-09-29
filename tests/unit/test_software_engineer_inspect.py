@@ -18,7 +18,11 @@ FIXTURE = FixtureRepository(
     name="inspected",
     files={
         "src/pkg/__init__.py": "",
-        "src/pkg/module.py": "VALUE = 1  # TODO: remove after migration\n",
+        "src/pkg/module.py": (
+            "VALUE = 1  # TODO: remove after migration\n"
+            'PATTERN = "TODO|FIXME"  # a string is not a task\n'
+            '"""Docstrings mentioning TODO markers are not tasks either."""\n'
+        ),
         "tests/test_module.py": "def test_value():\n    assert True\n",
         "README.md": "# fixture\n",
     },
@@ -90,6 +94,7 @@ def test_inspector_reports_typed_signals_and_flags_untrusted_text(tmp_path: Path
     injected = next(item for item in commits if item.details == INJECTION)
     assert injected.untrusted_text and injected.instruction_like
     assert by_kind[SignalKind.WORKING_TREE][0].severity is SignalSeverity.INFO
+    assert len(by_kind[SignalKind.TODO_MARKER]) == 1
     todo = by_kind[SignalKind.TODO_MARKER][0]
     assert todo.source.startswith("src/pkg/module.py:1") and todo.untrusted_text
     assert by_kind[SignalKind.TEST_RESULTS][0].severity is SignalSeverity.FAILURE
@@ -133,6 +138,7 @@ def test_candidates_cite_signals_rank_deterministically_and_respect_failed_attem
     assert lint.category is ChangeCategory.DEAD_CODE_REMOVAL
     todo = next(item for item in candidates if item.title.startswith("Address marker"))
     assert todo.derived_from_untrusted_text and todo.category is ChangeCategory.UNKNOWN
+    assert todo.estimate.score <= 0  # markers are reported, never selected as daily work
     known = {item.signal_id for item in signals}
     assert all(set(item.signal_ids) <= known for item in candidates)
     assert generator.generate(signals) == candidates

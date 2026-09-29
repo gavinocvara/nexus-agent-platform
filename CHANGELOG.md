@@ -6,7 +6,11 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 ## Unreleased
 
-Nothing yet.
+- Resident Software Engineer: the marker scanner counts only comments (`#.*TODO|FIXME|XXX`),
+  so a marker word inside a string, docstring, or the scanner's own pattern is no longer a
+  signal; marker candidates are report-only (score never positive) instead of becoming
+  daily approval requests. Found by the first real dry-run cycle over this repository,
+  which flagged the scanner itself.
 
 ## 0.23.0 — Resident Software Engineer model-backed recipes (no live calls)
 
