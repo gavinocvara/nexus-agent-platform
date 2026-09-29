@@ -59,7 +59,7 @@ zero disagreements).
 | `python -m nexus.patchforge.e2e_catalog` | 23 scenarios passed, byte-identical |
 | `python -m nexus.patchforge.benchmark_corpus` | passed; SentinelQA agreement 100% |
 | `python -m nexus.sentinelqa` | 29 scenarios passed, byte-identical |
-| `python -m nexus.software_engineer.evaluation` | 28 judgment scenarios passed, byte-identical |
+| `python -m nexus.software_engineer.evaluation` | 30 judgment scenarios passed, byte-identical |
 | `python -m nexus.lab.scenarios validate` | 5 scenarios |
 | `python -m nexus.software_engineer preflight` | `enabled=False mode=dry_run sandbox=none slack_webhook_present=False github_token_present=False publish_from_cycle=False` |
 | `docker compose config --quiet` | valid |
@@ -117,7 +117,7 @@ No credential is present in this container; nothing here needs one.
 | Cycle state machine, persistence, failure handling | Done (`cycle.py`) |
 | CLI and scheduled workflow (read-only token, variable-gated) | Done |
 | Executor (PatchForge + SentinelQA + gates on an isolated branch) | **Done** for mechanical and model recipes (`executor.py`, `recipes.py`, `sandbox.py`); ships only through a configured publisher |
-| Controlled judgment evaluation (28 scenarios, CI gate) | **Done** (`evaluation.py`) |
+| Controlled judgment evaluation (30 scenarios incl. autonomous draft publication and publisher refusal, CI gate) | **Done** (`evaluation.py`) |
 | Model-backed recipes (type annotation, micro bug fix, defensive check) | **Done** (`PatchForgeExecutor.model_engine_factory`), off until model + confirmation + budgets + key |
 | Owner decisions (`decide`) and publication (`publish`) as draft pull requests | **Done** (`approval.py`, `publish.py`, CLI); tree re-derived from the validated patch, remote blob/tree SHAs verified, never merges |
 | Slack-delivered owner commands | Not built (`decide` CLI today) |

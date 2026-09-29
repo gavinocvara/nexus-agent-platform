@@ -42,7 +42,7 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 - `python -m nexus.patchforge.e2e_catalog`: 23 scenarios passed, byte-identical replay.
 - `python -m nexus.patchforge.benchmark_corpus`: passed (SentinelQA agreement included).
 - `python -m nexus.sentinelqa`: 29 scenarios passed, byte-identical replay.
-- `python -m nexus.software_engineer.evaluation`: 28 scenarios passed, byte-identical.
+- `python -m nexus.software_engineer.evaluation`: 30 scenarios passed, byte-identical.
 - `python -m nexus.lab.scenarios validate`: 5 scenarios. `docker compose config`: valid.
 - `python -m nexus.software_engineer preflight`: `enabled=False mode=dry_run sandbox=none
   github_token_present=False publish_from_cycle=False`.

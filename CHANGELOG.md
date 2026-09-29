@@ -6,7 +6,12 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 ## Unreleased
 
-Nothing yet.
+- Resident Software Engineer evaluation: two publication scenarios join the judgment gate.
+  `autonomous_draft_publication` (a LOW-risk change in `autonomous_low_risk` mode with a
+  publisher ships as a draft pull request recorded on the change) and
+  `publisher_refuses_at_ship` (a publisher refusal is a typed executor failure: the cycle
+  is `blocked`, nothing is published, `engineering_cycle_failed` is sent). New invariant:
+  a publication appears only in a shipped, unfailed cycle and is always a draft.
 
 ## 0.24.0 — Resident Software Engineer owner-approved draft pull requests
 

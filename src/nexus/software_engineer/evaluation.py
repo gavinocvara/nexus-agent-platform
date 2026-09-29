@@ -58,6 +58,7 @@ from nexus.software_engineer.models import (
     GateStatus,
     NotificationEvent,
     OwnerVerdict,
+    PublishedChange,
     RiskLevel,
     RollbackRecord,
 )
@@ -68,6 +69,7 @@ from nexus.software_engineer.notify import (
     RecordingTransport,
 )
 from nexus.software_engineer.policy import REQUIRED_GATES_FOR_AUTONOMOUS_SHIP, ShipPolicy
+from nexus.software_engineer.publish import agent_publisher_identity
 from nexus.software_engineer.trust import (
     OwnerCommand,
     contains_credential,
@@ -117,6 +119,8 @@ class ScriptedExecutor:
         can_ship: bool = True,
         additions: int = 1,
         deletions: int = 1,
+        publish: bool = False,
+        ship_error: str | None = None,
     ) -> None:
         self.paths = list(paths)
         self.failing = set(failing_gates)
@@ -126,6 +130,8 @@ class ScriptedExecutor:
         self.can_ship = can_ship
         self.additions = additions
         self.deletions = deletions
+        self.publish = publish
+        self.ship_error = ship_error
         self.shipped: list[ChangeSummary] = []
 
     def execute(
@@ -163,8 +169,37 @@ class ScriptedExecutor:
         )
 
     def ship(self, change: ChangeSummary, *, cycle_id: UUID) -> ChangeSummary:
+        if self.ship_error is not None:
+            raise ExecutorError(f"Publishing refused: {self.ship_error}")
         self.shipped.append(change)
-        return change
+        if not self.publish:
+            return change
+        publication = PublishedChange(
+            publication_id=uuid5(_EVAL_NAMESPACE, f"{cycle_id}:publication"),
+            cycle_id=cycle_id,
+            authority="autonomous_low_risk",
+            provider="github",
+            repository="example/fixture",
+            base_branch="main",
+            base_sha=change.base_sha,
+            base_head_at_publish=change.base_sha,
+            branch=change.branch or "nexus/software-engineer/scripted",
+            tree_sha="3" * 40,
+            local_commit_sha=change.commit_sha or change.base_sha,
+            remote_commit_sha=change.commit_sha or change.base_sha,
+            diff_sha256=change.diff_sha256,
+            pull_request_number=1,
+            pull_request_url="https://example.invalid/example/fixture/pull/1",
+            published_by=agent_publisher_identity(),
+            published_at=EVALUATION_TIME,
+        )
+        return change.model_copy(
+            update={
+                "publication": publication,
+                "rollback_reference": "Draft pull request #1 on the candidate branch; "
+                "close it and delete the branch to roll back.",
+            }
+        )
 
     def rollback(self, change: ChangeSummary, *, reason: str) -> RollbackRecord:
         return RollbackRecord(
@@ -251,6 +286,7 @@ class EngineerScenario:
     owner_verdict: OwnerVerdict | None = None
     expected_owner_outcome: CycleDecision | None = None
     broken_repository: bool = False
+    expected_publication: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -305,6 +341,9 @@ class EngineerEvaluationRun:
         )
         reasons = " ".join(record.decision_reasons)
         check(all(text in reasons for text in scenario.expected_reasons), f"reasons: {reasons}")
+        if scenario.expected_publication is not None:
+            published = record.change is not None and record.change.publication is not None
+            check(published is scenario.expected_publication, f"publication present: {published}")
         if scenario.owner_verdict is not None:
             check(self.owner_outcome is scenario.expected_owner_outcome, "owner outcome")
         return problems + self.invariant_problems()
@@ -340,6 +379,11 @@ class EngineerEvaluationRun:
                 "shipped with a failed gate",
             )
         check(len(record.notifications) <= record.budget.max_turns, "notification flood")
+        publication = record.change.publication if record.change is not None else None
+        if publication is not None:
+            check(record.decision is CycleDecision.SHIP, "publication without a ship decision")
+            check(publication.draft is True, "publication is not a draft")
+            check(record.failure is None, "publication in a failed cycle")
         check(record.usage.turns == len(record.transitions), "turn accounting")
         return problems
 
@@ -785,6 +829,32 @@ def default_catalog() -> list[EngineerScenario]:
             expected_decision=CycleDecision.REQUEST_APPROVAL,
             expected_risk=RiskLevel.LOW,
             expected_reasons=["no publisher"],
+            expected_publication=False,
+        ),
+        EngineerScenario(
+            name="autonomous_draft_publication",
+            mode=CycleMode.AUTONOMOUS_LOW_RISK,
+            candidates=[doc_fix],
+            executor=lambda: ScriptedExecutor(publish=True),
+            expected_decision=CycleDecision.SHIP,
+            expected_risk=RiskLevel.LOW,
+            expected_memory_statuses=[EpistemicStatus.VALIDATED_FACT],
+            expected_events=[NotificationEvent.DAILY_REPORT],
+            forbidden_events=[NotificationEvent.APPROVAL_REQUIRED],
+            expected_publication=True,
+        ),
+        EngineerScenario(
+            name="publisher_refuses_at_ship",
+            mode=CycleMode.AUTONOMOUS_LOW_RISK,
+            candidates=[doc_fix],
+            executor=lambda: ScriptedExecutor(ship_error="branch_exists"),
+            expected_decision=CycleDecision.BLOCKED,
+            expected_failure=CycleFailure.EXECUTOR_ERROR,
+            expected_risk=RiskLevel.LOW,
+            expected_events=[NotificationEvent.ENGINEERING_CYCLE_FAILED],
+            forbidden_events=[NotificationEvent.IMPROVEMENT_COMPLETED],
+            expected_reasons=["executor error"],
+            expected_publication=False,
         ),
     ]
 

@@ -12,7 +12,7 @@ from nexus.software_engineer.evaluation import (
     EngineerScenario,
     default_catalog,
 )
-from nexus.software_engineer.models import CycleDecision, NotificationEvent
+from nexus.software_engineer.models import CycleDecision, CycleMode, NotificationEvent
 
 NOW = datetime(2026, 9, 29, 12, tzinfo=UTC)
 
@@ -62,12 +62,25 @@ def test_catalog_covers_the_required_judgment_cases() -> None:
 
 def test_only_the_obvious_micro_bug_ships_and_only_autonomously(tmp_path: Path) -> None:
     shipped = [item for item in default_catalog() if item.expected_decision is CycleDecision.SHIP]
-    assert [item.name for item in shipped] == ["obvious_micro_bug"]
-    run = EngineerEvaluationHarness(tmp_path, now=NOW).run(shipped[0])
+    assert [item.name for item in shipped] == ["obvious_micro_bug", "autonomous_draft_publication"]
+    assert all(item.mode is CycleMode.AUTONOMOUS_LOW_RISK for item in shipped)
+    harness = EngineerEvaluationHarness(tmp_path, now=NOW)
+    run = harness.run(shipped[0])
     assert run.record.decision is CycleDecision.SHIP
     assert NotificationEvent.APPROVAL_REQUIRED not in {
         item.event for item in run.record.notifications
     }
+    published = harness.run(shipped[1])
+    assert published.record.change is not None
+    publication = published.record.change.publication
+    assert publication is not None and publication.draft is True
+    assert publication.authority == "autonomous_low_risk"
+    refused = harness.run(
+        next(item for item in default_catalog() if item.name == "publisher_refuses_at_ship")
+    )
+    assert refused.record.decision is CycleDecision.BLOCKED
+    assert refused.record.change is not None and refused.record.change.publication is None
+    assert refused.problems() == [] and refused.invariant_problems() == []
 
 
 def test_gate_passes_and_reports_a_wrong_expectation(
