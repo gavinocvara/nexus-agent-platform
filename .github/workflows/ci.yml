@@ -48,6 +48,12 @@ jobs:
       - name: Validate PatchForge Benchmark v0
         run: python -m nexus.patchforge.benchmark_corpus
 
+      - name: Validate SentinelQA independent verification
+        run: python -m pytest tests/unit/test_sentinelqa_*.py
+
+      - name: Validate SentinelQA adversarial gate
+        run: python -m nexus.sentinelqa
+
       - name: Validate deterministic investigator boundary
         run: python -m pytest tests/unit/test_aegisops_contracts.py tests/unit/test_aegisops_runtime.py tests/unit/test_aegisops_evaluation.py
 

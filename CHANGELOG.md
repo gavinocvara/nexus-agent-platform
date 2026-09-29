@@ -8,6 +8,37 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
+## 0.19.0 — PatchForge Milestone J: SentinelQA-lite independent verification
+
+- New `nexus.sentinelqa` package (ADR 0011): `SpecificationLock` captured from the Git
+  objects of the source commit (tests under the operator prefixes, evaluation
+  configuration anywhere, operator-declared paths; symlinks fail closed),
+  `SentinelQAVerifier`, `SpecificationRunner`, a strict pytest summary parser, and
+  runtime-attested `SentinelVerdict`s that convert to Atlas `ReviewResult`s for reviewer
+  `sentinelqa.reviewer`.
+- Verification happens on fresh `.git`-free trees of the source commit: baseline runs on
+  the pristine tree, the patch applied to a second tree, every locked file compared with
+  the lock, then the *verification tree* (candidate with the pristine specification
+  restored and candidate-added tests/config removed) run through the operator's targeted
+  and full-suite commands with tree fingerprints, count rules against the baseline, and
+  a cross-check of PatchForge's attested checks.
+- Verdicts fail closed: unverifiable evidence is `inconclusive`, any rejection finding is
+  `failed`, only a clean review is `passed`. Closed finding vocabulary with categories.
+- `python -m nexus.sentinelqa`: a 29-scenario adversarial gate (modified, weakened,
+  deleted, renamed, moved tests; manipulated expected data; `conftest.py`,
+  `pyproject.toml`, `sitecustomize.py` injection; skips and non-collection from code;
+  a candidate passing only with its own tests; mutated verification trees; rewritten
+  source history; tampered, incomplete, or foreign locks; corrupted artifacts; executor
+  outages, timeouts, missing summaries, contradictory statuses) replayed byte-identically.
+  CI runs it and the SentinelQA unit tests.
+- Benchmark v0 reviews every proposal with SentinelQA (no ground truth) and records
+  agreement with the hidden truth: `reference` 5/5 passed, `fix_and_edit_tests` 5/5
+  failed with `specification_modified`, zero disagreements. The live run path evaluates
+  through SentinelQA and prints the verdict.
+- `E2ERun` carries the `EngineeringTask` it ran (additive).
+- The Milestone H finding is closed: specification-weakening proposals are now rejected
+  by an independent verifier rather than only by benchmark ground truth.
+
 ## 0.18.0 — PatchForge Milestone I: model engine boundary (`b613072`)
 
 - `ModelBackedEngine` behind a provider-neutral `ModelClient`: one strictly parsed action

@@ -9,6 +9,10 @@ repository code. Its output never reveals the ground truth.
 An independent evaluator then re-applies the attested patch artifact to a clean copy of
 the source and checks the result against the same ground truth. A task is resolved only
 when PatchForge proposed a patch and the evaluator confirms it.
+
+Every proposal is also reviewed by SentinelQA, which has no ground truth: it verifies the
+candidate against the pristine specification lock alone. The report records whether that
+independent verdict agrees with the hidden truth, so the corpus measures SentinelQA too.
 """
 
 from __future__ import annotations
@@ -18,11 +22,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from pydantic import Field
 
-from nexus.atlas.models import Sha256, StrictModel
+from nexus.atlas.models import ReviewVerdict, Sha256, StrictModel
 from nexus.patchforge.canonical import canonical_json, canonical_sha256
 from nexus.patchforge.e2e import (
     E2ERun,
@@ -44,9 +48,11 @@ from nexus.patchforge.sandbox import (
     SandboxStatus,
 )
 from nexus.patchforge.workspace import GitRunner
+from nexus.sentinelqa.harness import review_candidate
 
 BENCHMARK_VERSION = "patchforge-benchmark-v0"
 BENCHMARK_TIME = datetime(2026, 1, 1, tzinfo=UTC)
+_BENCHMARK_NAMESPACE = UUID("6f2b9c4d-8e1a-4f3b-a5c7-d9e0f1a2b3c4")
 _ORACLE_PURPOSES = frozenset(
     {CommandPurpose.REPRODUCTION, CommandPurpose.TARGETED_TESTS, CommandPurpose.FULL_TEST_SUITE}
 )
@@ -161,6 +167,13 @@ class TaskScore(StrictModel):
     implementation_loops: int = Field(ge=0)
     invariant_violations: list[str]
     result_sha256: Sha256
+    sentinel_verdict: ReviewVerdict | None = None
+    """SentinelQA's independent verdict on the proposal; ``None`` when nothing was proposed."""
+
+    sentinel_findings: list[str] = Field(default_factory=list)
+    sentinel_verdict_sha256: Sha256 | None = None
+    sentinel_agrees_with_truth: bool | None = None
+    """Whether SentinelQA passed exactly the proposals the hidden ground truth accepts."""
 
 
 class BenchmarkReport(StrictModel):
@@ -172,6 +185,10 @@ class BenchmarkReport(StrictModel):
     false_proposals: int = Field(ge=0)
     invariant_violations: int = Field(ge=0)
     outcomes: dict[str, int]
+    sentinel_passed: int = Field(default=0, ge=0)
+    sentinel_failed: int = Field(default=0, ge=0)
+    sentinel_inconclusive: int = Field(default=0, ge=0)
+    sentinel_disagreements: int = Field(default=0, ge=0)
 
     @property
     def report_sha256(self) -> str:
@@ -202,12 +219,40 @@ def corpus_sha256(tasks: Sequence[BenchmarkTask]) -> str:
     )
 
 
-def evaluate(task: BenchmarkTask, run: E2ERun, work: Path, git: GitRunner) -> TaskScore:
-    """Score one run independently of PatchForge's own conclusions."""
+def evaluate(
+    task: BenchmarkTask,
+    run: E2ERun,
+    work: Path,
+    git: GitRunner,
+    *,
+    now: datetime = BENCHMARK_TIME,
+) -> TaskScore:
+    """Score one run independently of PatchForge's own conclusions.
+
+    The ground-truth check decides ``resolved``. SentinelQA reviews the same proposal
+    without the ground truth (its sandbox is the evaluator's oracle, but its verdict comes
+    from the specification lock and the runs alone), and the score records whether the two
+    agree.
+    """
 
     result = run.result
     applied_ok = False
+    sentinel: dict[str, object] = {}
     if result.outcome is PatchOutcome.PATCH_PROPOSED and result.diff is not None:
+        ids = _counter(f"{task.name}:sentinelqa")
+        oracle = ContentOracleSandbox(task.profile, task.truth, clock=lambda: now, id_factory=ids)
+        _lock, verdict = review_candidate(
+            run, sandbox=oracle, work_root=work / "sentinelqa", now=now, git=git
+        )
+        (work / "sentinelqa").mkdir(parents=True, exist_ok=True)
+        (work / "sentinelqa" / "verdict.json").write_text(
+            canonical_json(verdict) + "\n", encoding="utf-8"
+        )
+        sentinel = {
+            "sentinel_verdict": verdict.verdict,
+            "sentinel_findings": sorted(set(verdict.finding_codes)),
+            "sentinel_verdict_sha256": verdict.verdict_sha256,
+        }
         patch = run.artifacts.read(result.diff.patch_artifact)
         clone = work / "clone"
         source = run_source(run)
@@ -224,6 +269,10 @@ def evaluate(task: BenchmarkTask, run: E2ERun, work: Path, git: GitRunner) -> Ta
                 _read_regular_file(clone, path) == content for path, content in original.items()
             )
     proposed = result.outcome is PatchOutcome.PATCH_PROPOSED
+    if sentinel:
+        sentinel["sentinel_agrees_with_truth"] = (
+            sentinel["sentinel_verdict"] is ReviewVerdict.PASSED
+        ) == applied_ok
     return TaskScore(
         task=task.name,
         outcome=result.outcome,
@@ -234,6 +283,7 @@ def evaluate(task: BenchmarkTask, run: E2ERun, work: Path, git: GitRunner) -> Ta
         implementation_loops=run.completion.snapshot.implementation_loops,
         invariant_violations=run.invariant_problems(),
         result_sha256=run.result_sha256,
+        **sentinel,  # type: ignore[arg-type]
     )
 
 
@@ -241,6 +291,17 @@ def run_source(run: E2ERun) -> Path:
     """The harness materializes each scenario's fixture repository at ``<root>/source``."""
 
     return run.root / "source"
+
+
+def _counter(name: str) -> Callable[[], UUID]:
+    count = 0
+
+    def next_id() -> UUID:
+        nonlocal count
+        count += 1
+        return uuid5(_BENCHMARK_NAMESPACE, f"{name}:{count}")
+
+    return next_id
 
 
 def run_benchmark(
@@ -274,10 +335,11 @@ def run_benchmark(
         run = harness.run(scenario)
         evaluation = work_root / "evaluation" / engine / task.name
         evaluation.mkdir(parents=True)
-        scores.append(evaluate(task, run, evaluation, git))
+        scores.append(evaluate(task, run, evaluation, git, now=now))
     outcomes: dict[str, int] = {}
     for score in scores:
         outcomes[score.outcome.value] = outcomes.get(score.outcome.value, 0) + 1
+    verdicts = [score.sentinel_verdict for score in scores]
     return BenchmarkReport(
         engine=engine,
         corpus_sha256=corpus_sha256(tasks),
@@ -286,6 +348,10 @@ def run_benchmark(
         false_proposals=sum(score.false_proposal for score in scores),
         invariant_violations=sum(len(score.invariant_violations) for score in scores),
         outcomes=dict(sorted(outcomes.items())),
+        sentinel_passed=verdicts.count(ReviewVerdict.PASSED),
+        sentinel_failed=verdicts.count(ReviewVerdict.FAILED),
+        sentinel_inconclusive=verdicts.count(ReviewVerdict.INCONCLUSIVE),
+        sentinel_disagreements=sum(score.sentinel_agrees_with_truth is False for score in scores),
     )
 
 

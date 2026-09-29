@@ -125,7 +125,9 @@ Engram records the validated history.
 - **G. Deterministic E2E (Complete):** scripted happy path and all required failure/partial paths
 - **H. Benchmark v0 (Complete):** small synthetic defect corpus and reproducible harness
 - **I. Live engine (Boundary complete; live run awaits owner authorization):** explicit opt-in, one targeted task, artifact inspection, then stop
-- **J. SentinelQA-lite:** independent fresh-sandbox patch and validation verification
+- **J. SentinelQA-lite (Complete):** specification lock from Git objects, fresh-tree
+  verification against the pristine tests only, fail-closed verdicts, adversarial gate,
+  Benchmark v0 agreement check, Atlas review gating (ADR 0011)
 - **K. GitHub:** issue intake, reviewed branch push, and draft PR only; never merge
 
 PatchForge memory, large benchmarks, automatic improvement adoption, Kubernetes, Engram,
@@ -135,9 +137,12 @@ and free-form multi-agent planning remain deferred.
 
 Each step needs explicit owner authorization:
 
-1. SentinelQA independent validation (Phase 12), starting from PatchForge Milestone J
-2. Bounded daily self-improvement: at most one measured proposal per day as a PR, with a
-   held-out comparison, SentinelQA review, and human approval; it never merges itself
+1. SentinelQA beyond lite (Phase 12): Docker runner proof, candidate-added test review,
+   requirements-to-tests, browser/API evidence, selector/DOM benchmark
+2. Resident Software Engineer: a bounded daily engineering cycle over this repository
+   (inspect, prioritize, propose, validate, self-review, classify risk, ship only
+   low-risk changes autonomously, otherwise request owner approval through Slack), with
+   an isolated private memory; it never merges its own work without policy approval
 3. Deferred, in an order chosen when authorized:
    - Phase 9: AegisOps specialists, verifier, and approval-gated remediation with
      recovery verification

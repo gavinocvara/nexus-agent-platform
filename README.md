@@ -18,7 +18,8 @@ against a baseline before adoption.
 | Brain v1 | Built (negative calibration) | Private per-agent memory, default off | `BRAIN.md`, ADR 0008, `docs/runbooks/aegisops-brain-v1.md` |
 | Atlas | Thin v1 | Local control plane: typed jobs, policy, review, approval, audit | ADR 0009 |
 | PatchForge | In progress | Contracts through Benchmark v0 plus an opt-in model engine boundary | ADR 0010 |
-| SentinelQA, Engram | Planned | Independent validation; shared validated knowledge | `ROADMAP.md` |
+| SentinelQA-lite | Built | Independent verification against the pristine specification; fail-closed verdicts gate Atlas approval | ADR 0011, `docs/runbooks/sentinelqa.md` |
+| Engram | Planned | Shared validated knowledge | `ROADMAP.md` |
 
 Lab request path:
 
@@ -28,7 +29,7 @@ Client -> Gateway -> Users
 ```
 
 Code lives under `src/nexus/` (`services`, `lab`, `observability`, `diagnostics`,
-`aegisops`, `evaluation`, `brain`, `atlas`, `patchforge`).
+`aegisops`, `evaluation`, `brain`, `atlas`, `patchforge`, `sentinelqa`).
 
 ## Install
 
@@ -97,6 +98,10 @@ Alloy. None of these is safe for a normal deployment.
   live benchmark.
 - PatchForge's best outcome is a proposed patch. It never approves, merges, deploys, or
   pushes to `main`; Atlas review and human approval stay outside the agent.
+- SentinelQA verifies every proposal against the original tests, locked by content hash
+  at the source commit. A candidate that changes, deletes, skips, or reconfigures the
+  specification is rejected; evidence that cannot be trusted is inconclusive. Only a
+  passed verdict unlocks human approval.
 - Each agent's memory is private. Brain v1 is disabled by default and fails closed.
 - Secrets, `.env`, and local state under `.nexus/` are never committed.
 
@@ -115,8 +120,10 @@ Alloy. None of these is safe for a normal deployment.
 
 ## Status
 
-Version `0.18.0`. Phases 0-8 are complete; Brain v1 ended with a documented negative
+Version `0.19.0`. Phases 0-8 are complete; Brain v1 ended with a documented negative
 calibration. PatchForge v1 Milestones A-H (contracts, workspaces, sandbox, ToolGateway,
-Runtime, Attestor, deterministic E2E, and Benchmark v0) are complete. The Milestone I
-model-engine boundary is built; the first live run awaits explicit owner authorization. See `CODEX_HANDOFF.md` for
-the current checkpoint and `ROADMAP.md` for the full sequence.
+Runtime, Attestor, deterministic E2E, and Benchmark v0) and Milestone J (SentinelQA-lite
+independent verification) are complete. The Milestone I model-engine boundary is built;
+the first live run awaits explicit owner authorization and is now SentinelQA-reviewed.
+See `PROJECT_STATE.md` and `CODEX_HANDOFF.md` for the current checkpoint and
+`ROADMAP.md` for the full sequence.

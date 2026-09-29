@@ -120,6 +120,7 @@ class E2ERun:
     source_refs_after: str
     source_refs_before: str
     sandbox_requests: Sequence[SandboxRequest]
+    task: EngineeringTask
     artifacts: LocalArtifactStore = field(repr=False)
 
     @property
@@ -429,6 +430,7 @@ class PatchForgeE2EHarness:
             source_refs_before=source_refs_before,
             source_refs_after=self._source_refs(git, root / "source"),
             sandbox_requests=tuple(sandbox.requests),
+            task=task,
             artifacts=artifacts,
         )
 

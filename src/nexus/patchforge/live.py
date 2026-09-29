@@ -187,10 +187,11 @@ def run_live_task(
         engine_kind="model",
         engine_version=f"{settings.model}/{ENGINE_PROMPT_VERSION}"[:100],
     )
-    run = PatchForgeE2EHarness(work_root / "harness", now=now or datetime.now(UTC)).run(scenario)
+    started = now or datetime.now(UTC)
+    run = PatchForgeE2EHarness(work_root / "harness", now=started).run(scenario)
     evaluation = work_root / "evaluation"
     evaluation.mkdir(parents=True)
-    score = evaluate(task, run, evaluation, GitRunner(work_root / "evaluator-git"))
+    score = evaluate(task, run, evaluation, GitRunner(work_root / "evaluator-git"), now=started)
     return LiveRun(run=run, score=score, engine=engine)
 
 
@@ -240,9 +241,11 @@ def main(
     work = arguments.output / "work" / f"{task.name}-{stamp}"
     live = run_live_task(task, client_factory(settings), settings, work)
     artifact = write_live_artifacts(live, arguments.output)
+    verdict = live.score.sentinel_verdict.value if live.score.sentinel_verdict else "not_reviewed"
     print(
         f"task={task.name} outcome={live.score.outcome.value} resolved={live.score.resolved} "
-        f"false_proposal={live.score.false_proposal} model_calls={len(live.engine.records)} "
+        f"false_proposal={live.score.false_proposal} sentinelqa={verdict} "
+        f"model_calls={len(live.engine.records)} "
         f"invariant_violations={len(live.score.invariant_violations)} artifact={artifact}"
     )
     return 0

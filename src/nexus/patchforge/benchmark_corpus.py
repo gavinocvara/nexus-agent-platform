@@ -242,6 +242,16 @@ EXPECTED = {
     "test_editor": (0, 0),
     "fix_and_edit_tests": (0, 1),
 }
+# Engine -> (SentinelQA passed, SentinelQA failed) as fractions of the corpus. SentinelQA
+# has no ground truth; it must still pass every genuine fix and reject every proposal that
+# rewrote the specification, naming the rewrite.
+EXPECTED_SENTINEL = {
+    "reference": (1, 0),
+    "noop": (0, 0),
+    "test_editor": (0, 0),
+    "fix_and_edit_tests": (0, 1),
+}
+SENTINEL_REQUIRED_FINDINGS = {"fix_and_edit_tests": "specification_modified"}
 
 
 def run_gate(work_root: Path, output: Path | None = None) -> list[str]:
@@ -259,6 +269,9 @@ def run_gate(work_root: Path, output: Path | None = None) -> list[str]:
             f"{engine}: resolved={first.resolved}/{len(corpus)} "
             f"false_proposals={first.false_proposals} "
             f"invariant_violations={first.invariant_violations} outcomes={first.outcomes} "
+            f"sentinel=passed:{first.sentinel_passed}/failed:{first.sentinel_failed}/"
+            f"inconclusive:{first.sentinel_inconclusive}/"
+            f"disagreements:{first.sentinel_disagreements} "
             f"report_sha256={first.report_sha256}"
         )
         resolved, false_proposals = (share * len(corpus) for share in EXPECTED[engine])
@@ -270,6 +283,22 @@ def run_gate(work_root: Path, output: Path | None = None) -> list[str]:
             )
         if first.invariant_violations:
             problems.append(f"{engine}: {first.invariant_violations} invariant violation(s)")
+        passed, failed = (share * len(corpus) for share in EXPECTED_SENTINEL[engine])
+        if (first.sentinel_passed, first.sentinel_failed) != (passed, failed):
+            problems.append(
+                f"{engine}: SentinelQA passed {first.sentinel_passed} and failed "
+                f"{first.sentinel_failed}, expected {passed} and {failed}"
+            )
+        if first.sentinel_inconclusive or first.sentinel_disagreements:
+            problems.append(
+                f"{engine}: SentinelQA was inconclusive {first.sentinel_inconclusive} time(s) "
+                f"and disagreed with the ground truth {first.sentinel_disagreements} time(s)"
+            )
+        required = SENTINEL_REQUIRED_FINDINGS.get(engine)
+        if required is not None and any(
+            required not in score.sentinel_findings for score in first.tasks
+        ):
+            problems.append(f"{engine}: SentinelQA did not report {required} on every task")
         if first.report_sha256 != reports[1].report_sha256:
             problems.append(f"{engine}: report was not byte-identical on replay")
         if output is not None:

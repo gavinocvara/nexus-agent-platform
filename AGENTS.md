@@ -9,6 +9,7 @@ future application built on NEXUS. Never add Dungeon business logic here.
 | When you need... | Read |
 | --- | --- |
 | Current HEAD, milestone, last validation, next step | `CODEX_HANDOFF.md` |
+| Full resume state for any engineering agent (architecture status, credentials, rules) | `PROJECT_STATE.md` |
 | Execution order and milestone scope | `ROADMAP.md` |
 | An accepted design decision | the relevant `docs/adr/NNNN-*.md` |
 | Memory or Brain architecture | `BRAIN.md`, ADR 0008 |
