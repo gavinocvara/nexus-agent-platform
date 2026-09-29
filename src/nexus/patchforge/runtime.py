@@ -20,6 +20,7 @@ from nexus.patchforge.gateway import (
     FailureOutput,
     GatewayBudgetError,
     GatewayError,
+    GatewayReserveRefusal,
     GatewayResult,
     PhaseRequestOutput,
     ReportOutput,
@@ -148,6 +149,7 @@ class RuntimeSnapshot(StrictModel):
     outcome: PatchOutcome | None = None
     failure: PatchForgeFailure | None = None
     cleanup_failed: bool = False
+    report_only: bool = False
     transitions: list[RuntimeTransition] = Field(default_factory=list, max_length=100)
     attested_by: Literal["patchforge.runtime"] = "patchforge.runtime"
 
@@ -173,6 +175,13 @@ class RuntimeSnapshot(StrictModel):
             raise ValueError("Runtime phase does not match its transition transcript")
         if retry_count != self.implementation_loops:
             raise ValueError("Implementation loop count does not match retry transitions")
+        refusals = [
+            item
+            for item in self.transitions
+            if item.source is PatchForgePhase.FINALIZE and item.target is PatchForgePhase.FINALIZE
+        ]
+        if len(refusals) > 1 or self.report_only != bool(refusals):
+            raise ValueError("Report-only mode must match exactly one reserve refusal")
         return self
 
 
@@ -303,6 +312,22 @@ class FinalWorkspaceCapture(StrictModel):
         )
 
 
+class ReserveRefusalRecord(StrictModel):
+    """A finalization call refused because it would consume the report's reserve."""
+
+    run_id: UUID
+    tool_name: ToolName
+    tool_call_sequence: int = Field(ge=1)
+    occurred_at: AwareDatetime
+    attested_by: Literal["patchforge.runtime"] = "patchforge.runtime"
+
+    @model_validator(mode="after")
+    def validate_tool(self) -> ReserveRefusalRecord:
+        if self.tool_name is ToolName.SUBMIT_REPORT:
+            raise ValueError("The report itself is never refused by the reserve")
+        return self
+
+
 class RuntimeCompletion(StrictModel):
     identity: RunIdentity
     snapshot: RuntimeSnapshot
@@ -315,6 +340,7 @@ class RuntimeCompletion(StrictModel):
     workspace_states: list[WorkspaceStateRecord] = Field(default_factory=list, max_length=30_000)
     final_capture: FinalWorkspaceCapture | None = None
     final_capture_error: FinalCaptureError | None = None
+    reserve_refusal: ReserveRefusalRecord | None = None
     workspace_cleaned: bool
     attested_by: Literal["patchforge.runtime"] = "patchforge.runtime"
 
@@ -349,6 +375,10 @@ class RuntimeCompletion(StrictModel):
                 raise ValueError("Final capture belongs to another run")
             if self.final_capture.base_sha != self.identity.source.commit_sha:
                 raise ValueError("Final capture base does not match the run source")
+        if (self.reserve_refusal is not None) != self.snapshot.report_only:
+            raise ValueError("Reserve refusal evidence does not match the lifecycle")
+        if self.reserve_refusal is not None and self.reserve_refusal.run_id != self.identity.run_id:
+            raise ValueError("Reserve refusal belongs to another run")
         if self.report is None and (
             self.final_capture is not None or self.final_capture_error is not None
         ):
@@ -461,11 +491,16 @@ class PatchForgeLifecycle:
         self._outcome: PatchOutcome | None = None
         self._failure: PatchForgeFailure | None = None
         self._cleanup_failed = False
+        self._report_only = False
         self._transitions: list[RuntimeTransition] = []
 
     @property
     def phase(self) -> PatchForgePhase:
         return self._phase
+
+    @property
+    def report_only(self) -> bool:
+        return self._report_only
 
     @property
     def snapshot(self) -> RuntimeSnapshot:
@@ -477,6 +512,7 @@ class PatchForgeLifecycle:
             outcome=self._outcome,
             failure=self._failure,
             cleanup_failed=self._cleanup_failed,
+            report_only=self._report_only,
             transitions=list(self._transitions),
         )
 
@@ -515,6 +551,28 @@ class PatchForgeLifecycle:
         if self._phase is not PatchForgePhase.FINALIZE:
             raise RuntimeTransitionError("A report can be recorded only from finalization")
         return self._record(PatchForgePhase.REPORTED, RuntimeTransitionKind.REPORT)
+
+    def reserve_refused(self) -> RuntimeTransition:
+        """Record a refused non-report finalization call and permit only the report.
+
+        The refused call never executed, so no budget is consumed or restored. The run is
+        classified as budget exhaustion unless an earlier failure is already primary, and
+        this can happen at most once.
+        """
+
+        if self._phase is not PatchForgePhase.FINALIZE:
+            raise RuntimeTransitionError("A reserve refusal requires the finalization phase")
+        if self._report_only:
+            raise RuntimeTransitionError("Finalization is already limited to the report")
+        if self._failure is None:
+            self._failure = PatchForgeFailure.BUDGET_EXHAUSTED
+            self._outcome = _FAILURE_OUTCOMES[PatchForgeFailure.BUDGET_EXHAUSTED]
+        self._report_only = True
+        return self._record(
+            PatchForgePhase.FINALIZE,
+            RuntimeTransitionKind.FAILURE,
+            failure=PatchForgeFailure.BUDGET_EXHAUSTED,
+        )
 
     def finalization_failed(self, failure: PatchForgeFailure) -> RuntimeTransition:
         if self._phase is not PatchForgePhase.FINALIZE:
@@ -613,6 +671,7 @@ class PatchForgeRuntime:
         self._states: list[WorkspaceStateRecord] = []
         self._final_capture: FinalWorkspaceCapture | None = None
         self._final_capture_error: FinalCaptureError | None = None
+        self._reserve_refusal: ReserveRefusalRecord | None = None
         self._workspace_cleaned = False
 
     def execute(self) -> RuntimeCompletion:
@@ -642,6 +701,11 @@ class PatchForgeRuntime:
                 action = self._next_action(turn)
                 if action is None:
                     continue
+                if self.lifecycle.report_only and action.tool_name is not ToolName.SUBMIT_REPORT:
+                    # After a reserve refusal only the reserved report may follow; anything
+                    # else ends finalization instead of retrying.
+                    self.lifecycle.finalization_failed(PatchForgeFailure.BUDGET_EXHAUSTED)
+                    continue
                 tracked = action.tool_name in STATE_TRACKED_TOOLS
                 try:
                     if self.gateway.requires_workspace(action.tool_name):
@@ -657,6 +721,18 @@ class PatchForgeRuntime:
                         action.arguments.model_dump(mode="python"),
                         phase=self.lifecycle.phase,
                     )
+                except GatewayReserveRefusal:
+                    if self.lifecycle.phase is PatchForgePhase.FINALIZE:
+                        self._reserve_refusal = ReserveRefusalRecord(
+                            run_id=self.gateway.identity.run_id,
+                            tool_name=action.tool_name,
+                            tool_call_sequence=len(self.gateway.records) + 1,
+                            occurred_at=self._clock(),
+                        )
+                        self.lifecycle.reserve_refused()
+                    else:
+                        self._record_failure(PatchForgeFailure.BUDGET_EXHAUSTED)
+                    continue
                 except GatewayBudgetError:
                     self._record_failure(PatchForgeFailure.BUDGET_EXHAUSTED)
                     continue
@@ -694,6 +770,7 @@ class PatchForgeRuntime:
             workspace_states=self._states,
             final_capture=self._final_capture,
             final_capture_error=self._final_capture_error,
+            reserve_refusal=self._reserve_refusal,
             workspace_cleaned=self._workspace_cleaned,
         )
 

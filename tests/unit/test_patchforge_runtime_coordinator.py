@@ -16,6 +16,7 @@ from nexus.patchforge.gateway import (
     AdvancePhaseArguments,
     FailureOutput,
     GatewayRequestError,
+    GatewayReserveRefusal,
     GatewayResult,
     GitDiffArguments,
     ListTreeArguments,
@@ -952,3 +953,29 @@ def test_unreported_runs_do_not_propose_a_commit() -> None:
     assert completion.report is None
     assert completion.final_capture is None and completion.final_capture_error is None
     assert manager.proposals == 0
+
+
+def test_reserve_refusal_outside_finalization_is_an_ordinary_budget_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime, gateway, _, _ = _runtime(
+        actions=[RuntimeToolAction(tool_name=ToolName.GIT_STATUS), _report()]
+    )
+    original = gateway.invoke
+    calls = 0
+
+    def refuse_first(*args: object, **kwargs: object) -> GatewayResult:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise GatewayReserveRefusal("fixture refusal outside finalization")
+        return original(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(gateway, "invoke", refuse_first)
+
+    completion = runtime.execute()
+
+    assert completion.snapshot.failure is PatchForgeFailure.BUDGET_EXHAUSTED
+    assert completion.snapshot.report_only is False
+    assert completion.reserve_refusal is None
+    assert completion.report is not None

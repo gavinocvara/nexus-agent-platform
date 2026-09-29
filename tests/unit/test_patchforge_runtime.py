@@ -320,3 +320,48 @@ def test_strict_transition_models_reject_coercion() -> None:
                 "occurred_at": NOW.isoformat(),
             }
         )
+
+
+def test_reserve_refusal_keeps_finalization_open_for_exactly_the_report() -> None:
+    lifecycle = _lifecycle()
+    _advance_to(lifecycle, PatchForgePhase.FINALIZE)
+
+    refusal = lifecycle.reserve_refused()
+
+    assert (refusal.source, refusal.target) == (PatchForgePhase.FINALIZE,) * 2
+    assert refusal.kind is RuntimeTransitionKind.FAILURE
+    assert refusal.failure is PatchForgeFailure.BUDGET_EXHAUSTED
+    snapshot = lifecycle.snapshot
+    assert snapshot.report_only is True
+    assert snapshot.failure is PatchForgeFailure.BUDGET_EXHAUSTED
+    assert snapshot.outcome is PatchOutcome.PARTIAL
+    with pytest.raises(RuntimeTransitionError, match="already limited"):
+        lifecycle.reserve_refused()
+    lifecycle.report()
+    lifecycle.begin_cleanup()
+    lifecycle.close()
+    assert lifecycle.snapshot.phase is PatchForgePhase.CLOSED
+
+
+def test_reserve_refusal_requires_finalization_and_keeps_a_primary_failure() -> None:
+    early = _lifecycle()
+    _advance_to(early, PatchForgePhase.SELF_REVIEW)
+    with pytest.raises(RuntimeTransitionError, match="finalization phase"):
+        early.reserve_refused()
+
+    lifecycle = _lifecycle()
+    _advance_to(lifecycle, PatchForgePhase.REPRODUCE)
+    lifecycle.fail(PatchForgeFailure.SANDBOX_ERROR)
+    lifecycle.reserve_refused()
+    assert lifecycle.snapshot.failure is PatchForgeFailure.SANDBOX_ERROR
+    assert lifecycle.snapshot.outcome is PatchOutcome.SANDBOX_FAILED
+
+
+def test_report_only_state_must_match_the_transcript() -> None:
+    lifecycle = _lifecycle()
+    _advance_to(lifecycle, PatchForgePhase.FINALIZE)
+    lifecycle.reserve_refused()
+    payload = lifecycle.snapshot.model_dump(mode="python")
+    payload["report_only"] = False
+    with pytest.raises(ValueError, match="exactly one reserve refusal"):
+        RuntimeSnapshot.model_validate(payload)

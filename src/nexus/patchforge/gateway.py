@@ -75,6 +75,10 @@ class GatewayBudgetError(GatewayError):
     """No visible budget remains for another tool invocation."""
 
 
+class GatewayReserveRefusal(GatewayBudgetError):
+    """A non-report tool would consume the capacity reserved for the final report."""
+
+
 class EmptyArguments(StrictModel):
     pass
 
@@ -675,11 +679,13 @@ class ToolGateway:
             raise GatewayBudgetError(f"Tool-call budget exhausted for {phase}")
         report_reserve = self._report_output_reserve(tool_name, phase)
         if report_reserve and phase_calls + 1 >= budget.max_tool_calls:
-            raise GatewayBudgetError("Final tool call is reserved for report submission")
+            raise GatewayReserveRefusal("Final tool call is reserved for report submission")
         remaining_output = budget.max_output_bytes - self._phase_output.get(phase, 0)
         if remaining_output - report_reserve < MIN_RESULT_ENVELOPE_BYTES:
             if report_reserve:
-                raise GatewayBudgetError("Final output capacity is reserved for report submission")
+                raise GatewayReserveRefusal(
+                    "Final output capacity is reserved for report submission"
+                )
             raise GatewayBudgetError(f"Tool output budget exhausted for {phase}")
         total_limit = self.policy.budgets.max_total_tool_calls
         if phase is not PatchForgePhase.FINALIZE:

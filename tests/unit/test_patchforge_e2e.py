@@ -108,10 +108,47 @@ def test_finalization_reserve_is_usable_and_protected(tmp_path: Path) -> None:
         for item in protected.result.tool_calls
         if item.phase.value == "finalize"
     ]
-    # The second read was refused before execution, so it left no tool-call record.
+    # The refused read never executed, so it left no tool-call record; the reserved report
+    # used the call it was protecting.
+    assert finalize_calls == ["git_status", "submit_report"]
+    completion = protected.completion
+    assert completion.report is not None
+    refusal = completion.reserve_refusal
+    assert refusal is not None and refusal.tool_name.value == "git_status"
+    assert refusal.tool_call_sequence == protected.result.tool_calls[-1].sequence
+    assert completion.snapshot.report_only is True
+    transitions = [
+        (item.source.value, item.target.value) for item in completion.snapshot.transitions
+    ]
+    assert transitions[-4:] == [
+        ("finalize", "finalize"),
+        ("finalize", "reported"),
+        ("reported", "cleanup"),
+        ("cleanup", "closed"),
+    ]
+    # Reserve accounting stays exact: the refusal consumed nothing.
+    usage = {item.phase.value: item.tool_calls for item in protected.result.budget_usage.phases}
+    assert usage["finalize"] == 2
+    assert protected.result.budget_usage.finalization_reserve_used is True
+    assert protected.result.budget_usage.total_tool_calls == len(protected.result.tool_calls)
+
+
+def test_after_a_reserve_refusal_only_the_report_may_follow(tmp_path: Path) -> None:
+    run = _run(tmp_path, "reserve_refusal_then_other_action")
+    assert run.completion.report is None
+    assert run.completion.reserve_refusal is not None
+    finalize_calls = [
+        item.tool_name.value for item in run.result.tool_calls if item.phase.value == "finalize"
+    ]
     assert finalize_calls == ["git_status"]
-    # Current Runtime semantics end finalization on that refusal, so no report is accepted.
-    assert protected.completion.report is None
+    assert run.completion.snapshot.transitions[-2].target.value == "cleanup"
+
+
+def test_a_second_report_is_impossible(tmp_path: Path) -> None:
+    run = _run(tmp_path, "second_report_attempt")
+    reports = [item for item in run.result.tool_calls if item.tool_name.value == "submit_report"]
+    assert len(reports) == 1
+    assert run.completion.report is not None
 
 
 def test_unknown_report_evidence_is_refused_by_the_gateway(tmp_path: Path) -> None:

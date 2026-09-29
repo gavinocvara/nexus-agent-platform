@@ -571,7 +571,8 @@ def finalization_reserve_used() -> E2EScenario:
 
 
 def finalization_reserve_protected() -> E2EScenario:
-    """A second finalize-phase read would take the report's reserved call; it is refused."""
+    """A second finalize-phase read would take the report's reserved call. It is refused,
+    classified as budget exhaustion, and the reserved report is still accepted."""
 
     return _scenario(
         "finalization_reserve_protected",
@@ -585,6 +586,40 @@ def finalization_reserve_protected() -> E2EScenario:
         PatchOutcome.PARTIAL,
         PatchForgeFailure.BUDGET_EXHAUSTED,
         expected_phase_reached=PatchForgePhase.FINALIZE,
+    )
+
+
+def reserve_refusal_then_other_action() -> E2EScenario:
+    """After a reserve refusal, a further non-report action ends finalization."""
+
+    return _scenario(
+        "reserve_refusal_then_other_action",
+        [
+            *happy_steps()[:14],
+            run(ToolName.GIT_STATUS),
+            run(ToolName.GIT_STATUS),
+            run(ToolName.INSPECT_DIFF),
+            report(),
+        ],
+        happy_plans(),
+        PatchOutcome.PARTIAL,
+        PatchForgeFailure.BUDGET_EXHAUSTED,
+        expected_phase_reached=PatchForgePhase.FINALIZE,
+    )
+
+
+def second_report_attempt() -> E2EScenario:
+    """The run ends at the first accepted report; a scripted second report is never used."""
+
+    return E2EScenario(
+        name="second_report_attempt",
+        fixture=CALCULATOR,
+        profile=calculator_profile(),
+        budgets=calculator_budgets(),
+        steps=[*happy_steps(), report()],
+        sandbox_plans=happy_plans(),
+        expected_outcome=PatchOutcome.PATCH_PROPOSED,
+        expected_failure=None,
     )
 
 
@@ -614,6 +649,8 @@ def default_catalog() -> list[E2EScenario]:
         tamper_after_last_call(),
         finalization_reserve_used(),
         finalization_reserve_protected(),
+        reserve_refusal_then_other_action(),
+        second_report_attempt(),
     ]
 
 

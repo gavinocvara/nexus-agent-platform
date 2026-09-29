@@ -175,9 +175,15 @@ renewal, and a refused cleanup.
 In 0.16.1 every E2E run must also satisfy universal invariants: a closed transcript
 through cleanup, workspace removal, runtime-owned evidence linkage, an untouched source
 repository (no push, merge, or approval), sandbox requests without network or secrets,
-memory disabled, and a scripted engine. A failure during `finalize` still ends
-finalization without a report, even when the refusal came from the report reserve; this
-fails closed and remains an open design question.
+memory disabled, and a scripted engine.
+
+0.16.2 makes the finalization reserve usable after it refuses a call. The gateway raises
+`GatewayReserveRefusal` only when a non-report call would take the report's reserved call
+or output. Runtime then records one runtime-attested `finalize -> finalize` failure
+transition (`budget_exhausted`, or the earlier primary failure) and a
+`ReserveRefusalRecord`, and allows exactly one further action: `submit_report`. Any other
+action ends finalization. The refused call never executed, so no budget is consumed or
+restored. Every other failure during `finalize` still ends finalization directly.
 
 ## Budgets And Runtime
 

@@ -8,6 +8,22 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
+## 0.16.2 — PatchForge finalization-reserve hardening
+
+- A finalize-phase call refused because it would take the report's reserved call or
+  output no longer destroys the report. The gateway raises `GatewayReserveRefusal`;
+  Runtime records one `finalize -> finalize` failure transition and a
+  `ReserveRefusalRecord`, then accepts only `submit_report`. Any other action ends
+  finalization.
+- The run stays `partial` / `budget_exhausted` (fail closed). Budgets are not reset or
+  expanded; the refused call leaves no ledger entry.
+- Unrelated finalization failures (engine errors, policy denials, ordinary budget
+  exhaustion) still end finalization directly.
+- `RuntimeSnapshot.report_only` and `RuntimeCompletion.reserve_refusal` are additive
+  fields, validated against the transcript.
+- New deterministic E2E scenarios: `reserve_refusal_then_other_action` and
+  `second_report_attempt`.
+
 ## 0.16.1 — PatchForge Milestone G completion (`9b05cdc`)
 
 - The deterministic E2E catalog grows to 21 scenarios: success, inability to reproduce

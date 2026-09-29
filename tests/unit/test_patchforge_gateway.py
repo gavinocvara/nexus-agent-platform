@@ -20,6 +20,7 @@ from nexus.patchforge.gateway import (
     FileOutput,
     GatewayBudgetError,
     GatewayRequestError,
+    GatewayReserveRefusal,
     MutationOutput,
     PhaseRequestOutput,
     ReportOutput,
@@ -965,3 +966,16 @@ def test_tool_cache_ignore_files_are_tolerated_but_other_nested_rules_fail_close
     (handle.worktree / ".pytest_cache" / ".gitattributes").write_text("* -diff\n")
     attributes = gateway.invoke(ToolName.INSPECT_DIFF, {}, phase=PatchForgePhase.RECON)
     assert attributes.record.status is ToolCallStatus.FAILED
+
+
+def test_only_report_reserve_refusals_use_the_reserve_error(tmp_path: Path) -> None:
+    gateway, _, _ = _gateway(tmp_path, budgets=_budgets(recon_calls=1))
+    gateway.invoke(ToolName.GIT_STATUS, {}, phase=PatchForgePhase.FINALIZE)
+    with pytest.raises(GatewayReserveRefusal, match="reserved for report submission"):
+        gateway.invoke(ToolName.GIT_STATUS, {}, phase=PatchForgePhase.FINALIZE)
+
+    gateway.invoke(ToolName.LIST_TREE, {}, phase=PatchForgePhase.RECON)
+    with pytest.raises(GatewayBudgetError, match="exhausted") as exhausted:
+        gateway.invoke(ToolName.LIST_TREE, {}, phase=PatchForgePhase.RECON)
+    assert not isinstance(exhausted.value, GatewayReserveRefusal)
+    assert len(gateway.records) == 2

@@ -5,43 +5,50 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 ## Checkpoint
 
-- Branch `main`; local `HEAD` must equal `origin/main` at every checkpoint.
-- Released: NEXUS `0.16.0` (Milestone G first cut) `915ea12`; GitHub Actions run
-  `36493180253` passed both jobs, including the E2E gate step. Milestone F release
-  `d6d39d3`, run `36491013537` green.
-- Milestone G completion release: NEXUS `0.16.1`
-  `9b05cdce16a25b1ae86c3e580951728e017b7df1`; GitHub Actions run `36494052048` passed
-  `validate` and `compose-integration` on the first attempt.
+- Branch `main`; local `HEAD` must equal `origin/main` at every checkpoint
+  (`git rev-parse HEAD origin/main`, `git diff HEAD`, `git diff origin/main...HEAD`).
+- NEXUS `0.16.2` (finalization-reserve hardening). HEAD is the commit containing this
+  file; its parent is `93e9430` (Milestone G verification).
+- Verified releases: 0.16.1 Milestone G `9b05cdc` (GitHub Actions run `36494052048`
+  green); 0.15.0 Milestone F `d6d39d3` (run `36491013537` green).
+- 0.16.2 GitHub Actions: pending. Record the run here, and the SHA in the CHANGELOG
+  0.16.2 heading, once green.
 
-## Milestone G Progress
+## Completed Unit: Finalization-Reserve Hardening (0.16.2)
 
-- Harness: `PatchForgeE2EHarness` (real Runtime + ToolGateway + WorkspaceManager +
-  FakeSandbox + Attestor), deterministic replay, fault injection (worktree, in-sandbox,
-  refused cleanup, refused Nth lease renewal).
-- `E2ERun.problems()` checks every run for expected outcome, classification, phase,
-  loop count, and findings; a closed transcript through cleanup; workspace removal;
-  runtime-owned evidence linkage; an untouched source repository (no push, merge, or
-  approval); sandbox requests without network or secrets; memory off; scripted engine.
-- Catalog: 21 scenarios covering success, the reproduction variants, targeted failure,
-  successful bounded retry, full-suite failure, budget, cancellation, policy,
-  workspace and lease failure, sandbox, engine, finalization failure, cleanup failure,
-  in-run and post-final tamper, stale validation, unknown report evidence, and
-  finalization-reserve use and refusal. The gate runs each twice (byte-identical).
+- `GatewayReserveRefusal` is raised only when a non-report finalize call would take the
+  report's reserved call or output. Runtime records a single `finalize -> finalize`
+  failure transition (`budget_exhausted`, or an earlier primary failure) and a
+  `ReserveRefusalRecord`, then accepts only `submit_report`. Anything else ends
+  finalization. The outcome stays `partial`; the budget ledger is unchanged.
+- Proven by lifecycle, gateway, coordinator, and E2E tests (scenarios
+  `finalization_reserve_protected`, `reserve_refusal_then_other_action`,
+  `second_report_attempt`; unrelated failures `finalization_failed`,
+  `unknown_report_evidence`).
+
+## Validation (0.16.2 local release gate)
+
+- `pip check` passed; Ruff format (159 files) and lint clean; strict mypy clean (88).
+- pytest: 644 passed, 23 deselected, in two consecutive runs. PatchForge focused suite:
+  378 passed.
+- `python -m nexus.lab.scenarios validate`: 5 scenarios. `python -m
+  nexus.patchforge.e2e_catalog`: 23 scenarios passed, byte-identical replay.
+- Compose config passed. Secret-pattern scan of tracked files: no matches. Frozen
+  `docs/experiments/` unchanged; `test_atlas_isolation.py` hash pins pass.
+- Not run locally: Compose integration (no Docker daemon here). CI's
+  `compose-integration` job is the integration gate.
 
 ## Exact Next Step
 
-Milestone G is released and verified. Next is Milestone H - Benchmark v0 (small
-synthetic defect corpus and reproducible harness), built on the Milestone G harness,
-once the owner has weighed the finalization-reserve question below. No live model calls; Milestone I needs explicit owner authorization.
+1. Confirm GitHub Actions is green for 0.16.2 and record it (CHANGELOG heading and this
+   file); fix first if red.
+2. Begin Milestone H - Benchmark v0 (`ROADMAP.md`): a small synthetic defect corpus plus
+   a reproducible harness built on `nexus.patchforge.e2e`. No live model calls.
 
 ## Active Issues
 
-- Design question for the owner: in `finalize`, the gateway refuses a non-report tool
-  that would take the report's reserved call, but Runtime (per Milestone E) treats any
-  failure during finalization as final, so the report is never submitted (scenario
-  `finalization_reserve_protected`). This fails closed; making the reserve usable after
-  a refusal would change Runtime lifecycle semantics.
-- No known failing tests; the F/G intermittent failure was a test bug, fixed in 0.16.0.
+- None failing. Test modules are not type-checked in CI and carry pre-existing
+  strict-mypy noise (`HttpUrl` literals, fake gateway locals).
 - Remote branch `maintenance/repo-hygiene-claude` is unmerged and untouched; owner decides.
 
 ## Critical Constraints
@@ -50,6 +57,7 @@ once the owner has weighed the finalization-reserve question below. No live mode
 - ToolGateway is the only engineering capability boundary; the model never gets Git.
 - Runtime-attested evidence is authoritative; model output is narrative only.
 - No unrestricted shell, network, secrets, memory/Brain, GitHub mutation, or live model
-  calls. The owner's API key stays in ignored local state only.
-- Preserve phase budgets, finalization reserve, disabled parallel calls, bounded loops,
-  cleanup on every path, and Phase 5/6/7 frozen evidence.
+  calls without explicit owner authorization. The owner's API key stays in ignored local
+  state only.
+- Preserve phase budgets, the finalization reserve, disabled parallel calls, bounded
+  loops, cleanup on every path, and Phase 5/6/7 frozen evidence (do not clean `.nexus/`).
