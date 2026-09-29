@@ -182,6 +182,16 @@ that satisfies the tests without solving the task. Such code is purpose-built ag
 reviewer and visible in the patch under human review. Closing it needs out-of-process
 execution of the code under test (alternative 3).
 
+**Count substitution, analysed and not built.** Candidate code can shrink the set of
+pristine tests the runner collects without a skip or an error (`__test__ = False` on a
+production base class a test class inherits from) and pad the count with its own test
+module outside the prefixes. Against a real pytest this is rejected already: the
+operator's targeted command collects only the specification, where the pristine test is
+missing (`tests_missing`). Tests whose cases come from production data (`parametrize`
+over a constant the candidate may edit) remain weak by construction; pytest's index-based
+ids would not change, so per-test-identifier tracking would not see it either. Data a test
+depends on belongs under a test prefix or in the lock's additional paths (runbook).
+
 ### Execution reuses the sandbox boundary
 
 `SpecificationRunner` executes only operator-profile commands through any

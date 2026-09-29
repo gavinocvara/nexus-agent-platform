@@ -123,9 +123,21 @@ def test_category_floors(category: ChangeCategory, level: RiskLevel) -> None:
     [
         ("README.md", RiskLevel.LOW, False),
         ("docs/runbooks/sentinelqa.md", RiskLevel.LOW, False),
+        ("CHANGELOG.md", RiskLevel.LOW, False),
         ("tests/unit/test_x.py", RiskLevel.LOW, False),
         ("src/nexus/web.py", RiskLevel.MEDIUM, False),
-        ("ROADMAP.md", RiskLevel.MEDIUM, False),
+        # Documents agents and owners take direction from are governing.
+        ("ROADMAP.md", RiskLevel.HIGH, True),
+        ("CODEX_HANDOFF.md", RiskLevel.HIGH, True),
+        ("PROJECT_STATE.md", RiskLevel.HIGH, True),
+        ("BRAIN.md", RiskLevel.HIGH, True),
+        ("docs/adr/0012-resident-software-engineer.md", RiskLevel.HIGH, True),
+        # So is anything that decides how the specification is evaluated, wherever it is.
+        ("tests/conftest.py", RiskLevel.HIGH, True),
+        ("tests/unit/conftest.py", RiskLevel.HIGH, True),
+        ("pyproject.toml", RiskLevel.HIGH, True),
+        ("src/pytest.py", RiskLevel.HIGH, True),
+        ("tests/sitecustomize.py", RiskLevel.HIGH, True),
         ("src/nexus/software_engineer/policy.py", RiskLevel.HIGH, True),
         ("src/nexus/sentinelqa/verifier.py", RiskLevel.HIGH, True),
         ("src/nexus/patchforge/gateway.py", RiskLevel.HIGH, True),
@@ -140,6 +152,21 @@ def test_category_floors(category: ChangeCategory, level: RiskLevel) -> None:
 def test_path_rules(path: str, level: RiskLevel, governing: bool) -> None:
     assert path_risk(path)[:2] == (level, governing)
     assert all(prefix == prefix.strip("/") for prefix in GOVERNING_PATH_PREFIXES)
+
+
+def test_evaluation_config_added_to_tests_is_never_low_risk() -> None:
+    """Adding a conftest only adds test lines, but it redefines what passing means."""
+
+    risk = classify_change(
+        category=ChangeCategory.TEST_REPAIR,
+        paths=["tests/unit/test_x.py", "tests/unit/conftest.py"],
+        additions=12,
+        deletions=0,
+        diff_bytes=400,
+        budget=settings().budget,
+    )
+    assert risk.level is RiskLevel.HIGH
+    assert risk.governing_paths == ["tests/unit/conftest.py"]
 
 
 def test_low_change_is_low_and_test_deletions_raise_it() -> None:
@@ -241,6 +268,21 @@ def test_policy_refuses_to_ship_on_every_missing_precondition() -> None:
         ).decision
         is CycleDecision.ABANDON
     )
+    # Autonomy never ships without SentinelQA's independent review: missing, not run, or
+    # inconclusive all abandon, however clean the repository's own checks are.
+    own_checks = [
+        item for item in passed_gates() if item.gate is not ValidationGate.SENTINEL_REVIEW
+    ]
+    for sentinel in (
+        [],
+        [GateResult(gate=ValidationGate.SENTINEL_REVIEW, status=GateStatus.NOT_RUN, summary="-")],
+        [GateResult(gate=ValidationGate.SENTINEL_REVIEW, status=GateStatus.ERROR, summary="-")],
+    ):
+        decision = policy.decide(
+            risk=low_risk(), gates=[*own_checks, *sentinel], self_review=clean_review(), usage=usage
+        )
+        assert decision.decision is CycleDecision.ABANDON, sentinel
+        assert "sentinel_review" in " ".join(decision.reasons)
     concerned = clean_review().model_copy(
         update={
             "items": [

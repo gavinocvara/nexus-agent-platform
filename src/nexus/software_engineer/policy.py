@@ -25,12 +25,16 @@ from nexus.software_engineer.models import (
     ValidationGate,
 )
 
+# The autonomous path has no human before publication, so it needs at least the evidence
+# the owner path needs: the repository's own checks and SentinelQA's independent review
+# against the pristine specification.
 REQUIRED_GATES_FOR_AUTONOMOUS_SHIP = frozenset(
     {
         ValidationGate.RUFF_FORMAT,
         ValidationGate.RUFF_LINT,
         ValidationGate.MYPY,
         ValidationGate.PYTEST_FULL,
+        ValidationGate.SENTINEL_REVIEW,
     }
 )
 

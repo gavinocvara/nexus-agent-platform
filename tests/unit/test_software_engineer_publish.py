@@ -18,6 +18,7 @@ import pytest
 from nexus.atlas.models import ActorType
 from nexus.patchforge.canonical import canonical_json
 from nexus.patchforge.e2e import FixtureRepository, materialize_fixture
+from nexus.patchforge.sandbox import SandboxExecution, SandboxRequest, SandboxStatus
 from nexus.patchforge.workspace import GitRunner
 from nexus.software_engineer import __main__ as cli
 from nexus.software_engineer.approval import (
@@ -45,8 +46,10 @@ from nexus.software_engineer.models import (
     CycleMode,
     EngineeringCandidate,
     EngineeringSignal,
+    GateStatus,
     OwnerVerdict,
     PublishedChange,
+    ValidationGate,
 )
 from nexus.software_engineer.notify import Notifier, RecordingTransport
 from nexus.software_engineer.publish import (
@@ -648,6 +651,52 @@ def test_executor_ships_only_its_own_change_and_withdraws_on_rollback(tmp_path: 
     with pytest.raises(ExecutorError, match="not configured"):
         plain.ship(outcome.change, cycle_id=CYCLE)
     assert "nothing was published" in plain.rollback(outcome.change, reason="x").revert_reference
+
+
+class _SentinelRejectingSandbox:
+    """PatchForge's own runs pass; SentinelQA's verification-tree test runs fail."""
+
+    def __init__(self) -> None:
+        self.inner = LocalProcessSandbox(allow_local_process=True, clock=lambda: NOW)
+
+    def execute(self, request: SandboxRequest) -> SandboxExecution:
+        execution = self.inner.execute(request)
+        parts = request.workspace.parts
+        if "sentinelqa" in parts and "candidate" in parts and "pytest" in request.command.arguments:
+            return execution.model_copy(
+                update={
+                    "status": SandboxStatus.FAILED,
+                    "exit_code": 1,
+                    "stdout": b"1 failed in 0.01s\n",
+                    "error_code": "command_failed",
+                }
+            )
+        return execution
+
+
+def test_executor_never_publishes_a_change_sentinelqa_did_not_pass(tmp_path: Path) -> None:
+    """The policy already abandons such a change; the publisher boundary re-checks anyway."""
+
+    publisher = RecordingPublisher(clock=lambda: LATER)
+    bench = _Workbench(tmp_path, publisher=publisher)
+    executor = PatchForgeExecutor(
+        repo_root=bench.repo,
+        repository_url=REPOSITORY_URL,
+        sandbox=_SentinelRejectingSandbox(),
+        run_root=tmp_path / "rejected-runs",
+        clock=lambda: NOW,
+        git=bench.git,
+        commands=_commands,
+        publisher=publisher,
+    )
+    outcome = executor.execute(_candidate(), cycle_id=CYCLE, budget=bench.settings.budget)
+    assert outcome.change is not None
+    statuses = {item.gate: item.status for item in outcome.gates}
+    assert statuses[ValidationGate.PYTEST_FULL] is GateStatus.PASSED
+    assert statuses[ValidationGate.SENTINEL_REVIEW] is GateStatus.FAILED
+    with pytest.raises(ExecutorError, match="including SentinelQA"):
+        executor.ship(outcome.change, cycle_id=CYCLE)
+    assert publisher.submissions == []
 
 
 def test_publisher_refusal_is_a_typed_executor_error(tmp_path: Path) -> None:

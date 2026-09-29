@@ -3,8 +3,9 @@
 Risk is the highest of three independent readings, raised one level when anything is
 uncertain: the change category's intrinsic floor, the most sensitive path touched, and the
 size of the change. Touching a *governing* path (the engineer's own policy, autonomy,
-budgets, approval rules, security boundaries, CI, frozen evidence, or infrastructure) is
-always high risk, whatever the category claims.
+budgets, approval rules, security boundaries, CI, frozen evidence, infrastructure, the
+documents agents take direction from, or the configuration that decides what passing
+means) is always high risk, whatever the category claims.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from nexus.patchforge.gateway import is_sensitive_path, path_matches
+from nexus.sentinelqa.models import is_evaluation_config_path
 from nexus.software_engineer.models import (
     ChangeCategory,
     CycleBudget,
@@ -26,10 +28,15 @@ from nexus.software_engineer.models import (
 GOVERNING_PATH_PREFIXES: tuple[str, ...] = (
     ".github",
     "AGENTS.md",
+    "BRAIN.md",
     "CLAUDE.md",
+    "CODEX_HANDOFF.md",
     "Dockerfile",
+    "PROJECT_STATE.md",
+    "ROADMAP.md",
     "alembic.ini",
     "compose.yaml",
+    "docs/adr",
     "docs/experiments",
     "infra",
     "migrations",
@@ -45,17 +52,9 @@ GOVERNING_PATH_PREFIXES: tuple[str, ...] = (
     "src/nexus/software_engineer",
 )
 # Paths that may change code behavior: medium unless a rule below says otherwise.
-_BEHAVIOR_PREFIXES: tuple[str, ...] = ("src", "lab", "pyproject.toml", "ROADMAP.md")
-# Documentation and state files: low.
-_LOW_PREFIXES: tuple[str, ...] = (
-    "README.md",
-    "CHANGELOG.md",
-    "CODEX_HANDOFF.md",
-    "PROJECT_STATE.md",
-    "BRAIN.md",
-    "docs/adr",
-    "docs/runbooks",
-)
+_BEHAVIOR_PREFIXES: tuple[str, ...] = ("src", "lab")
+# Documentation nobody takes direction from: low.
+_LOW_PREFIXES: tuple[str, ...] = ("README.md", "CHANGELOG.md", "docs/runbooks")
 _TEST_PREFIXES: tuple[str, ...] = ("tests",)
 
 
@@ -64,6 +63,8 @@ def path_risk(path: str, *, deletions: int = 0) -> tuple[RiskLevel, bool, str]:
 
     if path_matches(path, GOVERNING_PATH_PREFIXES):
         return RiskLevel.HIGH, True, f"{path} is a governing path"
+    if is_evaluation_config_path(path):
+        return RiskLevel.HIGH, True, f"{path} decides how the specification is evaluated"
     if is_sensitive_path(path):
         return RiskLevel.HIGH, True, f"{path} is a sensitive path"
     if path_matches(path, _TEST_PREFIXES):

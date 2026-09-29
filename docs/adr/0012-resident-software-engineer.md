@@ -62,13 +62,25 @@ the change size, raises the level once when anything is uncertain, and forces HI
 governing path (the engineer's own package, PatchForge/SentinelQA/Atlas policy and
 boundary modules, CI workflows, `AGENTS.md`, frozen evidence, infrastructure, migrations,
 sensitive files). Unknown categories, unclassified paths, and empty path lists are HIGH.
+Since 0.27.0 two more groups are governing. Documents agents and owners take direction
+from (`docs/adr/`, `ROADMAP.md`, `CODEX_HANDOFF.md`, `PROJECT_STATE.md`, `BRAIN.md`):
+before, a "documentation correction" to the ADR that defines this policy, or to the
+handoff the next agent treats as canonical, was LOW and could ship autonomously. And
+evaluation configuration anywhere (`conftest.py`, `pyproject.toml`, `pytest.ini`,
+`sitecustomize.py`, `.pth`, modules that shadow the harness; SentinelQA's
+`is_evaluation_config_path`): before, a conftest added under `tests/` only "added test
+lines" and read as LOW.
 
 `ShipPolicy.decide` is a pure function: over budget -> `blocked`; dry run -> a plan-only
 `request_approval`; any failed or missing required gate (`ruff_format`, `ruff_lint`,
-`mypy`, `pytest_full`) -> `abandon`; governing paths, medium or high risk, a missing or
+`mypy`, `pytest_full`, and since 0.27.0 `sentinel_review`) -> `abandon`; governing paths, medium or high risk, a missing or
 human-requiring self-review, or any non-autonomous mode -> `request_approval`; only a
 low-risk, fully validated, cleanly reviewed change in `autonomous_low_risk` mode ->
-`ship`. Owner decisions (`ship` / `revise` / `reject`) come only as typed `OwnerDecision`s
+`ship`. Until 0.27.0 the autonomous path required less independent evidence than the
+owner path: publication after an owner SHIP demanded `sentinel_review`, autonomous
+shipping did not, and relied on the executor happening to record it. Now both require it,
+and `PatchForgeExecutor.ship` re-checks that every recorded gate passed before the
+publisher sees the change. Owner decisions (`ship` / `revise` / `reject`) come only as typed `OwnerDecision`s
 from a human actor and are re-checked against validation; silence never decides. Since
 0.24.0 `ship` means "open a draft pull request" and nothing more.
 
