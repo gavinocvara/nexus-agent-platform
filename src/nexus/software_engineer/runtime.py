@@ -6,6 +6,11 @@ that died (a killed runner, a crashed process) expires after the cycle's runtime
 plus a grace period, or as soon as its process is gone; the next cycle then records the
 interruption as an incident with an audit marker and proceeds. A live lease is never
 stolen: the second cycle refuses with ``concurrent_run`` and writes nothing.
+
+A lease file appears with its whole content in one step, so no reader sees it half
+written; an unreadable lease is stale only once it is older than a lease can live.
+Recovery moves the stale lease aside and checks that it moved the one it judged stale, so
+two cycles recovering at once cannot delete each other's fresh lease.
 """
 
 from __future__ import annotations
@@ -15,7 +20,7 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 LEASE_FILENAME = "run.lock"
 GRACE_SECONDS = 300
@@ -87,6 +92,10 @@ def acquire_run_lease(
     if not _create_exclusive(path, lease.payload()):
         previous = _read(path)
         if previous is None:
+            if not _older_than(path, now, lease.expires_at - now):
+                raise RunLeaseError(
+                    "concurrent_run", "an unreadable lease is too recent to be stale"
+                )
             reason = "unreadable lease"
         elif previous.expires_at > now and alive(previous.pid):
             raise RunLeaseError("concurrent_run", f"cycle {previous.cycle_id} holds the lease")
@@ -94,6 +103,7 @@ def acquire_run_lease(
             reason = "process gone before its lease expired"
         else:
             reason = "lease expired without a record"
+        _retire(path, previous, recovered_by=cycle_id)
         if previous is not None:
             interrupted = InterruptedRun(
                 cycle_id=previous.cycle_id,
@@ -102,10 +112,6 @@ def acquire_run_lease(
                 reason=reason,
             )
             _write_marker(state_root, interrupted, recovered_by=cycle_id, now=now)
-        try:
-            path.unlink()
-        except OSError as exc:
-            raise RunLeaseError("lease_unavailable", type(exc).__name__) from exc
         if not _create_exclusive(path, lease.payload()):
             raise RunLeaseError("concurrent_run", "the lease was taken while recovering")
     return lease, interrupted
@@ -126,15 +132,76 @@ def release_run_lease(lease: RunLease) -> None:
 
 
 def _create_exclusive(path: Path, payload: str) -> bool:
+    """Create ``path`` with its whole content, or return ``False`` if it exists.
+
+    The payload is written to a private file and hard-linked into place, which fails if
+    the path exists. Where hard links are unavailable, an exclusive create is the fallback.
+    """
+
+    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     try:
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError:
-        return False
+        _write_new(temporary, payload)
+        try:
+            os.link(temporary, path)
+        except FileExistsError:
+            return False
+        except OSError:
+            try:
+                _write_new(path, payload)
+            except FileExistsError:
+                return False
+        return True
     except OSError as exc:
         raise RunLeaseError("lease_unavailable", type(exc).__name__) from exc
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _write_new(path: Path, payload: str) -> None:
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
         handle.write(payload + "\n")
-    return True
+
+
+def _older_than(path: Path, now: datetime, age: timedelta) -> bool:
+    try:
+        modified = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
+    except FileNotFoundError:
+        return True
+    except OSError as exc:
+        raise RunLeaseError("lease_unavailable", type(exc).__name__) from exc
+    return now - modified > age
+
+
+def _retire(path: Path, stale: RunLease | None, *, recovered_by: UUID) -> None:
+    """Move the stale lease aside, then prove it was the stale one.
+
+    If another cycle recovered first and already holds a fresh lease, the rename moved
+    that lease instead: it is put back and this cycle refuses.
+    """
+
+    aside = path.with_name(f"{path.name}.retired-{recovered_by.hex}")
+    try:
+        os.rename(path, aside)
+    except FileNotFoundError:
+        return  # already retired by another cycle; the exclusive create decides
+    except OSError as exc:
+        raise RunLeaseError("lease_unavailable", type(exc).__name__) from exc
+    moved = _read(aside)
+    same = (
+        moved is None
+        if stale is None
+        else moved is not None
+        and (moved.cycle_id, moved.started_at) == (stale.cycle_id, stale.started_at)
+    )
+    if not same:
+        try:
+            os.link(aside, path)
+        except OSError:
+            pass
+        aside.unlink(missing_ok=True)
+        raise RunLeaseError("concurrent_run", "another cycle recovered the lease first")
+    aside.unlink(missing_ok=True)
 
 
 def _read(path: Path) -> RunLease | None:

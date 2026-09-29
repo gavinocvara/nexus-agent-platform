@@ -154,6 +154,15 @@ dead process) is recovered with an audit marker and an incident memory. Together
 workflow's concurrency group, the budgets, the persisted record on every path, and
 `no_work` as a normal outcome, this is the whole daily runtime contract.
 
+Two races are closed since 0.27.0. The lease file was created empty and filled
+afterwards, and an unreadable lease counted as stale, so a second cycle reading in between
+removed a live lease and ran concurrently. A lease now appears with its whole content (a
+private file hard-linked into place), and an unreadable lease is stale only once its file
+is older than a lease can live. And recovery was read-then-unlink: two cycles judging the
+same lease stale could each recover it, the slower deleting the fresh lease the faster had
+just taken. Recovery now renames the lease aside and checks it moved the stale one; if it
+caught a fresher lease it puts it back and refuses with `concurrent_run`.
+
 ### Scheduling
 
 `.github/workflows/software-engineer.yml` runs on `workflow_dispatch` and a daily cron,
