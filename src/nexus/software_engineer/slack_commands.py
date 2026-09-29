@@ -1,12 +1,14 @@
 """Owner decisions through Slack slash commands, verified before they mean anything.
 
-A Slack message is untrusted text until three checks pass: the request carries a valid
+A Slack message is untrusted text until four checks pass: the request carries a valid
 ``v0`` HMAC signature computed with the signing secret that lives only in the environment,
-its timestamp is inside the replay window, and the Slack user id is the one configured as
-the owner. Only then does ``/nexus ship|revise|reject [request|latest] <reason>`` become a
-typed ``OwnerCommand`` over the ``slack`` channel and a recorded ``OwnerDecision``, once per
-request, exactly as the ``decide`` CLI records it. Nothing here publishes: SHIP still needs
-the owner-run ``publish`` step (or the opted-in autonomous path).
+its timestamp is inside the replay window, the same signed request has not been seen in
+that window (a persisted ledger, so a restart does not reopen it), and the Slack user id is
+the one configured as the owner. Only then does
+``/nexus ship|revise|reject [request|latest] <reason>`` become a typed ``OwnerCommand``
+over the ``slack`` channel and a recorded ``OwnerDecision``, once per request, exactly as
+the ``decide`` CLI records it. Nothing here publishes: SHIP still needs the owner-run
+``publish`` step (or the opted-in autonomous path).
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import hashlib
 import hmac
 import json
 import os
+import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -90,6 +93,47 @@ def verify_slack_signature(
         raise SlackCommandError("signature_invalid", 401)
 
 
+class ReplayLedger:
+    """Digests of verified signatures seen inside the replay window, persisted atomically.
+
+    A replayed command is not harmless even though each request is decided once: ``latest``
+    resolves when the command arrives, so a signed "reject latest" replayed after a newer
+    cycle would decide a request the owner never saw.
+    """
+
+    def __init__(self, path: Path, *, window_seconds: int) -> None:
+        self.path = path
+        self.window_seconds = window_seconds
+        self._lock = threading.Lock()
+
+    def admit(self, signature: str, *, timestamp: int, now: datetime) -> None:
+        digest = hashlib.sha256(signature.strip().encode("utf-8")).hexdigest()
+        horizon = int(now.timestamp()) - 2 * self.window_seconds
+        with self._lock:
+            seen = {key: value for key, value in self._load().items() if value >= horizon}
+            if digest in seen:
+                raise SlackCommandError("replayed", 401)
+            seen[digest] = timestamp
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.path.with_name(f".{self.path.name}.tmp")
+            temporary.write_text(json.dumps(seen, sort_keys=True) + "\n", encoding="utf-8")
+            os.replace(temporary, self.path)
+
+    def _load(self) -> dict[str, int]:
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return {}
+        except (OSError, ValueError) as exc:
+            # An unreadable ledger cannot prove a request is new: refuse, do not reset.
+            raise SlackCommandError("replay_ledger_unreadable", 503) from exc
+        if not isinstance(raw, dict) or not all(
+            isinstance(key, str) and isinstance(value, int) for key, value in raw.items()
+        ):
+            raise SlackCommandError("replay_ledger_unreadable", 503)
+        return raw
+
+
 def parse_slash_command(body: bytes) -> ParsedCommand:
     """``<ship|revise|reject> [<cycle-id>|latest] <reason>`` from Slack's form body."""
 
@@ -153,11 +197,20 @@ class SlackCommandHandler:
         self.signing_secret_env = signing_secret_env
         self.clock = clock or (lambda: datetime.now(UTC))
         self.window_seconds = window_seconds
+        self.ledger = ReplayLedger(
+            state_root / "slack" / "replay_ledger.json", window_seconds=window_seconds
+        )
 
     def handle(self, headers: Mapping[str, str], body: bytes) -> SlackReply:
         now = self.clock()
         try:
             self._verify(headers, body, now)
+            lowered = {key.lower(): value for key, value in headers.items()}
+            self.ledger.admit(
+                lowered["x-slack-signature"],
+                timestamp=int(lowered["x-slack-request-timestamp"]),
+                now=now,
+            )
             command = parse_slash_command(body)
             if self.slack_owner_user_id is None or command.user_id != self.slack_owner_user_id:
                 raise SlackCommandError("not_owner", 200)
@@ -218,8 +271,15 @@ def create_app(handler: SlackCommandHandler) -> FastAPI:
 
     @app.post("/slack/commands")
     async def slack_commands(request: Request) -> Response:
-        body = await request.body()
-        reply = handler.handle(dict(request.headers), body)
+        declared = request.headers.get("content-length", "0")
+        if not declared.isdigit() or int(declared) > MAX_BODY_BYTES:
+            return _too_large()
+        body = bytearray()
+        async for chunk in request.stream():
+            body.extend(chunk)
+            if len(body) > MAX_BODY_BYTES:
+                return _too_large()
+        reply = handler.handle(dict(request.headers), bytes(body))
         return Response(
             content=json.dumps(reply.payload()),
             status_code=reply.status,
@@ -229,10 +289,18 @@ def create_app(handler: SlackCommandHandler) -> FastAPI:
     return app
 
 
+def _too_large() -> Response:
+    reply = SlackReply(413, "Refused: body_too_large.")
+    return Response(
+        content=json.dumps(reply.payload()), status_code=413, media_type="application/json"
+    )
+
+
 __all__ = [
     "DEFAULT_REPLAY_WINDOW_SECONDS",
     "SLACK_SIGNING_SECRET_ENV_DEFAULT",
     "ParsedCommand",
+    "ReplayLedger",
     "SlackCommandError",
     "SlackCommandHandler",
     "SlackReply",

@@ -263,9 +263,14 @@ on later days, so a rejected issue is context, not a daily request.
 ### Owner commands through Slack (after 0.24.0)
 
 `SlackCommandHandler` accepts `/nexus ship|revise|reject [cycle|latest] <reason>` only
-after three checks: Slack's `v0` HMAC signature verified with the signing secret read from
-the environment per request, a timestamp inside the replay window, and the configured
-owner member id. It then records the decision through the same `decide` path as the CLI,
+after four checks: Slack's `v0` HMAC signature verified with the signing secret read from
+the environment per request, a timestamp inside the replay window, a signature not seen
+before in that window, and the configured owner member id. The replay ledger (0.27.0)
+exists because "decided once per request" did not stop replays: `latest` resolves on
+arrival, so a captured "reject latest" replayed after a newer cycle would have decided a
+request the owner never saw. Digests of verified signatures are persisted atomically under
+the state root, an unreadable ledger refuses every command rather than resetting, and
+bodies over 20 KB are refused before they are buffered. It then records the decision through the same `decide` path as the CLI,
 over the `slack` channel, once per request. Slack never publishes: SHIP from Slack is a
 recorded decision, and the draft pull request still needs the owner-run `publish` step (or
 the opted-in autonomous path), so a compromised Slack account cannot open or merge

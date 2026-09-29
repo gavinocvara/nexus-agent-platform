@@ -173,9 +173,15 @@ python -m nexus.software_engineer serve-slack --host 127.0.0.1 --port 8787
 
 Grammar: `/nexus ship|revise|reject [<cycle-id>|latest] <reason>`. Every request must
 carry a valid Slack `v0` HMAC signature (checked with the signing secret from the
-environment) inside the replay window, and come from the configured owner member id;
-anything else is refused with a stable code (`signature_invalid`, `timestamp_stale`,
-`not_owner`, `already_decided`, ...) and records nothing. A SHIP from Slack records the
+environment) inside the replay window, must not repeat a signed request already seen in
+that window, and must come from the configured owner member id; anything else is refused
+with a stable code (`signature_invalid`, `timestamp_stale`, `replayed`, `not_owner`,
+`already_decided`, `body_too_large`, ...) and records nothing. Seen signatures are kept as
+digests in `<state_root>/slack/replay_ledger.json`, so a restart does not reopen the
+window; if that file is unreadable every command is refused (`replay_ledger_unreadable`)
+until the owner removes it. Prefer an explicit cycle id over `latest` when a new cycle may
+have finished since the notification you are answering: `latest` is resolved when the
+command arrives, and the reply names the request that was decided. A SHIP from Slack records the
 decision only: publishing remains the owner-run `publish` step, so a compromised Slack
 account can at most say "ship" about an already-validated draft, never open or merge one.
 The receiver never reads secrets from Slack messages and never echoes them.
