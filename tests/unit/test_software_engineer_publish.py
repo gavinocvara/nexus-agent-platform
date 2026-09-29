@@ -385,6 +385,28 @@ def test_bundle_reproduces_the_validated_tree_from_the_patch(tmp_path: Path) -> 
     assert not list((tmp_path / "work").iterdir()), "scratch clones are removed"
 
 
+def test_bundle_rederives_the_tree_when_work_root_is_relative(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The CLI passes a relative state root; `git -C <scratch> apply` must still find the patch.
+    bench = _Workbench(tmp_path)
+    bench.run_cycle()
+    change = load_cycle_record(bench.state_root).change
+    assert change is not None and change.commit_sha is not None
+    patch = (bench.run_root / "candidate.patch").read_bytes()
+    monkeypatch.chdir(tmp_path)
+    bundle = bundle_from_branch(
+        bench.git,
+        bench.run_root / "branch",
+        base_sha=change.base_sha,
+        commit_sha=change.commit_sha,
+        patch=patch,
+        work_root=Path("relative-work"),
+    )
+    assert bundle.tree_sha == bench.git_text("rev-parse", f"{change.commit_sha}^{{tree}}")
+    assert not list((tmp_path / "relative-work").iterdir()), "scratch clones are removed"
+
+
 def test_bundle_refuses_anything_but_the_validated_patch_on_the_validated_base(
     tmp_path: Path,
 ) -> None:

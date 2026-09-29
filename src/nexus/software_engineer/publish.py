@@ -216,6 +216,9 @@ def normalize_iso8601(value: str) -> str:
 def _rederive_tree(
     git: GitRunner, clone: Path, base_sha: str, patch: bytes, work_root: Path
 ) -> str:
+    # Absolute before Git sees it: `git -C <scratch> apply` resolves a relative patch path
+    # against the scratch clone, not the process working directory.
+    work_root = work_root.resolve()
     work_root.mkdir(parents=True, exist_ok=True)
     scratch = work_root / f"rederive-{uuid4().hex[:12]}"
     patch_file = work_root / f"{scratch.name}.patch"
