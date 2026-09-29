@@ -8,16 +8,22 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 - Branch `main`; local `HEAD` must equal `origin/main` at every checkpoint
   (`git rev-parse HEAD origin/main`, `git diff HEAD`, `git diff origin/main...HEAD`).
-- NEXUS `0.22.0` (resident Software Engineer controlled evaluation) is the commit
+- NEXUS `0.23.0` (resident Software Engineer model-backed recipes) is the commit
   containing this file (`git rev-parse HEAD`). Record its CI run in `PROJECT_STATE.md`
   once green.
-- Previous: 0.21.0 executor v1 `aad015d` + `fddcf16`; 0.20.0 foundation `c045de8` (run
+- Previous: 0.22.0 evaluation `f10a5ef`; 0.21.0 executor v1 `aad015d` (run `36551163992`
+  green) + `fddcf16` (run `36551242679` green); 0.20.0 foundation `c045de8` (run
   `36549244409` green); 0.19.0 Milestone J SentinelQA-lite `09b8c99` (run
   `36546322678` green); 0.18.0 `b613072` (run `36540394002` green).
 
-## Completed Unit: Resident Software Engineer controlled evaluation (0.22.0)
+## Completed Unit: Resident Software Engineer model-backed recipes (0.23.0)
 
-- `nexus.software_engineer.evaluation`: 28 judgment scenarios (every case in the owner's
+- Model recipes (`type_annotation`, `micro_bug_fix`, `defensive_check`) run PatchForge's
+  `ModelBackedEngine` inside `PatchForgeExecutor` under the same governance as mechanical
+  recipes; spending needs model + `confirm_model_spend` + positive call/token budgets +
+  `OPENAI_API_KEY`, else the candidate is an approval-only plan. Tested with a scripted
+  client; no live call was made.
+- 0.22.0: `nexus.software_engineer.evaluation`: 28 judgment scenarios (every case in the owner's
   brief) with scripted executors and transports, universal invariants, byte-identical
   replay, and a CI step. Cycle changes: worthless candidates are never selected; observed
   regressions are notified; changed files and diff bytes are shipping limits, not hard
@@ -33,10 +39,10 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 - 0.20.0 (foundation) shipped in `c045de8`: contracts, risk, policy, trust, memory,
   inspection, self-review, notifier, cycle, CLI, scheduled workflow, ADR 0012, runbook.
 
-## Validation (0.22.0 local release gate, Linux, Python 3.12.3)
+## Validation (0.23.0 local release gate, Linux, Python 3.12.3)
 
 - Ruff format and lint clean; strict mypy clean (118 files).
-- pytest: 849 passed, 23 deselected (0.21.0: 818; 0.20.0: 807; 0.19.0: 744).
+- pytest: 854 passed, 23 deselected (0.22.0: 849; 0.21.0: 818; 0.20.0: 807).
 - `python -m nexus.patchforge.e2e_catalog`: 23 scenarios passed, byte-identical replay.
 - `python -m nexus.patchforge.benchmark_corpus`: passed (SentinelQA agreement included).
 - `python -m nexus.sentinelqa`: 29 scenarios passed, byte-identical replay.
@@ -49,9 +55,9 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 ## Exact Next Step
 
 1. Publisher for approved candidate branches (push + draft PR, never merge) with a
-   deliberately supplied write token, only after an `OwnerDecision(ship)`. Then
-   model-backed recipes behind `ModelClient` with zero default budgets, extended
-   adversarial evaluation, and Slack-delivered `OwnerCommand`s. See `PROJECT_STATE.md`.
+   deliberately supplied write token, only after an `OwnerDecision(ship)`. Then the
+   first owner-authorized model-recipe run, Slack-delivered `OwnerCommand`s, and
+   SentinelQA review of candidate-changed tests. See `PROJECT_STATE.md`.
 2. The live PatchForge run remains unexecuted and owner-authorized only; it is
    SentinelQA-reviewed end to end.
 

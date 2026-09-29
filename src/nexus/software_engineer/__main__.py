@@ -10,9 +10,13 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
+from nexus.patchforge.engine import EngineBudget, ModelBackedEngine
+from nexus.patchforge.live import API_KEY_VARIABLE, LiveSettings, OpenAIResponsesClient
+from nexus.patchforge.runtime import RuntimeEngine
 from nexus.patchforge.workspace import GitRunner
 from nexus.software_engineer.config import EngineerDisabledError, SoftwareEngineerSettings
 from nexus.software_engineer.cycle import CandidateExecutor, EngineeringCycle
@@ -40,6 +44,30 @@ def _inspector(arguments: argparse.Namespace) -> RepositoryInspector:
     )
 
 
+def _model_engine_factory(
+    settings: SoftwareEngineerSettings,
+) -> Callable[[], RuntimeEngine] | None:
+    """Model recipes need a model, a confirmed spend, positive budgets, and the key."""
+
+    if not settings.model_recipes_allowed or not os.environ.get(API_KEY_VARIABLE, "").strip():
+        return None
+    assert settings.model is not None
+    live = LiveSettings(model=settings.model, timeout_seconds=settings.model_timeout_seconds)
+    budget = EngineBudget(
+        max_model_calls=settings.max_model_calls,
+        max_output_tokens=min(settings.model_max_output_tokens, settings.max_output_tokens),
+        max_rendered_result_chars=8000,
+        max_history_turns=12,
+    )
+
+    def build() -> RuntimeEngine:
+        return ModelBackedEngine(
+            client=OpenAIResponsesClient.from_environment(live), model=live.model, budget=budget
+        )
+
+    return build
+
+
 def _executor(
     settings: SoftwareEngineerSettings, arguments: argparse.Namespace
 ) -> CandidateExecutor | None:
@@ -54,6 +82,7 @@ def _executor(
         sandbox=LocalProcessSandbox(allow_local_process=True),
         run_root=state_root / "runs",
         git=GitRunner(state_root / "git-runtime"),
+        model_engine_factory=_model_engine_factory(settings),
     )
 
 
@@ -83,7 +112,8 @@ def main(argv: list[str] | None = None) -> int:
         slack = bool(os.environ.get(settings.slack_webhook_env, "").strip())
         print(
             f"enabled={settings.enabled} mode={settings.mode.value} owner={settings.owner_id} "
-            f"model={settings.model or 'none'} sandbox={settings.sandbox} "
+            f"model={settings.model or 'none'} model_recipes_allowed="
+            f"{settings.model_recipes_allowed} sandbox={settings.sandbox} "
             f"slack_webhook_present={slack} "
             f"state_root={settings.state_root} memory_path={settings.memory_path} "
             f"max_runtime_seconds={settings.max_runtime_seconds} "

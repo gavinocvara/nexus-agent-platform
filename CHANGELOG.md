@@ -8,6 +8,27 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
+## 0.23.0 — Resident Software Engineer model-backed recipes (no live calls)
+
+- Model recipes for `type_annotation`, `micro_bug_fix`, and `defensive_check` candidates
+  run PatchForge's existing `ModelBackedEngine` under exactly the same governance as the
+  mechanical recipes: real ToolGateway, Runtime, and Attestor; reproduction by the check
+  that reported the defect; check-only formatter so the diff is the model's alone;
+  SentinelQA verification; gates with evidence hashes; a local candidate branch; no
+  publisher. Test repair is deliberately excluded because SentinelQA-lite treats tests as
+  the specification.
+- Spending is opt-in four times over: a model, `confirm_model_spend=true`, positive
+  `max_model_calls` and `max_output_tokens`, and `OPENAI_API_KEY` in the environment.
+  Any missing condition keeps model recipes as approval-only plans. Model calls and
+  tokens flow into the cycle's usage and budgets; hash-only engine call records are
+  persisted next to the run.
+- The scheduled workflow passes the model variables and an optional
+  `NEXUS_SOFTWARE_ENGINEER_OPENAI_API_KEY` secret through; all default to off.
+- Tests drive the model path with a scripted client (a real type-error fix verified end
+  to end, a plan when no model is configured, garbage output as a typed engine failure,
+  and the CLI refusing to build a model engine without every condition). No live model
+  call was made.
+
 ## 0.22.0 — Resident Software Engineer controlled evaluation
 
 - `nexus.software_engineer.evaluation`: a 28-scenario judgment catalog run as a CI gate

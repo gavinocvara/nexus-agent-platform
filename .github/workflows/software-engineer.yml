@@ -34,6 +34,12 @@ jobs:
       # The runner is ephemeral and holds no credentials beyond the read-only token, so
       # mechanical recipes may run as bounded local processes when the mode allows changes.
       NEXUS_SOFTWARE_ENGINEER_SANDBOX: ${{ vars.NEXUS_SOFTWARE_ENGINEER_SANDBOX || 'none' }}
+      # Model recipes spend money only when the owner sets every one of these deliberately.
+      NEXUS_SOFTWARE_ENGINEER_MODEL: ${{ vars.NEXUS_SOFTWARE_ENGINEER_MODEL }}
+      NEXUS_SOFTWARE_ENGINEER_CONFIRM_MODEL_SPEND: ${{ vars.NEXUS_SOFTWARE_ENGINEER_CONFIRM_MODEL_SPEND || 'false' }}
+      NEXUS_SOFTWARE_ENGINEER_MAX_MODEL_CALLS: ${{ vars.NEXUS_SOFTWARE_ENGINEER_MAX_MODEL_CALLS || '0' }}
+      NEXUS_SOFTWARE_ENGINEER_MAX_OUTPUT_TOKENS: ${{ vars.NEXUS_SOFTWARE_ENGINEER_MAX_OUTPUT_TOKENS || '0' }}
+      OPENAI_API_KEY: ${{ secrets.NEXUS_SOFTWARE_ENGINEER_OPENAI_API_KEY }}
       NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL: ${{ secrets.NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL }}
 
     steps:

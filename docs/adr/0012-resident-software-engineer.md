@@ -158,13 +158,27 @@ and byte-identical replay. Only the obvious micro bug ships, and only in
 out of building it: candidates whose cost outweighs their value are never selected, and
 regressions visible in the evidence are notified even when nothing is actionable.
 
+### Model-backed recipes (0.23.0)
+
+Categories that need judgment (`type_annotation`, `micro_bug_fix`, `defensive_check`) run
+PatchForge's `ModelBackedEngine` inside the same executor: the model chooses one typed
+tool call per turn, the gateway enforces phase and path policy, reproduction is the check
+that reported the defect (mypy or the targeted tests), the formatter only checks so the
+diff is the model's alone, SentinelQA verifies the attested patch, and the result is a
+local branch plus an approval request. Test repair is excluded because SentinelQA-lite
+treats tests as the specification. Spending needs a model, an explicit
+`confirm_model_spend`, positive call and token budgets, and the API key in the
+environment; without any one of them the candidate stays an approval-only plan. Model
+calls and tokens are accounted in the cycle's usage; engine call records are hash-only.
+
 ## Deferred
 
 - A publisher that pushes an approved candidate branch and fast-forwards `main` with a
   deliberately supplied write token; until then nothing ships and `autonomous_low_risk`
   is exercised only with scripted executors in tests.
-- Recipes beyond formatting and lint fixes (type-annotation repair, test repair, micro bug
-  fixes) need a model-backed engine and remain approval-only plans.
+- Test repair and any recipe that must change tests wait for SentinelQA to review
+  candidate-added or changed tests; today they remain approval-only plans.
+- Price tables for cost accounting; until then token and call budgets bound spending.
 - A model-backed investigator for candidate refinement behind the existing `ModelClient`
   boundary, with the same one-action-per-turn parsing PatchForge uses.
 - Owner commands arriving through Slack (today: typed `OwnerCommand` via code/CLI).

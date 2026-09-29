@@ -16,7 +16,8 @@ push. Owner decisions come only from the configured human owner.
 | `NEXUS_SOFTWARE_ENGINEER_MODE` | `dry_run` | `dry_run` (plan and report), `propose` (validated approval requests), `autonomous_low_risk` (ship low-risk validated changes; needs a real executor). |
 | `NEXUS_SOFTWARE_ENGINEER_OWNER_ID` | `owner` | Human actor id whose decisions are accepted. |
 | `NEXUS_SOFTWARE_ENGINEER_REPOSITORY_URL` | this repository | Operator identity used in PatchForge tasks and SentinelQA locks. |
-| `NEXUS_SOFTWARE_ENGINEER_SANDBOX` | `none` | `local_process` lets mechanical recipes run as bounded local processes (ephemeral runners only). |
+| `NEXUS_SOFTWARE_ENGINEER_SANDBOX` | `none` | `local_process` lets recipes run as bounded local processes (ephemeral runners only). |
+| `NEXUS_SOFTWARE_ENGINEER_MODEL`, `_CONFIRM_MODEL_SPEND`, `_MAX_MODEL_CALLS`, `_MAX_OUTPUT_TOKENS` | unset, `false`, `0`, `0` | All four, plus `OPENAI_API_KEY`, are needed before a model recipe can spend money. |
 | `NEXUS_SOFTWARE_ENGINEER_STATE_ROOT` | `.nexus/software_engineer` | Cycle records, reports, and recipe runs. |
 | `NEXUS_SOFTWARE_ENGINEER_MEMORY_PATH` | `.nexus/software_engineer/memory.sqlite3` | Private memory. |
 | `NEXUS_SOFTWARE_ENGINEER_MAX_*` | see `config.py` | Runtime, turns, tool calls, model calls, tokens, cost, changed files, diff bytes. |
@@ -40,6 +41,13 @@ Executing a recipe needs `NEXUS_SOFTWARE_ENGINEER_MODE=propose` (or
 `autonomous_low_risk`) and `NEXUS_SOFTWARE_ENGINEER_SANDBOX=local_process`. The local
 sandbox is for ephemeral, credential-free runners only: it scrubs the environment and
 bounds each command but has no container isolation.
+
+Model recipes (`type_annotation`, `micro_bug_fix`, `defensive_check`) additionally need
+`NEXUS_SOFTWARE_ENGINEER_MODEL`, `NEXUS_SOFTWARE_ENGINEER_CONFIRM_MODEL_SPEND=true`,
+positive `NEXUS_SOFTWARE_ENGINEER_MAX_MODEL_CALLS` and `NEXUS_SOFTWARE_ENGINEER_MAX_OUTPUT_TOKENS`,
+and `OPENAI_API_KEY` in the environment (in the workflow: the
+`NEXUS_SOFTWARE_ENGINEER_OPENAI_API_KEY` secret). Missing any of them leaves the candidate
+as an approval-only plan. `preflight` prints `model_recipes_allowed`.
 
 ## Judgment evaluation
 
@@ -131,6 +139,6 @@ rollback.
 
 ## Not yet built
 
-A publisher that pushes approved branches and fast-forwards `main`; recipes that need a
-model (type errors, test repair, bug fixes); Slack-delivered owner commands; memory
-consolidation. See ADR 0012.
+A publisher that pushes approved branches and fast-forwards `main`; test repair (blocked
+by SentinelQA-lite's byte-level specification rule); Slack-delivered owner commands;
+memory consolidation; price tables for cost accounting. See ADR 0012.

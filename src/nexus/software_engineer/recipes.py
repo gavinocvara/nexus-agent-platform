@@ -48,12 +48,22 @@ _PLACEHOLDER_IMAGE = f"sha256:{'0' * 64}"
 class Recipe(StrEnum):
     FORMATTING = "formatting"
     LINT_FIX = "lint_fix"
+    MODEL_TYPE_FIX = "model_type_fix"
+    MODEL_CODE_FIX = "model_code_fix"
 
 
 RECIPE_FOR_CATEGORY: dict[ChangeCategory, Recipe] = {
     ChangeCategory.FORMATTING: Recipe.FORMATTING,
     ChangeCategory.DEAD_CODE_REMOVAL: Recipe.LINT_FIX,
 }
+# Recipes that need a model-backed engine. Test repair is deliberately absent: under
+# SentinelQA-lite the tests are the specification and may not be changed by a candidate.
+MODEL_RECIPE_FOR_CATEGORY: dict[ChangeCategory, Recipe] = {
+    ChangeCategory.TYPE_ANNOTATION: Recipe.MODEL_TYPE_FIX,
+    ChangeCategory.MICRO_BUG_FIX: Recipe.MODEL_CODE_FIX,
+    ChangeCategory.DEFENSIVE_CHECK: Recipe.MODEL_CODE_FIX,
+}
+MECHANICAL_RECIPES = frozenset({Recipe.FORMATTING, Recipe.LINT_FIX})
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,16 +86,22 @@ def recipe_commands(
     typecheck: Sequence[str] = ("-m", "mypy"),
 ) -> RecipeCommands:
     sources = list(source_paths)
+    targeted = ("-m", "pytest", "-q", "-p", "no:cacheprovider", *targeted_tests)
     if recipe is Recipe.FORMATTING:
         formatter = ("-m", "ruff", "format", *sources)
         reproduction = ("-m", "ruff", "format", "--check", *sources)
-    else:
+    elif recipe is Recipe.LINT_FIX:
         formatter = ("-m", "ruff", "check", "--fix", *sources)
         reproduction = ("-m", "ruff", "check", *sources)
+    else:
+        # Model recipes: the formatter only checks, so the diff is the model's alone; the
+        # defect is reproduced by the check that reported it.
+        formatter = ("-m", "ruff", "format", "--check", *sources)
+        reproduction = tuple(typecheck) if recipe is Recipe.MODEL_TYPE_FIX else targeted
     return RecipeCommands(
         formatter=formatter,
         reproduction=reproduction,
-        targeted_tests=("-m", "pytest", "-q", "-p", "no:cacheprovider", *targeted_tests),
+        targeted_tests=targeted,
         full_tests=("-m", "pytest", "-q", "-p", "no:cacheprovider"),
         linter=("-m", "ruff", "check", "."),
         typecheck=tuple(typecheck),
@@ -164,6 +180,9 @@ def recipe_budgets(*, phase_duration_seconds: int = 3600) -> RunBudgets:
 def recipe_steps(recipe: Recipe) -> list[ScriptStep]:
     """The fixed PatchForge script: reproduce, let the tool fix, validate twice, report."""
 
+    if recipe not in MECHANICAL_RECIPES:
+        raise ValueError("Model recipes are driven by a model-backed engine, not a script")
+
     def advance(target: PatchForgePhase) -> RuntimeToolAction:
         return RuntimeToolAction(
             tool_name=ToolName.ADVANCE_PHASE, arguments=AdvancePhaseArguments(target_phase=target)
@@ -213,6 +232,8 @@ def recipe_steps(recipe: Recipe) -> list[ScriptStep]:
 
 
 __all__ = [
+    "MECHANICAL_RECIPES",
+    "MODEL_RECIPE_FOR_CATEGORY",
     "RECIPE_FOR_CATEGORY",
     "RECIPE_PROFILE_VERSION",
     "Recipe",

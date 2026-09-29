@@ -22,6 +22,7 @@ from nexus.atlas.models import SourceRevision
 from nexus.patchforge.attestor import LocalArtifactStore, PatchForgeAttestor
 from nexus.patchforge.canonical import canonical_json, canonical_sha256
 from nexus.patchforge.e2e import ScriptedEngine
+from nexus.patchforge.engine import ModelBackedEngine
 from nexus.patchforge.gateway import ToolGateway
 from nexus.patchforge.models import (
     CheckKind,
@@ -34,7 +35,7 @@ from nexus.patchforge.models import (
     ToolName,
 )
 from nexus.patchforge.policy import PatchForgePolicy
-from nexus.patchforge.runtime import PatchForgeRuntime
+from nexus.patchforge.runtime import PatchForgeRuntime, RuntimeEngine
 from nexus.patchforge.sandbox import SandboxExecutor
 from nexus.patchforge.workspace import GitCommandError, GitRunner, WorkspaceError, WorkspaceManager
 from nexus.sentinelqa.lock import SpecificationLockError, capture_specification_lock
@@ -50,6 +51,8 @@ from nexus.software_engineer.models import (
     ValidationGate,
 )
 from nexus.software_engineer.recipes import (
+    MECHANICAL_RECIPES,
+    MODEL_RECIPE_FOR_CATEGORY,
     RECIPE_FOR_CATEGORY,
     Recipe,
     RecipeCommands,
@@ -101,6 +104,7 @@ class PatchForgeExecutor:
         git: GitRunner | None = None,
         commands: Callable[[Recipe], RecipeCommands] | None = None,
         lease_duration: timedelta = timedelta(hours=2),
+        model_engine_factory: Callable[[], RuntimeEngine] | None = None,
     ) -> None:
         self.repo_root = repo_root.resolve()
         self.repository_url = repository_url
@@ -110,6 +114,9 @@ class PatchForgeExecutor:
         self.git = git or GitRunner(run_root / "git-runtime")
         self.commands = commands or recipe_commands
         self.lease_duration = lease_duration
+        self.model_engine_factory = model_engine_factory
+        """Builds a model-backed ``RuntimeEngine`` per run; ``None`` keeps model recipes
+        as approval-only plans. The factory owns the client, model, and call budget."""
 
     # -- CandidateExecutor -----------------------------------------------------------------
 
@@ -117,14 +124,26 @@ class PatchForgeExecutor:
         self, candidate: EngineeringCandidate, *, cycle_id: UUID, budget: CycleBudget
     ) -> ExecutionOutcome:
         recipe = RECIPE_FOR_CATEGORY.get(candidate.category)
+        if recipe is None and candidate.category in MODEL_RECIPE_FOR_CATEGORY:
+            if self.model_engine_factory is None:
+                return ExecutionOutcome(
+                    change=None,
+                    patch=None,
+                    gates=_not_run("no model engine is configured"),
+                    notes=(
+                        f"Category {candidate.category.value} needs a model-backed recipe, and "
+                        "no model is configured or confirmed for spending.",
+                    ),
+                )
+            recipe = MODEL_RECIPE_FOR_CATEGORY[candidate.category]
         if recipe is None:
             return ExecutionOutcome(
                 change=None,
                 patch=None,
-                gates=_not_run(f"no mechanical recipe for {candidate.category.value}"),
+                gates=_not_run(f"no recipe for {candidate.category.value}"),
                 notes=(
-                    f"Category {candidate.category.value} has no mechanical recipe; the "
-                    "candidate needs investigation before any change.",
+                    f"Category {candidate.category.value} has no recipe; the candidate needs "
+                    "investigation before any change.",
                 ),
             )
         root = self.run_root / str(cycle_id) / candidate.candidate_id.hex[:12]
@@ -166,7 +185,7 @@ class PatchForgeExecutor:
             repository_profile_id=profile.profile_id,
             repository_profile_sha256=profile_sha,
             task_sha256=canonical_sha256(task),
-            engine_kind="scripted",
+            engine_kind="scripted" if recipe in MECHANICAL_RECIPES else "model",
             engine_version=f"software-engineer-{recipe.value}-v1",
             created_at=now,
         )
@@ -196,14 +215,31 @@ class PatchForgeExecutor:
             sandbox=self.sandbox,
             clock=self.clock,
         )
+        engine: RuntimeEngine
+        if recipe in MECHANICAL_RECIPES:
+            engine = ScriptedEngine(recipe_steps(recipe), handle.worktree)
+        else:
+            assert self.model_engine_factory is not None
+            engine = self.model_engine_factory()
         runtime = PatchForgeRuntime(
             gateway=gateway,
             workspace_manager=manager,
-            engine=ScriptedEngine(recipe_steps(recipe), handle.worktree),
+            engine=engine,
             lease_duration=self.lease_duration,
             clock=self.clock,
         )
         completion = runtime.execute()
+        model_calls = input_tokens = output_tokens = 0
+        if isinstance(engine, ModelBackedEngine):
+            model_calls = len(engine.records)
+            input_tokens = sum(item.input_tokens or 0 for item in engine.records)
+            output_tokens = sum(item.output_tokens or 0 for item in engine.records)
+            _write(
+                root / "engine_calls.json",
+                canonical_json(
+                    {"calls": [item.model_dump(mode="json") for item in engine.records]}
+                ),
+            )
         artifacts = LocalArtifactStore(root / "artifacts")
         result = PatchForgeAttestor(
             task=task, profile=profile, policy=policy, artifact_store=artifacts
@@ -226,7 +262,14 @@ class PatchForgeExecutor:
                 )
             )
             return ExecutionOutcome(
-                change=None, patch=None, gates=gates, notes=tuple(notes), tool_calls=tool_calls
+                change=None,
+                patch=None,
+                gates=gates,
+                notes=tuple(notes),
+                tool_calls=tool_calls,
+                model_calls=model_calls,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
             )
         patch = artifacts.read(result.diff.patch_artifact)
         _write(root / "candidate.patch", patch)
@@ -290,6 +333,9 @@ class PatchForgeExecutor:
                 and result.reproduction.status is ReproductionStatus.FAIL_BEFORE_PASS_AFTER
             ),
             tool_calls=tool_calls,
+            model_calls=model_calls,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
         )
 
     def ship(self, change: ChangeSummary, *, cycle_id: UUID) -> ChangeSummary:

@@ -8,12 +8,12 @@ Update it at every checkpoint. Rules live in `AGENTS.md`; execution order in
 
 | Item | Value |
 | --- | --- |
-| Version | `0.22.0` (`pyproject.toml`) |
+| Version | `0.23.0` (`pyproject.toml`) |
 | HEAD | the commit containing this file (`git rev-parse HEAD`) |
 | origin/main | must equal HEAD at a checkpoint (`git rev-parse origin/main`) |
 | Working tree | clean at the checkpoint (`git status --short` empty) |
 | Toolchain | Python 3.12, Ruff, strict mypy, pytest, Docker Compose |
-| Local setup used for 0.19.0 to 0.22.0 | `uv venv --python 3.12 <outside repo>` then `uv pip install -e ".[dev]"` |
+| Local setup used for 0.19.0 to 0.23.0 | `uv venv --python 3.12 <outside repo>` then `uv pip install -e ".[dev]"` |
 
 ## What exists (architecture status)
 
@@ -27,7 +27,7 @@ Update it at every checkpoint. Rules live in `AGENTS.md`; execution order in
 | PatchForge I (model engine boundary) | Built; live run not executed | `nexus.patchforge.engine`, `nexus.patchforge.live` |
 | PatchForge J (SentinelQA-lite) | Complete (0.19.0, CI run 36546322678 green) | `nexus.sentinelqa`, ADR 0011, `docs/runbooks/sentinelqa.md` |
 | PatchForge K (GitHub intake, branch push, draft PR) | Not started | — |
-| Resident Software Engineer | **Foundation (0.20.0, CI run 36549244409 green) + executor v1 for mechanical recipes (0.21.0) + controlled judgment evaluation (0.22.0)**, disabled by default | `nexus.software_engineer`, ADR 0012, `docs/runbooks/software-engineer.md` |
+| Resident Software Engineer | **Foundation (0.20.0, CI run 36549244409 green) + executor v1 for mechanical recipes (0.21.0) + controlled judgment evaluation (0.22.0) + model-backed recipes behind explicit spend confirmation (0.23.0)**, disabled by default | `nexus.software_engineer`, ADR 0012, `docs/runbooks/software-engineer.md` |
 | Engram, Kubernetes, AegisOps remediation | Deferred | `ROADMAP.md` |
 
 ## SentinelQA-lite (0.19.0) in one paragraph
@@ -48,7 +48,7 @@ byte-identically), `tests/unit/test_sentinelqa_*.py`, and Benchmark v0 agreement
 (`reference` 5/5 passed, `fix_and_edit_tests` 5/5 failed with `specification_modified`,
 zero disagreements).
 
-## Validation record (0.22.0, local, Linux)
+## Validation record (0.23.0, local, Linux)
 
 | Check | Result |
 | --- | --- |
@@ -64,7 +64,7 @@ zero disagreements).
 | `python -m nexus.software_engineer preflight` | `enabled=False mode=dry_run sandbox=none slack_webhook_present=False` |
 | `docker compose config --quiet` | valid |
 | Compose integration (`RUN_INTEGRATION=1`) | not run locally (no Docker daemon); CI job `compose-integration` |
-| Live model calls | none, ever, in this repository's history |
+| Live model calls | none, ever, in this repository's history (model recipes tested with a scripted client) |
 | Frozen evidence (`docs/experiments/`, hash pins in `test_atlas_isolation.py`) | unchanged |
 
 ### Test counts
@@ -75,6 +75,7 @@ zero disagreements).
 - 0.20.0: 807 passed, 23 deselected (63 resident-engineer tests added).
 - 0.21.0: 818 passed, 23 deselected (executor, local sandbox, and SentinelQA reproduction tests added).
 - 0.22.0: 849 passed, 23 deselected (evaluation catalog tests added).
+- 0.23.0: 854 passed, 23 deselected (model recipe tests added).
 
 ## Credentials and enablement
 
@@ -83,7 +84,7 @@ zero disagreements).
 | AegisOps live investigator | `NEXUS_AGENT_ENABLED`, `OPENAI_API_KEY` | off | key only in ignored `.env` |
 | PatchForge live run | `NEXUS_PATCHFORGE_LIVE_ENABLED`, `OPENAI_API_KEY`, `--confirm-live` | off | owner authorization required; now SentinelQA-reviewed |
 | Brain v1 | `NEXUS_BRAIN_MODE` | `disabled` | frozen evaluation only |
-| Resident Software Engineer | `NEXUS_SOFTWARE_ENGINEER_ENABLED`, `NEXUS_SOFTWARE_ENGINEER_MODE`, `NEXUS_SOFTWARE_ENGINEER_SANDBOX`, `NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL` (secret) | off, `dry_run`, `none`, unset | GitHub Actions variables gate the scheduled workflow; `propose` + `local_process` lets mechanical recipes produce verified branches in the uploaded artifact |
+| Resident Software Engineer | `NEXUS_SOFTWARE_ENGINEER_ENABLED`, `_MODE`, `_SANDBOX`, `_MODEL`, `_CONFIRM_MODEL_SPEND`, `_MAX_MODEL_CALLS`, `_MAX_OUTPUT_TOKENS`, `_SLACK_WEBHOOK_URL` (secret), `OPENAI_API_KEY` (secret) | off, `dry_run`, `none`, unset, `false`, `0`, `0`, unset, unset | GitHub Actions variables gate the scheduled workflow; `propose` + `local_process` lets mechanical recipes produce verified branches in the uploaded artifact |
 
 No credential is present in this container; nothing here needs one.
 
@@ -115,7 +116,7 @@ No credential is present in this container; nothing here needs one.
 | CLI and scheduled workflow (read-only token, variable-gated) | Done |
 | Executor (PatchForge + SentinelQA + gates on an isolated branch) | **Done for mechanical recipes** (`executor.py`, `recipes.py`, `sandbox.py`); no publisher, so it never ships |
 | Controlled judgment evaluation (28 scenarios, CI gate) | **Done** (`evaluation.py`) |
-| Model-backed investigation | Not built (no model configured; budgets zero) |
+| Model-backed recipes (type annotation, micro bug fix, defensive check) | **Done** (`PatchForgeExecutor.model_engine_factory`), off until model + confirmation + budgets + key |
 | Slack-delivered owner commands | Not built (typed `OwnerCommand` via code) |
 | Autonomous low-risk shipping in production | Disabled; needs a publisher with a deliberately supplied write token; exercised only with scripted executors in tests |
 
@@ -125,12 +126,12 @@ No credential is present in this container; nothing here needs one.
    deliberately supplied write token, only after an `OwnerDecision(ship)`; record the
    PR reference in the change summary and memory. Keep the workflow token read-only by
    default; a separate, owner-enabled workflow would hold the write token.
-2. Model-backed recipes behind `ModelClient` (PatchForge's `ModelBackedEngine`) for
-   type-annotation repair and test repair, with zero budgets by default, then extend
-   the adversarial evaluation (injection in issue text, safety-weakening requests, flaky
-   and unrelated failing tests, merge conflicts).
+2. The first owner-authorized model-recipe run (a real type or micro-bug fix on this
+   repository) once the owner sets the model, confirmation, budgets, and key; inspect the
+   run directory, record the result here, then decide whether to widen categories.
 3. Slack-delivered `OwnerCommand`s with signature verification, replacing the code/CLI
-   path for approvals.
+   path for approvals; SentinelQA review of candidate-changed tests so test repair can
+   leave plan-only mode.
 
 ## Resume commands
 

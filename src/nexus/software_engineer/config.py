@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from nexus.atlas.models import Identifier
@@ -45,7 +45,15 @@ class SoftwareEngineerSettings(BaseSettings):
     state_root: Path = Path(".nexus/software_engineer")
     memory_path: Path = Path(".nexus/software_engineer/memory.sqlite3")
     model: str | None = Field(default=None, min_length=1, max_length=100)
-    """No model is configured by default; the deterministic engine needs none."""
+    """No model is configured by default; mechanical recipes need none."""
+
+    confirm_model_spend: bool = False
+    """Explicit acknowledgement that model recipes may spend money. Without it, and
+    without a model, a positive model-call budget, and an API key, model recipes stay
+    approval-only plans."""
+
+    model_timeout_seconds: float = Field(default=60, gt=0, le=600)
+    model_max_output_tokens: int = Field(default=1024, ge=64, le=32_000)
 
     max_runtime_seconds: int = Field(default=1800, ge=60, le=86_400)
     max_turns: int = Field(default=40, ge=1, le=1000)
@@ -66,6 +74,15 @@ class SoftwareEngineerSettings(BaseSettings):
     schedule_cron: str = Field(default="17 6 * * *", min_length=9, max_length=100)
     """Documented intent only; the GitHub Actions workflow owns the real schedule."""
 
+    @field_validator("model", mode="before")
+    @classmethod
+    def empty_model_means_none(cls, value: object) -> object:
+        """CI passes unset variables as empty strings; an empty model is no model."""
+
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
     @property
     def budget(self) -> CycleBudget:
         return CycleBudget(
@@ -78,6 +95,17 @@ class SoftwareEngineerSettings(BaseSettings):
             max_cost_usd=self.max_cost_usd,
             max_changed_files=self.max_changed_files,
             max_diff_bytes=self.max_diff_bytes,
+        )
+
+    @property
+    def model_recipes_allowed(self) -> bool:
+        """True only when every explicit condition for spending on a model holds."""
+
+        return (
+            self.model is not None
+            and self.confirm_model_spend
+            and self.max_model_calls > 0
+            and self.max_output_tokens > 0
         )
 
     def require_enabled(self) -> None:
