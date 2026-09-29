@@ -182,9 +182,26 @@ def bundle_from_branch(
         message=meta[3].strip() or "Change produced by the NEXUS resident engineer",
         author_name=meta[0],
         author_email=meta[1],
-        authored_at=meta[2],
+        authored_at=normalize_iso8601(meta[2]),
         entries=entries,
     )
+
+
+def normalize_iso8601(value: str) -> str:
+    """Render a Git ``%aI`` date the same way on every Git version.
+
+    Git 2.55 prints UTC as ``...Z`` where older versions print ``...+00:00``; the bundle
+    must not depend on which Git produced it.
+    """
+
+    text = value.strip()
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise PublishError("bundle_metadata_unreadable", "author date") from exc
+    if parsed.utcoffset() is None:
+        raise PublishError("bundle_metadata_unreadable", "naive author date")
+    return parsed.isoformat()
 
 
 def _rederive_tree(
@@ -734,6 +751,7 @@ __all__ = [
     "RecordingPublisher",
     "agent_publisher_identity",
     "bundle_from_branch",
+    "normalize_iso8601",
     "parse_github_repository",
     "render_pull_request",
 ]

@@ -56,6 +56,7 @@ from nexus.software_engineer.publish import (
     RecordingPublisher,
     agent_publisher_identity,
     bundle_from_branch,
+    normalize_iso8601,
     parse_github_repository,
     render_pull_request,
 )
@@ -559,6 +560,13 @@ def test_publisher_construction_and_rendering_guard_their_inputs() -> None:
             parse_github_repository(bad)
     with pytest.raises(PublishError, match="api_base_insecure"):
         GitHubDraftPullRequestPublisher("o/r", api_base="http://api.github.com")
+    # Git 2.55 prints UTC author dates with "Z"; older Git prints "+00:00". Same bundle.
+    assert normalize_iso8601("2026-09-29T12:00:00Z") == "2026-09-29T12:00:00+00:00"
+    assert normalize_iso8601("2026-09-29T12:00:00+00:00") == "2026-09-29T12:00:00+00:00"
+    assert normalize_iso8601("2026-09-29T14:00:00+02:00") == "2026-09-29T14:00:00+02:00"
+    for bad in ("2026-09-29T12:00:00", "yesterday"):
+        with pytest.raises(PublishError, match="bundle_metadata_unreadable"):
+            normalize_iso8601(bad)
     candidate = _candidate().model_copy(
         update={"title": "Fix it\nsk-live-0123456789abcdefghijklmnopqrstuvwxyz"}
     )
