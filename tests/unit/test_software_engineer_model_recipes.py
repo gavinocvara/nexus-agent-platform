@@ -31,6 +31,7 @@ from nexus.software_engineer.models import (
     GateStatus,
     ValidationGate,
 )
+from nexus.software_engineer.pricing import PriceTable
 from nexus.software_engineer.recipes import (
     MODEL_RECIPE_FOR_CATEGORY,
     Recipe,
@@ -137,8 +138,11 @@ def _candidate(category: ChangeCategory = ChangeCategory.TYPE_ANNOTATION) -> Eng
     )
 
 
+PRICES = PriceTable(input_usd_per_mtok=2.0, output_usd_per_mtok=8.0)
+
+
 def _executor(
-    tmp_path: Path, replies: list[str] | None
+    tmp_path: Path, replies: list[str] | None, *, prices: PriceTable | None = PRICES
 ) -> tuple[PatchForgeExecutor, Path, GitRunner]:
     git = GitRunner(tmp_path / "git")
     repo = tmp_path / "repo"
@@ -165,6 +169,7 @@ def _executor(
         git=git,
         commands=_commands,
         model_engine_factory=factory,
+        price_table=prices,
     )
     return executor, repo, git
 
@@ -181,6 +186,10 @@ def test_model_recipe_fixes_a_type_error_under_full_governance(tmp_path: Path) -
     assert b"-    return str(a + b)" in outcome.patch and b"+    return a + b" in outcome.patch
     assert outcome.model_calls == len(replies)
     assert outcome.input_tokens == 11 * len(replies) and outcome.output_tokens == 7 * len(replies)
+    assert outcome.cost_usd == PRICES.cost_usd(
+        input_tokens=11 * len(replies), output_tokens=7 * len(replies)
+    )
+    assert outcome.cost_usd is not None and outcome.cost_usd > 0
     assert outcome.root_cause_evidence is True
     run_root = tmp_path / "runs" / str(CYCLE) / UUID(int=951).hex[:12]
     calls = json.loads((run_root / "engine_calls.json").read_text())["calls"]
@@ -199,6 +208,23 @@ def test_model_recipe_without_a_configured_model_is_a_plan(tmp_path: Path) -> No
     assert all(item.status is GateStatus.NOT_RUN for item in outcome.gates)
     assert any("no model is configured" in note for note in outcome.notes)
     assert not (tmp_path / "runs").exists()
+
+
+def test_model_recipe_without_prices_is_a_plan_because_cost_cannot_be_enforced(
+    tmp_path: Path,
+) -> None:
+    replies = [_reply(action) for action in _type_fix_script()]
+    executor, _, _ = _executor(tmp_path, replies, prices=None)
+    outcome = executor.execute(
+        _candidate(), cycle_id=CYCLE, budget=SoftwareEngineerSettings.model_validate({}).budget
+    )
+    assert outcome.change is None and outcome.model_calls == 0 and outcome.cost_usd is None
+    assert any("no model prices" in note for note in outcome.notes)
+    assert not (tmp_path / "runs").exists()
+    assert PRICES.cost_usd(input_tokens=1_000_000, output_tokens=500_000) == 6.0
+    assert PRICES.cost_usd(input_tokens=0, output_tokens=0) == 0.0
+    with pytest.raises(ValueError):
+        PRICES.cost_usd(input_tokens=-1, output_tokens=0)
 
 
 def test_model_garbage_is_a_typed_engine_failure_not_a_change(tmp_path: Path) -> None:
@@ -242,6 +268,12 @@ def test_cli_never_builds_a_model_engine_without_every_explicit_condition(
     confirmed = {**with_model, "confirm_model_spend": True}
     assert cli._model_engine_factory(SoftwareEngineerSettings.model_validate(confirmed)) is None
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-only-never-used")
+    # A key alone is not enough: prices and a positive cost budget make cost enforceable.
+    assert cli._model_engine_factory(SoftwareEngineerSettings.model_validate(confirmed)) is None
+    priced = {**confirmed, "model_price_input_per_mtok": 2.0, "model_price_output_per_mtok": 8.0}
+    assert cli._model_engine_factory(SoftwareEngineerSettings.model_validate(priced)) is None
+    confirmed = {**priced, "max_cost_usd": 1.5}
+    assert SoftwareEngineerSettings.model_validate(confirmed).price_table is not None
     factory = cli._model_engine_factory(SoftwareEngineerSettings.model_validate(confirmed))
     assert factory is not None
     engine = factory()

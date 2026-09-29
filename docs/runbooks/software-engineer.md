@@ -18,7 +18,8 @@ with a change is open a draft pull request after the owner says SHIP; a human me
 | `NEXUS_SOFTWARE_ENGINEER_OWNER_ID` | `owner` | Human actor id whose decisions are accepted. |
 | `NEXUS_SOFTWARE_ENGINEER_REPOSITORY_URL` | this repository | Operator identity used in PatchForge tasks and SentinelQA locks. |
 | `NEXUS_SOFTWARE_ENGINEER_SANDBOX` | `none` | `local_process` lets recipes run as bounded local processes (ephemeral runners only). |
-| `NEXUS_SOFTWARE_ENGINEER_MODEL`, `_CONFIRM_MODEL_SPEND`, `_MAX_MODEL_CALLS`, `_MAX_OUTPUT_TOKENS` | unset, `false`, `0`, `0` | All four, plus `OPENAI_API_KEY`, are needed before a model recipe can spend money. |
+| `NEXUS_SOFTWARE_ENGINEER_MODEL`, `_CONFIRM_MODEL_SPEND`, `_MAX_MODEL_CALLS`, `_MAX_OUTPUT_TOKENS` | unset, `false`, `0`, `0` | All four, plus `OPENAI_API_KEY`, prices, and a cost budget, are needed before a model recipe can spend money. |
+| `NEXUS_SOFTWARE_ENGINEER_MODEL_PRICE_INPUT_PER_MTOK`, `_MODEL_PRICE_OUTPUT_PER_MTOK`, `_MAX_COST_USD` | unset, unset, `0` | USD per million input / output tokens and the per-cycle cost ceiling. The engineer never guesses a price: without both prices and a positive ceiling, model recipes stay plans. |
 | `NEXUS_SOFTWARE_ENGINEER_STATE_ROOT` | `.nexus/software_engineer` | Cycle records, reports, and recipe runs. |
 | `NEXUS_SOFTWARE_ENGINEER_MEMORY_PATH` | `.nexus/software_engineer/memory.sqlite3` | Private memory. |
 | `NEXUS_SOFTWARE_ENGINEER_MAX_*` | see `config.py` | Runtime, turns, tool calls, model calls, tokens, cost, changed files, diff bytes. |
@@ -56,9 +57,13 @@ bounds each command but has no container isolation.
 Model recipes (`type_annotation`, `micro_bug_fix`, `defensive_check`) additionally need
 `NEXUS_SOFTWARE_ENGINEER_MODEL`, `NEXUS_SOFTWARE_ENGINEER_CONFIRM_MODEL_SPEND=true`,
 positive `NEXUS_SOFTWARE_ENGINEER_MAX_MODEL_CALLS` and `NEXUS_SOFTWARE_ENGINEER_MAX_OUTPUT_TOKENS`,
-and `OPENAI_API_KEY` in the environment (in the workflow: the
-`NEXUS_SOFTWARE_ENGINEER_OPENAI_API_KEY` secret). Missing any of them leaves the candidate
-as an approval-only plan. `preflight` prints `model_recipes_allowed`.
+both `NEXUS_SOFTWARE_ENGINEER_MODEL_PRICE_INPUT_PER_MTOK` and `_OUTPUT_PER_MTOK`, a positive
+`NEXUS_SOFTWARE_ENGINEER_MAX_COST_USD`, and `OPENAI_API_KEY` in the environment (in the
+workflow: the `NEXUS_SOFTWARE_ENGINEER_OPENAI_API_KEY` secret). Missing any of them leaves
+the candidate as an approval-only plan. Every model run's cost (tokens times the owner's
+prices) flows into the cycle's usage; a cycle that crosses `MAX_COST_USD` stops as
+`budget_exhausted`, and the daily report shows tokens and dollars. `preflight` prints
+`prices_set`, `max_cost_usd`, and `model_recipes_allowed`.
 
 ## Issues as signals
 
@@ -229,7 +234,7 @@ sends `rollback_occurred`. An owner can do the same by hand at any time.
 ## Not yet built
 
 Test repair (blocked by SentinelQA-lite's byte-level specification rule); memory
-consolidation; price tables for cost accounting; a hosted deployment of the Slack
-receiver (today it runs wherever the owner starts it). No real GitHub or Slack call has
+consolidation; a hosted deployment of the Slack receiver (today it runs wherever the
+owner starts it). No real GitHub or Slack call has
 been made yet: the publisher, issue source, and Slack receiver are exercised only against
 fakes in tests. See ADR 0012.

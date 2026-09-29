@@ -16,6 +16,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from nexus.atlas.models import Identifier
 from nexus.software_engineer.issues import GITHUB_READ_TOKEN_ENV_DEFAULT
 from nexus.software_engineer.models import CycleBudget, CycleMode
+from nexus.software_engineer.pricing import PriceTable
 from nexus.software_engineer.publish import GITHUB_TOKEN_ENV_DEFAULT
 
 SLACK_WEBHOOK_ENV_DEFAULT = "NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL"
@@ -57,6 +58,12 @@ class SoftwareEngineerSettings(BaseSettings):
 
     model_timeout_seconds: float = Field(default=60, gt=0, le=600)
     model_max_output_tokens: int = Field(default=1024, ge=64, le=32_000)
+
+    model_price_input_per_mtok: float | None = Field(default=None, ge=0, le=10_000)
+    model_price_output_per_mtok: float | None = Field(default=None, ge=0, le=10_000)
+    """USD per million input / output tokens for ``model``. Both are required, together
+    with a positive ``max_cost_usd``, before a model recipe may spend: the engineer never
+    guesses a price, and a cost budget it cannot measure is not a budget."""
 
     max_runtime_seconds: int = Field(default=1800, ge=60, le=86_400)
     max_turns: int = Field(default=40, ge=1, le=1000)
@@ -113,7 +120,13 @@ class SoftwareEngineerSettings(BaseSettings):
     schedule_cron: str = Field(default="17 6 * * *", min_length=9, max_length=100)
     """Documented intent only; the GitHub Actions workflow owns the real schedule."""
 
-    @field_validator("model", "slack_owner_user_id", mode="before")
+    @field_validator(
+        "model",
+        "slack_owner_user_id",
+        "model_price_input_per_mtok",
+        "model_price_output_per_mtok",
+        mode="before",
+    )
     @classmethod
     def empty_model_means_none(cls, value: object) -> object:
         """CI passes unset variables as empty strings; an empty model is no model."""
@@ -137,14 +150,28 @@ class SoftwareEngineerSettings(BaseSettings):
         )
 
     @property
+    def price_table(self) -> PriceTable | None:
+        if self.model_price_input_per_mtok is None or self.model_price_output_per_mtok is None:
+            return None
+        return PriceTable(
+            input_usd_per_mtok=self.model_price_input_per_mtok,
+            output_usd_per_mtok=self.model_price_output_per_mtok,
+        )
+
+    @property
     def model_recipes_allowed(self) -> bool:
-        """True only when every explicit condition for spending on a model holds."""
+        """True only when every explicit condition for spending on a model holds:
+        a model, a confirmed spend, positive call and token budgets, both prices, and a
+        positive cost budget."""
 
         return (
             self.model is not None
             and self.confirm_model_spend
             and self.max_model_calls > 0
             and self.max_output_tokens > 0
+            and self.price_table is not None
+            and self.max_cost_usd is not None
+            and self.max_cost_usd > 0
         )
 
     def require_enabled(self) -> None:

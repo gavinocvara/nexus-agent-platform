@@ -61,7 +61,7 @@ zero disagreements).
 | `python -m nexus.sentinelqa` | 29 scenarios passed, byte-identical |
 | `python -m nexus.software_engineer.evaluation` | 30 judgment scenarios passed, byte-identical |
 | `python -m nexus.lab.scenarios validate` | 5 scenarios |
-| `python -m nexus.software_engineer preflight` | `enabled=False mode=dry_run sandbox=none slack_webhook_present=False github_token_present=False publish_from_cycle=False read_issues=False slack_owner_user_id_set=False` |
+| `python -m nexus.software_engineer preflight` | `enabled=False mode=dry_run prices_set=False max_cost_usd=0.0 model_recipes_allowed=False sandbox=none slack_webhook_present=False github_token_present=False publish_from_cycle=False read_issues=False slack_owner_user_id_set=False` |
 | `docker compose config --quiet` | valid |
 | Compose integration (`RUN_INTEGRATION=1`) | not run locally (no Docker daemon); CI job `compose-integration` |
 | Live model calls / GitHub or Slack traffic from agent code | none, ever (model recipes tested with a scripted client; publisher, issue source, and Slack receiver tested against fakes) |
@@ -86,7 +86,7 @@ zero disagreements).
 | AegisOps live investigator | `NEXUS_AGENT_ENABLED`, `OPENAI_API_KEY` | off | key only in ignored `.env` |
 | PatchForge live run | `NEXUS_PATCHFORGE_LIVE_ENABLED`, `OPENAI_API_KEY`, `--confirm-live` | off | owner authorization required; now SentinelQA-reviewed |
 | Brain v1 | `NEXUS_BRAIN_MODE` | `disabled` | frozen evaluation only |
-| Resident Software Engineer | `NEXUS_SOFTWARE_ENGINEER_ENABLED`, `_MODE`, `_SANDBOX`, `_MODEL`, `_CONFIRM_MODEL_SPEND`, `_MAX_MODEL_CALLS`, `_MAX_OUTPUT_TOKENS`, `_SLACK_WEBHOOK_URL` (secret), `OPENAI_API_KEY` (secret) | off, `dry_run`, `none`, unset, `false`, `0`, `0`, unset, unset | GitHub Actions variables gate the scheduled workflow; `propose` + `local_process` lets mechanical recipes produce verified branches in the uploaded artifact |
+| Resident Software Engineer | `NEXUS_SOFTWARE_ENGINEER_ENABLED`, `_MODE`, `_SANDBOX`, `_MODEL`, `_CONFIRM_MODEL_SPEND`, `_MAX_MODEL_CALLS`, `_MAX_OUTPUT_TOKENS`, `_MODEL_PRICE_INPUT_PER_MTOK`, `_MODEL_PRICE_OUTPUT_PER_MTOK`, `_MAX_COST_USD`, `_SLACK_WEBHOOK_URL` (secret), `OPENAI_API_KEY` (secret) | off, `dry_run`, `none`, unset, `false`, `0`, `0`, unset, unset, `0`, unset, unset | GitHub Actions variables gate the scheduled workflow; `propose` + `local_process` lets mechanical recipes produce verified branches in the uploaded artifact |
 | Resident Software Engineer publishing | `NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN` (local env only; fine-grained, this repo, contents + pull requests write), `_PUBLISH_FROM_CYCLE` | unset, `false` | Used only by the owner-run `publish` command after `decide --verdict ship`; the scheduled workflow never receives it |
 | Resident Software Engineer Slack commands | `NEXUS_SOFTWARE_ENGINEER_SLACK_SIGNING_SECRET` (secret), `_SLACK_OWNER_USER_ID`, `_SLACK_REPLAY_WINDOW_SECONDS` | unset, unset, `300` | `serve-slack` refuses to start without both; decisions only, never publication |
 | Resident Software Engineer issue intake | `NEXUS_SOFTWARE_ENGINEER_READ_ISSUES`, `_MAX_ISSUES`, `_GITHUB_READ_TOKEN` (optional, `issues: read`) | `false`, `20`, unset | The workflow passes `github.token` (permissions `contents: read`, `issues: read`); issues are untrusted signals |
@@ -121,7 +121,8 @@ No credential is present in this container; nothing here needs one.
 | CLI and scheduled workflow (read-only token, variable-gated) | Done |
 | Executor (PatchForge + SentinelQA + gates on an isolated branch) | **Done** for mechanical and model recipes (`executor.py`, `recipes.py`, `sandbox.py`); ships only through a configured publisher |
 | Controlled judgment evaluation (30 scenarios incl. autonomous draft publication and publisher refusal, CI gate) | **Done** (`evaluation.py`) |
-| Model-backed recipes (type annotation, micro bug fix, defensive check) | **Done** (`PatchForgeExecutor.model_engine_factory`), off until model + confirmation + budgets + key |
+| Model-backed recipes (type annotation, micro bug fix, defensive check) | **Done** (`PatchForgeExecutor.model_engine_factory`), off until model + confirmation + budgets + prices + cost ceiling + key |
+| Cost accounting (owner prices, enforced `max_cost_usd`, report shows tokens and dollars) | **Done** (`pricing.py`); fail closed without prices |
 | Owner decisions (`decide`) and publication (`publish`) as draft pull requests | **Done** (`approval.py`, `publish.py`, CLI); tree re-derived from the validated patch, remote blob/tree SHAs verified, never merges |
 | GitHub issue intake (read-only, opt-in, untrusted signals; owner REJECT honoured by the generator) | **Done** (`issues.py`, `inspect.py`) |
 | Slack-delivered owner commands (`serve-slack`: HMAC v0 signature, replay window, owner member id; records through `decide`; never publishes) | **Done** (`slack_commands.py`), hosting is the owner's choice |
@@ -138,7 +139,7 @@ No credential is present in this container; nothing here needs one.
 3. The first owner-authorized model-recipe run (a real type or micro-bug fix on this
    repository) once the owner sets the model, confirmation, budgets, and key.
 4. SentinelQA review of candidate-changed tests so test repair can leave plan-only mode;
-   then memory consolidation and price tables.
+   then memory consolidation.
 
 ## Resume commands
 

@@ -171,6 +171,11 @@ treats tests as the specification. Spending needs a model, an explicit
 `confirm_model_spend`, positive call and token budgets, and the API key in the
 environment; without any one of them the candidate stays an approval-only plan. Model
 calls and tokens are accounted in the cycle's usage; engine call records are hash-only.
+Since 0.25.x the cost budget is enforceable rather than decorative: the owner supplies
+USD prices per million input and output tokens and a positive `max_cost_usd`, the
+executor prices every model run from the client's token counts, the cycle stops as
+`budget_exhausted` when the ceiling is crossed, and without prices a model recipe does not
+run at all (the engineer never guesses a price).
 
 ### Publication as draft pull requests (0.24.0)
 
@@ -229,7 +234,6 @@ chooses; the engineer never reads secrets from Slack messages and never echoes t
   reactions as owner signals stay outside the trust boundary.
 - Test repair and any recipe that must change tests wait for SentinelQA to review
   candidate-added or changed tests; today they remain approval-only plans.
-- Price tables for cost accounting; until then token and call budgets bound spending.
 - A model-backed investigator for candidate refinement behind the existing `ModelClient`
   boundary, with the same one-action-per-turn parsing PatchForge uses.
 - Owner commands arriving through Slack (today: typed `OwnerCommand` via code/CLI).

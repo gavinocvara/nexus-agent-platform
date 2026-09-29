@@ -6,7 +6,13 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 ## Unreleased
 
-Nothing yet.
+- Resident Software Engineer: enforceable cost accounting. `PriceTable` (owner-supplied
+  USD per million input / output tokens, `NEXUS_SOFTWARE_ENGINEER_MODEL_PRICE_INPUT_PER_MTOK`
+  and `_OUTPUT_PER_MTOK`) prices every model run from the client's token counts; the cost
+  flows into the cycle's usage and `MAX_COST_USD` is enforced as `budget_exhausted`.
+  Model recipes are allowed only with both prices and a positive cost ceiling (settings,
+  CLI, and executor all fail closed), the daily report shows tokens and dollars, and the
+  workflow passes the price and ceiling variables through (all default to off).
 
 ## 0.25.0 — Resident Software Engineer owner channels: Slack decisions and issue intake
 

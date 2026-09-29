@@ -11,8 +11,9 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 - NEXUS `0.25.0` (resident Software Engineer Slack decisions and issue intake) is the
   commit containing this file (`git rev-parse HEAD`). Record its CI run in
   `PROJECT_STATE.md` once green.
-- Previous: `bcb04ae` Slack commands, `5bdbfc2` issue intake, `ebca518` Git-date CI fix,
-  `6dea458` evaluation scenarios, 0.24.0 publisher `6210fb4` (its CI run `36557239380`
+- Previous: `bcb04ae` Slack commands (run `36558831526` green), `5bdbfc2` issue intake
+  (run `36558333163` green), `ebca518` Git-date CI fix (run `36558041450` green),
+  `6dea458` evaluation scenarios (failed on the same Git-date issue), 0.24.0 publisher `6210fb4` (its CI run `36557239380`
   failed on the Git 2.55 date format fixed in `ebca518`); `2632597` marker-scanner fix
   (run `36554057081` green); 0.23.0 model recipes `035e0f5` (run `36553508853` green); 0.22.0 evaluation `f10a5ef` (run `36552400237`); 0.21.0
   executor v1 `aad015d` + `fddcf16`; 0.20.0 foundation `c045de8`; 0.19.0 SentinelQA-lite

@@ -145,6 +145,7 @@ def _executor(
         git=GitRunner(state_root / "git-runtime"),
         model_engine_factory=_model_engine_factory(settings),
         publisher=_cycle_publisher(settings),
+        price_table=settings.price_table,
     )
 
 
@@ -194,7 +195,8 @@ def main(argv: list[str] | None = None) -> int:
         slack = bool(os.environ.get(settings.slack_webhook_env, "").strip())
         print(
             f"enabled={settings.enabled} mode={settings.mode.value} owner={settings.owner_id} "
-            f"model={settings.model or 'none'} model_recipes_allowed="
+            f"model={settings.model or 'none'} prices_set={settings.price_table is not None} "
+            f"max_cost_usd={settings.max_cost_usd} model_recipes_allowed="
             f"{settings.model_recipes_allowed} sandbox={settings.sandbox} "
             f"slack_webhook_present={slack} "
             f"github_token_present={_github_token_present(settings)} "

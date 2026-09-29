@@ -52,6 +52,7 @@ from nexus.software_engineer.models import (
     RollbackRecord,
     ValidationGate,
 )
+from nexus.software_engineer.pricing import PriceTable
 from nexus.software_engineer.publish import (
     Publisher,
     PublishError,
@@ -132,6 +133,7 @@ class PatchForgeExecutor:
         lease_duration: timedelta = timedelta(hours=2),
         model_engine_factory: Callable[[], RuntimeEngine] | None = None,
         publisher: Publisher | None = None,
+        price_table: PriceTable | None = None,
     ) -> None:
         self.repo_root = repo_root.resolve()
         self.repository_url = repository_url
@@ -143,6 +145,7 @@ class PatchForgeExecutor:
         self.lease_duration = lease_duration
         self.model_engine_factory = model_engine_factory
         self.publisher = publisher
+        self.price_table = price_table
         self._produced: dict[UUID, _Produced] = {}
         """Builds a model-backed ``RuntimeEngine`` per run; ``None`` keeps model recipes
         as approval-only plans. The factory owns the client, model, and call budget."""
@@ -162,6 +165,18 @@ class PatchForgeExecutor:
                     notes=(
                         f"Category {candidate.category.value} needs a model-backed recipe, and "
                         "no model is configured or confirmed for spending.",
+                    ),
+                )
+            if self.price_table is None:
+                # Fail closed: without prices the cost budget cannot be measured.
+                return ExecutionOutcome(
+                    change=None,
+                    patch=None,
+                    gates=_not_run("no price table is configured"),
+                    notes=(
+                        f"Category {candidate.category.value} needs a model-backed recipe, and "
+                        "no model prices are configured, so the cost budget could not be "
+                        "enforced.",
                     ),
                 )
             recipe = MODEL_RECIPE_FOR_CATEGORY[candidate.category]
@@ -259,10 +274,15 @@ class PatchForgeExecutor:
         )
         completion = runtime.execute()
         model_calls = input_tokens = output_tokens = 0
+        cost_usd: float | None = None
         if isinstance(engine, ModelBackedEngine):
             model_calls = len(engine.records)
             input_tokens = sum(item.input_tokens or 0 for item in engine.records)
             output_tokens = sum(item.output_tokens or 0 for item in engine.records)
+            assert self.price_table is not None
+            cost_usd = self.price_table.cost_usd(
+                input_tokens=input_tokens, output_tokens=output_tokens
+            )
             _write(
                 root / "engine_calls.json",
                 canonical_json(
@@ -299,6 +319,7 @@ class PatchForgeExecutor:
                 model_calls=model_calls,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
+                cost_usd=cost_usd,
             )
         patch = artifacts.read(result.diff.patch_artifact)
         _write(root / "candidate.patch", patch)
@@ -368,6 +389,7 @@ class PatchForgeExecutor:
             model_calls=model_calls,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            cost_usd=cost_usd,
         )
 
     def ship(self, change: ChangeSummary, *, cycle_id: UUID) -> ChangeSummary:

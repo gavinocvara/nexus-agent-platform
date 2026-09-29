@@ -144,7 +144,18 @@ def build_report(
         f"Decision: {record.decision.value}. Reasons: {'; '.join(record.decision_reasons[:3])}.",
         f"Budget: {record.usage.turns}/{record.budget.max_turns} turns, "
         f"{record.usage.tool_calls}/{record.budget.max_tool_calls} tool calls, "
-        f"{record.usage.model_calls}/{record.budget.max_model_calls} model calls.",
+        f"{record.usage.model_calls}/{record.budget.max_model_calls} model calls, "
+        f"{record.usage.input_tokens + record.usage.output_tokens} tokens, "
+        + (
+            f"${record.usage.cost_usd:.4f}"
+            if record.usage.cost_usd is not None
+            else "cost not measured"
+        )
+        + (
+            f"/${record.budget.max_cost_usd:.2f}."
+            if record.budget.max_cost_usd is not None
+            else "."
+        ),
     ]
     text = "\n".join(lines)[:20_000]
     return CycleReport(
