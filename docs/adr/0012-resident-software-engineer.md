@@ -92,6 +92,16 @@ data, prompt injection, test coverage, smaller solution, human review) from
 `DiffFacts` derived from the diff alone. It shares no state with the implementer. A concern
 or an unknown on a critical question blocks autonomous shipping.
 
+Hardened in 0.27.0 after an audit found the review could answer clear on evidence it had
+misread. `diff_facts` attributed a deleted file's lines to whichever file the diff showed
+before it (or to none), so deleting a whole test file or a public module reviewed clear;
+file names are now read only from each section's header. Removed unittest assertions and
+`pytest.raises` blocks count as removed checks, and skip or expected-failure markers added
+to test files count as test weakening. And `requires_human` now holds for any concern,
+not only concerns on critical questions: before, finding a removed public definition,
+added threading, or new global state did not require the owner, while merely lacking
+evidence (an unknown) did.
+
 ### Memory
 
 `EngineerMemoryStore` is a private SQLite namespace `software_engineer.resident` with

@@ -386,7 +386,10 @@ class SelfReview(StrictModel):
 
     @property
     def requires_human(self) -> bool:
-        return self.blocking or any(item.answer is ReviewAnswer.UNKNOWN for item in self.items)
+        """Any concern or unknown, on any question, needs the owner. A concern is the
+        reviewer finding a problem, so it can never weigh less than an unknown."""
+
+        return self.blocking or bool(self.concerns)
 
 
 class PublishedChange(StrictModel):
