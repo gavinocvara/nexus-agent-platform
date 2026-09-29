@@ -27,8 +27,8 @@ from nexus.software_engineer.models import (
 )
 from nexus.software_engineer.trust import detect_instruction_like_text
 
-_ADDED = re.compile(r"^\+(?!\+\+)(.*)$")
-_REMOVED = re.compile(r"^-(?!--)(.*)$")
+_ADDED = re.compile(r"^\+(.*)$")
+_REMOVED = re.compile(r"^-(.*)$")
 _CONCURRENCY = re.compile(r"\b(threading|multiprocessing|concurrent\.futures|create_task|gather)\b")
 _NONDETERMINISM = re.compile(
     r"\b(random\.|time\.time\(|perf_counter\(|datetime\.now\(\)|uuid4\(|os\.urandom)"
@@ -41,7 +41,15 @@ _SECRET_LIKE = re.compile(
     re.IGNORECASE,
 )
 _PUBLIC_DEF = re.compile(r"^\s*(?:async\s+)?(?:def|class)\s+([A-Za-z][A-Za-z0-9_]*)")
-_ASSERT = re.compile(r"^\s*assert\b")
+# Checks a test makes: pytest asserts, unittest assertions, and expected-exception blocks.
+_ASSERT = re.compile(
+    r"^\s*(?:assert\b|self\.(?:assert|fail)\w*\(|(?:with\s+)?pytest\.(?:raises|warns)\b)"
+)
+# Ways to weaken a test by adding lines: skip or expect failure instead of checking.
+_TEST_SKIP = re.compile(
+    r"\bpytest\.(?:skip|xfail|importorskip)\s*\(|@pytest\.mark\.(?:skip|skipif|xfail)\b"
+    r"|\bunittest\.(?:skip|skipIf|skipUnless|expectedFailure)\b|\bself\.skipTest\s*\("
+)
 _TEST_PREFIXES = ("tests",)
 
 
@@ -55,6 +63,8 @@ class DiffFacts(StrictModel):
     test_files_changed: list[RepositoryPath] = Field(default_factory=list, max_length=500)
     source_files_changed: list[RepositoryPath] = Field(default_factory=list, max_length=500)
     assertions_removed: int = Field(default=0, ge=0)
+    skips_added: int = Field(default=0, ge=0)
+    """Skip or expected-failure markers added to test files."""
     public_definitions_removed: list[str] = Field(default_factory=list, max_length=200)
     concurrency_added: bool = False
     nondeterminism_added: bool = False
@@ -71,15 +81,29 @@ def diff_facts(patch: bytes, changed_files: Sequence[str], diff_sha256: str | No
     additions = 0
     deletions = 0
     assertions_removed = 0
+    skips_added = 0
     removed_defs: list[str] = []
     added_defs: set[str] = set()
     concurrency = nondeterminism = global_state = secret_like = instruction_like = False
     current: str | None = None
+    old_path: str | None = None
+    header = True  # a plain unified diff starts with its file names, without "diff --git"
     for line in text.splitlines():
-        if line.startswith("+++ b/"):
-            current = line[6:]
+        # Every file section starts afresh; a deleted file's lines belong to its old path,
+        # never to whichever file the diff showed before it. File names appear only in the
+        # header, so a hunk line such as "--- x" (a removed "-- x") stays content.
+        if line.startswith("diff --git "):
+            current = old_path = None
+            header = True
             continue
-        if line.startswith(("--- ", "diff --git", "index ", "@@")):
+        if line.startswith("@@"):
+            header = False
+            continue
+        if header:
+            if line.startswith("--- "):
+                old_path = line[6:] if line.startswith("--- a/") else None
+            elif line.startswith("+++ "):
+                current = line[6:] if line.startswith("+++ b/") else old_path
             continue
         added = _ADDED.match(line)
         removed = _REMOVED.match(line)
@@ -91,6 +115,8 @@ def diff_facts(patch: bytes, changed_files: Sequence[str], diff_sha256: str | No
             global_state |= bool(_GLOBAL_STATE.search(content))
             secret_like |= bool(_SECRET_LIKE.search(content))
             instruction_like |= bool(detect_instruction_like_text(content))
+            if current is not None and path_matches(current, _TEST_PREFIXES):
+                skips_added += bool(_TEST_SKIP.search(content))
             definition = _PUBLIC_DEF.match(content)
             if definition:
                 added_defs.add(definition.group(1))
@@ -122,6 +148,7 @@ def diff_facts(patch: bytes, changed_files: Sequence[str], diff_sha256: str | No
             :500
         ],
         assertions_removed=assertions_removed,
+        skips_added=skips_added,
         public_definitions_removed=sorted(set(removed_defs) - added_defs)[:200],
         concurrency_added=concurrency,
         nondeterminism_added=nondeterminism,
@@ -187,12 +214,14 @@ class SelfReviewer:
             if risk is RiskLevel.HIGH or facts.sensitive_paths
             else "no invariant-bearing path touched",
         )
+        weakened = facts.assertions_removed or facts.skips_added
         add(
             ReviewQuestion.TEST_WEAKENED,
-            ReviewAnswer.CONCERN if facts.assertions_removed else ReviewAnswer.CLEAR,
-            f"{facts.assertions_removed} assertion line(s) removed"
-            if facts.assertions_removed
-            else "no assertion removed",
+            ReviewAnswer.CONCERN if weakened else ReviewAnswer.CLEAR,
+            f"{facts.assertions_removed} check(s) removed, {facts.skips_added} skip or "
+            "expected-failure marker(s) added"
+            if weakened
+            else "no check removed and no skip added",
         )
         add(
             ReviewQuestion.RACE,

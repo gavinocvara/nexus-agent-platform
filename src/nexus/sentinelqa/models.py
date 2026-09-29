@@ -140,6 +140,15 @@ class SpecificationTree(StrEnum):
     VERIFICATION = "verification"
 
 
+class RunnerCanaryRecord(StrictModel):
+    """The runner-integrity canary SentinelQA planted for one run, and whether it was seen."""
+
+    path: RepositoryPath
+    sha256: Sha256
+    reported_failed: bool
+    """The runner's short summary named the canary as a failed test."""
+
+
 class SpecificationRun(StrictModel):
     """One operator command executed by SentinelQA on a tree it built itself."""
 
@@ -160,12 +169,16 @@ class SpecificationRun(StrictModel):
     output_truncated: bool
     started_at: AwareDatetime
     completed_at: AwareDatetime
+    canary: RunnerCanaryRecord | None = None
+    """Set on runner-integrity probes: the full suite with a planted failing test."""
     attested_by: SentinelIssuer = "sentinelqa.runtime"
 
     @model_validator(mode="after")
     def validate_run(self) -> SpecificationRun:
         if self.completed_at < self.started_at:
             raise ValueError("Specification run completion cannot precede start")
+        if self.canary is not None and self.purpose is not CommandPurpose.FULL_TEST_SUITE:
+            raise ValueError("Only the full-suite command carries a runner-integrity canary")
         if self.status is ExecutionStatus.PASSED and self.exit_code != 0:
             raise ValueError("Passed specification run requires exit code zero")
         if self.status is ExecutionStatus.FAILED and (
@@ -181,6 +194,21 @@ class SpecificationRun(StrictModel):
     @property
     def tree_unchanged(self) -> bool:
         return self.tree_sha256_before == self.tree_sha256_after
+
+    @property
+    def runner_integrity_demonstrated(self) -> bool:
+        """The runner reported the planted canary, and nothing else, as a failure."""
+
+        return (
+            self.canary is not None
+            and self.canary.reported_failed
+            and self.status is ExecutionStatus.FAILED
+            and self.exit_code == 1
+            and self.counts is not None
+            and self.counts.failed == 1
+            and self.counts.errors == 0
+            and self.tree_unchanged
+        )
 
 
 class FindingCategory(StrEnum):
@@ -210,6 +238,7 @@ class SentinelFindingCode(StrEnum):
     TESTS_MISSING = "tests_missing"
     VERIFICATION_TREE_MUTATED = "verification_tree_mutated"
     HARNESS_TAMPERING = "harness_tampering"
+    RUNNER_INTEGRITY_VIOLATED = "runner_integrity_violated"
     INDEPENDENT_VALIDATION_DISAGREES = "independent_validation_disagrees"
     UNRECORDED_CHANGE = "unrecorded_change"
     NO_CODE_CHANGE = "no_code_change"
@@ -219,6 +248,7 @@ class SentinelFindingCode(StrEnum):
     PRISTINE_REFERENCE_UNVERIFIABLE = "pristine_reference_unverifiable"
     EVIDENCE_INCOMPLETE = "evidence_incomplete"
     EXECUTOR_UNAVAILABLE = "executor_unavailable"
+    RUNNER_INTEGRITY_UNPROVEN = "runner_integrity_unproven"
     # Advisory.
     REPRODUCTION_NOT_DEMONSTRATED = "reproduction_not_demonstrated"
     CANDIDATE_TESTS_EXCLUDED = "candidate_tests_excluded"
@@ -237,6 +267,7 @@ FINDING_CATEGORY: dict[SentinelFindingCode, FindingCategory] = {
     SentinelFindingCode.TESTS_MISSING: FindingCategory.REJECTION,
     SentinelFindingCode.VERIFICATION_TREE_MUTATED: FindingCategory.REJECTION,
     SentinelFindingCode.HARNESS_TAMPERING: FindingCategory.REJECTION,
+    SentinelFindingCode.RUNNER_INTEGRITY_VIOLATED: FindingCategory.REJECTION,
     SentinelFindingCode.INDEPENDENT_VALIDATION_DISAGREES: FindingCategory.REJECTION,
     SentinelFindingCode.UNRECORDED_CHANGE: FindingCategory.REJECTION,
     SentinelFindingCode.NO_CODE_CHANGE: FindingCategory.REJECTION,
@@ -245,6 +276,7 @@ FINDING_CATEGORY: dict[SentinelFindingCode, FindingCategory] = {
     SentinelFindingCode.PRISTINE_REFERENCE_UNVERIFIABLE: FindingCategory.UNVERIFIABLE,
     SentinelFindingCode.EVIDENCE_INCOMPLETE: FindingCategory.UNVERIFIABLE,
     SentinelFindingCode.EXECUTOR_UNAVAILABLE: FindingCategory.UNVERIFIABLE,
+    SentinelFindingCode.RUNNER_INTEGRITY_UNPROVEN: FindingCategory.UNVERIFIABLE,
     SentinelFindingCode.REPRODUCTION_NOT_DEMONSTRATED: FindingCategory.ADVISORY,
     SentinelFindingCode.CANDIDATE_TESTS_EXCLUDED: FindingCategory.ADVISORY,
 }
@@ -344,6 +376,7 @@ class SentinelVerdict(StrictModel):
                 item.purpose
                 for item in self.runs
                 if item.tree is SpecificationTree.VERIFICATION
+                and item.canary is None
                 and item.status is ExecutionStatus.PASSED
                 and item.tree_unchanged
                 and item.counts is not None
@@ -355,6 +388,11 @@ class SentinelVerdict(StrictModel):
                 raise ValueError(
                     "A passed verdict requires passing pristine targeted and full runs"
                 )
+            if not any(
+                item.tree is SpecificationTree.VERIFICATION and item.runner_integrity_demonstrated
+                for item in self.runs
+            ):
+                raise ValueError("A passed verdict requires demonstrated runner integrity")
             if self.patch_sha256 is None or self.proposed_head_sha is None:
                 raise ValueError("A passed verdict must name the candidate it verified")
         return self
@@ -417,6 +455,7 @@ __all__ = [
     "SENTINELQA_SCHEMA_VERSION",
     "VERDICT_ARTIFACT_TYPE",
     "FindingCategory",
+    "RunnerCanaryRecord",
     "SentinelFinding",
     "SentinelFindingCode",
     "SentinelVerdict",

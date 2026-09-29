@@ -52,6 +52,7 @@ from nexus.software_engineer.models import (
     RollbackRecord,
     ValidationGate,
 )
+from nexus.software_engineer.policy import REQUIRED_GATES_FOR_AUTONOMOUS_SHIP
 from nexus.software_engineer.pricing import PriceTable
 from nexus.software_engineer.publish import (
     Publisher,
@@ -405,6 +406,13 @@ class PatchForgeExecutor:
         if change.branch is None or change.commit_sha is None or change.publication is not None:
             raise ExecutorError("The change has no unpublished local branch")
         gates = produced.gates
+        # The same evidence the owner path requires before publication, re-checked here so
+        # nothing but a fully validated, independently verified change reaches the publisher.
+        statuses = {item.gate: item.status for item in gates}
+        if not REQUIRED_GATES_FOR_AUTONOMOUS_SHIP <= set(statuses) or any(
+            status is not GateStatus.PASSED for status in statuses.values()
+        ):
+            raise ExecutorError("The change has not passed every gate, including SentinelQA")
         try:
             patch = (produced.root / "candidate.patch").read_bytes()
         except OSError as exc:

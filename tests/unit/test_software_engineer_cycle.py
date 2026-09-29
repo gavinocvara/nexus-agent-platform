@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid5
 
 import pytest
 
@@ -16,6 +16,7 @@ from nexus.patchforge.workspace import GitRunner
 from nexus.software_engineer import __main__ as cli
 from nexus.software_engineer.config import SoftwareEngineerSettings
 from nexus.software_engineer.cycle import (
+    _CYCLE_NAMESPACE,
     EngineeringCycle,
     ExecutionOutcome,
     record_owner_decision,
@@ -27,6 +28,8 @@ from nexus.software_engineer.memory import (
     EpistemicStatus,
     MemoryCategory,
     MemoryQuery,
+    MemorySource,
+    observation,
 )
 from nexus.software_engineer.models import (
     CandidateEstimate,
@@ -347,6 +350,103 @@ def test_failed_gate_abandons_records_a_failed_hypothesis_and_blocks_a_retry(
     assert second.decision is CycleDecision.NO_WORK
     assert second.abandoned_candidate_ids == [UUID(int=77)]
     assert "no unblocked candidate" in second.decision_reasons
+
+
+def _bury(memory: EngineerMemoryStore, status: EpistemicStatus, count: int) -> None:
+    """Newer, higher-ranked memories than the guard under test, as months of cycles leave."""
+
+    for index in range(count):
+        cycle_id = UUID(int=10_000 + index)
+        owner = status is EpistemicStatus.OWNER_DECISION
+        memory.remember(
+            observation(
+                cycle_id=cycle_id,
+                sequence=1,
+                category=MemoryCategory.OWNER_PREFERENCE if owner else MemoryCategory.ROOT_CAUSE,
+                content=(
+                    f"Unrelated proposal {index}: owner decided ship (fine)"
+                    if owner
+                    else f"Unrelated module {index} failed on a missing guard; fixed and verified."
+                ),
+                now=NOW + timedelta(days=1 + index),
+                confidence=100 if owner else 90,
+                tags=["owner", "ship"] if owner else ["validated"],
+                status=status,
+                evidence_sha256=[] if owner else [sha256(str(index).encode()).hexdigest()],
+                owner_decision_id=cycle_id if owner else None,
+                source=MemorySource.OWNER_DECISION if owner else MemorySource.VALIDATION_EVIDENCE,
+            )
+        )
+
+
+def test_a_failed_hypothesis_keeps_blocking_the_retry_under_months_of_newer_facts(
+    tmp_path: Path,
+) -> None:
+    executor = FakeExecutor(failing=["mypy"])
+    generator = OneCandidate(ChangeCategory.DOCUMENTATION_CORRECTION, ["README.md"])
+    cycle, _, memory, _ = _cycle(
+        tmp_path, CycleMode.AUTONOMOUS_LOW_RISK, executor=executor, generator=generator
+    )
+    assert cycle.run()[0].decision is CycleDecision.ABANDON
+    _bury(memory, EpistemicStatus.VALIDATED_FACT, 60)
+    later = NOW + timedelta(days=90)
+    retry, _, _, _ = _cycle(
+        tmp_path / "retry",
+        CycleMode.AUTONOMOUS_LOW_RISK,
+        executor=FakeExecutor(),
+        generator=generator,
+        clock=lambda: later,
+        cycle_id=UUID(int=43),
+    )
+    retry.memory = memory
+    second, _ = retry.run()
+    assert second.decision is CycleDecision.NO_WORK, second.decision_reasons
+    assert second.abandoned_candidate_ids == [UUID(int=77)]
+
+
+def test_an_owner_rejection_is_not_forgotten_under_months_of_newer_decisions(
+    tmp_path: Path,
+) -> None:
+    cycle, _, memory, _ = _cycle(
+        tmp_path, CycleMode.DRY_RUN, artifacts=_failing_artifacts(tmp_path)
+    )
+    record, _ = cycle.run()
+    request = record.approval_request
+    assert request is not None
+    record_owner_decision(
+        memory,
+        request=request,
+        command=OwnerCommand(
+            command_id=UUID(int=500),
+            request_id=request.request_id,
+            verdict=OwnerVerdict.REJECT,
+            issued_by=ActorIdentity(actor_type=ActorType.HUMAN, actor_id="owner"),
+            channel="cli",
+            reason="Not worth the churn.",
+            issued_at=NOW,
+        ),
+        owner_id="owner",
+        now=NOW,
+    )
+    _bury(memory, EpistemicStatus.OWNER_DECISION, 60)
+    later = NOW + timedelta(days=90)
+    (tmp_path / "again").mkdir()
+    again, _, _, _ = _cycle(
+        tmp_path / "again",
+        CycleMode.DRY_RUN,
+        artifacts=_failing_artifacts(tmp_path / "again"),
+        clock=lambda: later,
+        cycle_id=UUID(int=44),
+    )
+    again.memory = memory
+    second, _ = again.run()
+    assert second.approval_request is None, "the rejected ask came back"
+    assert second.decision is CycleDecision.NO_WORK, second.decision_reasons
+    rejection = uuid5(_CYCLE_NAMESPACE, f"{UUID(int=500)}:owner-decision")
+    blocked = [item for item in second.candidates if item.blockers]
+    assert blocked and all(
+        any(str(rejection) in blocker for blocker in item.blockers) for item in blocked
+    ), "the blocker must name the owner decision that decided it"
 
 
 @pytest.mark.parametrize(

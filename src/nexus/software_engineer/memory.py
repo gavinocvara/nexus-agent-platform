@@ -291,6 +291,12 @@ class EngineerMemoryStore:
     def retrieve(self, query: MemoryQuery) -> list[EngineerMemory]:
         """Active, currently valid records; owner decisions and validated facts first."""
 
+        return self.retrieve_all(query)[: query.limit]
+
+    def retrieve_all(self, query: MemoryQuery) -> list[EngineerMemory]:
+        """``retrieve`` without the window, for records that must never fall out of view
+        because newer, higher-ranked ones outnumber them (``query.limit`` is ignored)."""
+
         records = [
             item
             for item in self.load_all()
@@ -316,7 +322,7 @@ class EngineerMemoryStore:
                 str(item.memory_id),
             )
         )
-        return records[: query.limit]
+        return records
 
     def load_all(self) -> list[EngineerMemory]:
         self.initialize()

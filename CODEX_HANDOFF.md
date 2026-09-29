@@ -8,75 +8,98 @@ Git and `CHANGELOG.md`, rules in `AGENTS.md`, the long-form resume state in
 
 | Item | Value |
 | --- | --- |
-| Version | `0.26.0` (`pyproject.toml`) |
-| HEAD | the commit containing this file; `git rev-parse HEAD` must equal `git rev-parse origin/main` |
+| Version | `0.27.0` (`pyproject.toml`) |
+| Branch | `claude/confident-faraday-1drq98` (session-designated; agents never push to `main`) |
+| HEAD | the commit containing this file; must equal `origin/claude/confident-faraday-1drq98` |
+| origin/main | `bcae514` (0.26.0), unchanged; this branch is a fast-forward of it |
 | Working tree | clean at the checkpoint (`git status --short` empty) |
-| Branch | `main` (direct pushes by the owner's agent sessions; no PR flow for this repo) |
+| CI | not run: `ci.yml` runs on pull requests and pushes to `main` only. The local gate below is the evidence until the owner opens a PR or fast-forwards `main`. |
 
-Commits created in this run, oldest first: `2632597` marker scanner fix, `6210fb4` 0.24.0
-publisher, `6dea458` publication scenarios, `ebca518` Git-date CI fix, `5bdbfc2` issue
-intake, `bcb04ae` Slack commands, `cd46730` 0.25.0, `5f79cfe` cost accounting, `8622b81`
-docs, `9f4d70b` SentinelQA harness boundary, `2cfd87e` brain, `36873a1` run lease, and the
-0.26.0 checkpoint commit containing this file. CI (`validate` + `compose-integration`) was
-green for every one of them observed before the last push (`6210fb4` and `6dea458`
-failed once on a Git 2.55 date format, fixed in `ebca518`).
+Commits in this run, oldest first: `d2d55ec` SentinelQA runner-integrity canary,
+`004d43c` autonomy requires SentinelQA + governance docs and eval config governing,
+`7358ff1` owner rejections and failed hypotheses never age out of memory view, `af69cfa`
+Slack replay ledger, `0f4b97a` publisher verifies commit/ref/PR head, `08986c6`
+self-review fixes, `89c3370` race-safe run lease, `b4afb04` `exercise-github` + 204 fix,
+`55ea114` blockers cite memory ids, and the 0.27.0 checkpoint commit containing this file.
+
+## What changed in 0.27.0 (details: `CHANGELOG.md`; each fix has a test that failed first)
+
+- SentinelQA runner-integrity canary: real-pytest attacks (forged summary at exit, patched
+  `_pytest` reports, swallowed failures) passed 0.26.0; now `runner_integrity_violated` /
+  `runner_integrity_unproven`, and the verdict contract refuses a pass without the probe.
+- Autonomy requires `sentinel_review`; governance docs and evaluation config are governing.
+- Owner rejections and failed hypotheses no longer age out of the memory window.
+- Self-review: deleted-file attribution, unittest/raises/skip detection, any concern needs
+  the owner. Run lease: atomic creation, race-safe recovery. Slack: replay ledger.
+- Publisher: commit/ref/PR-head verification, bodiless-204 fix, `exercise-github`.
+
+## Validation (0.27.0 local gate, Linux, Python 3.12.3)
+
+- `uv pip check` compatible; Ruff format and lint clean; strict mypy clean (127 files).
+- pytest: **934 passed, 23 deselected** in 4m28s (0.26.0: 898).
+- E2E gate passed; Benchmark v0 gate passed (`reference` 5/5 passed, `fix_and_edit_tests`
+  5/5 failed, zero inconclusive, zero disagreements); SentinelQA gate **35/35**; engineer
+  evaluation gate 30/30 (all byte-identical replays); `nexus.lab.scenarios validate` 5;
+  `docker compose config --quiet` valid; preflight all-off defaults.
+- Secret scan of tracked files: no file has a credential-shaped line the 0.26.0 base did
+  not already have (deliberate test fixtures and env-variable references only); no
+  `.env`, `.nexus/`, sqlite, patch, or bundle file tracked.
+- Not run locally: Compose integration (CI job `compose-integration`), and CI itself
+  (see Checkpoint).
 
 ## Subsystem status
 
 | Subsystem | Status |
 | --- | --- |
-| SentinelQA-lite | Complete. Specification lock from Git objects; fresh pristine/candidate trees; verification tree with the pristine specification restored; count rules; cross-check; **harness boundary** (shadowing modules are evaluation config, `harness_tampering` scans added source lines); 32 adversarial scenarios replayed byte-identically; Benchmark v0 agreement; gates Atlas approval. Known blind spot: in-process test manipulation that leaves counts, outcomes, and all scanned markers intact. |
-| Persistent brain | Complete for this scope. Private SQLite namespace `software_engineer.resident`; categories incl. root cause and recurring pattern; OBSERVATION / INFERENCE / VALIDATED_FACT / OWNER_DECISION / FAILED_HYPOTHESIS; provenance, validity, versions, supersession, dispute, dedup; trusted-only retrieval; typed `KnowledgeExport`; learns root causes (validated), recurrence and overconfidence (observations); never consulted by policy or risk. |
-| Daily scheduler/runtime | Complete. Workflow `.github/workflows/software-engineer.yml` (cron + dispatch, gated by repository variable, read-only token, concurrency group, artifact upload); local `run.lock` lease with interrupted-run recovery; budgets (runtime, turns, tool calls, model calls, tokens, cost); `no_work` is a normal outcome; record + report persisted on every path. **Production scheduling is not enabled** (variable unset). |
-| Slack | Notifier (webhook from env) and `serve-slack` owner commands (HMAC v0, replay window, owner member id; decisions only). Fake-backed tests only; no real Slack call ever made. |
-| GitHub publisher | `decide` + `publish` open a **draft PR only** after an owner SHIP, tree re-derived from the validated patch, remote blob/tree SHAs verified, never merges. Fake-backed tests only; no real publication ever made. Read-only issue intake is opt-in. |
-| Autonomous shipping | Possible only with `PUBLISH_FROM_CYCLE=true` + `autonomous_low_risk` + token, LOW risk, every gate passed, clean self-review; still a draft PR. Off by default; the workflow never receives the token. |
-| Model spend | Off. Needs model, confirmation, positive call/token budgets, both prices, positive `MAX_COST_USD`, and the key; no live call ever made. |
+| SentinelQA-lite | Complete + runner-integrity canary. Residual risk (recorded in ADR 0011): canary-aware code, test-detecting behavior, tests fed by production data. Candidate-changed tests stay rejected; test repair stays an owner decision. |
+| Resident engineer | Ship policy, risk, self-review, memory guards, lease hardened as above. Effective autonomous class is **empty in production**: every recipe (ruff format, ruff `--fix`, model recipes) edits `src/`, which is MEDIUM, so every real change needs the owner; only non-governing Markdown outside `src/`/`lab/` is LOW, and no recipe produces it. Widening that is an owner decision, not built. Autonomous path is still draft-PR-only and off by default. |
+| Persistent brain | Unchanged architecture; guard memories read in full; knowledge never authority. |
+| Scheduler | Unchanged, disabled (repository variable unset); read-only token; reversible by unsetting. |
+| Slack | Receiver hardened; no real Slack call ever made. |
+| GitHub publisher | Hardened; no real GitHub call ever made; `exercise-github` prepared, not run. |
+| Model spend | Off; no live call ever made. |
 
-## Validation (0.26.0 local gate, Linux, Python 3.12.3)
+## Known operational risks
 
-- `uv pip check` compatible; Ruff format/lint clean; strict mypy clean (125 files).
-- pytest: 898 passed, 23 deselected (0.25.0: 876; 0.24.0: 864).
-- E2E gate 23/23, Benchmark v0 gate passed, SentinelQA gate 32/32, engineer evaluation
-  gate 30/30 (all byte-identical replays), `nexus.lab.scenarios validate` 5, Compose
-  config valid, secret scan of tracked files clean (no credential shapes in tracked files; no .env, .nexus, sqlite, or patch files tracked), preflight all-off defaults.
-- Not run locally: Compose integration (CI job `compose-integration` is the gate).
+- A real `propose` cycle on this repository runs the full test suite about seven times
+  (PatchForge targeted, which is `tests/`, and full; SentinelQA pristine and
+  verification targeted and full; the runner-integrity probe). With the default
+  `NEXUS_SOFTWARE_ENGINEER_MAX_RUNTIME_SECONDS=1800` and the workflow's 45-minute timeout
+  it may end `budget_exhausted` (blocked, recorded, nothing shipped). Raise both, or
+  narrow the targeted test paths, before the first real propose cycle.
+- SentinelQA residual risk: canary-aware or test-detecting candidate code (ADR 0011).
 
-## Known risks and unfinished work
+## Owner decisions required (nothing below has been done)
 
-- Publisher, issue source, and Slack receiver are proven only against fakes; first real
-  runs are owner steps and may surface API differences.
-- SentinelQA cannot see in-process manipulation without the scanned markers; the Docker
-  runner proof and out-of-process oracles are deferred.
-- Test modules are not strict-mypy-checked in CI (pre-existing noise).
-- Remote branch `maintenance/repo-hygiene-claude` is unmerged; owner decides.
-- Deferred by design: test repair (SentinelQA treats tests as the specification), memory
-  consolidation beyond the deterministic rules above, hosted Slack receiver.
+1. Fast-forward `main` to this branch (or open a PR) so CI (`validate`,
+   `compose-integration`) runs on 0.27.0.
+2. Authorize the first live GitHub exercise: `exercise-github --confirm-live` with a
+   fine-grained token (this repository; Contents + Pull requests read/write). Runbook
+   "First live exercises".
+3. Authorize hosting `serve-slack` and the six-step Slack exercise.
+4. Remote branch `maintenance/repo-hygiene-claude` is unmerged; owner decides.
 
 ## Exact next task
 
-Owner steps, no code: (1) run one `propose` + `local_process` cycle, `decide --verdict
-ship`, `publish` with a fine-grained token, verify the draft PR; (2) host `serve-slack`
-if Slack decisions are wanted; (3) set `READ_ISSUES=true` if issues should feed the daily
-report. Engineering next, only with owner authorization: SentinelQA review of
-candidate-changed tests (an ADR change), then the first owner-authorized model-recipe
-run. The live PatchForge run remains unexecuted and owner-authorized only.
+Owner steps 1-3 above. Engineering next, only if the owner wants it: out-of-process
+execution for SentinelQA (the only full answer to canary-aware code; see ADR 0011
+"alternatives"), then a Docker proof of the runner. Files: `src/nexus/sentinelqa/
+{verifier,executor,canary}.py`, `tests/unit/test_sentinelqa_runner_integrity.py`.
 
 ## Files that matter
 
-- SentinelQA: `src/nexus/sentinelqa/{models,lock,verifier,tamper,catalog,harness}.py`;
-  tests `tests/unit/test_sentinelqa_*.py`.
-- Engineer: `src/nexus/software_engineer/{config,models,cycle,runtime,memory,policy,risk,
-  trust,inspect,issues,executor,recipes,sandbox,pricing,publish,approval,slack_commands,
-  notify,report,evaluation,__main__}.py`; tests `tests/unit/test_software_engineer_*.py`.
-- Docs: ADR 0011, ADR 0012, `docs/runbooks/{sentinelqa,software-engineer}.md`,
-  `PROJECT_STATE.md`.
+- SentinelQA: `src/nexus/sentinelqa/{models,lock,verifier,executor,canary,tamper,catalog,
+  harness}.py`; tests `tests/unit/test_sentinelqa_*.py`.
+- Engineer: `src/nexus/software_engineer/{policy,risk,review,memory,cycle,runtime,inspect,
+  executor,publish,exercise,slack_commands,approval,__main__}.py`; tests
+  `tests/unit/test_software_engineer_*.py`.
+- Docs: ADR 0011, ADR 0012, `docs/runbooks/{sentinelqa,software-engineer}.md`.
 
 ## Resume and validation commands
 
 ```bash
-uv venv --python 3.12 <outside repo> && uv pip install -e ".[dev]"   # or pip install -e ".[dev]"
-git rev-parse HEAD origin/main && git status --short
+uv venv --python 3.12 <outside repo> && uv pip install -e ".[dev]"
+git rev-parse HEAD @{upstream} && git status --short
 python -m ruff format --check . && python -m ruff check . && python -m mypy
 python -m pytest -q
 python -m nexus.patchforge.e2e_catalog && python -m nexus.patchforge.benchmark_corpus
@@ -88,17 +111,14 @@ python -m nexus.software_engineer preflight
 ## Invariants that must not be violated
 
 - Agents act only through narrow typed tools; no unrestricted shell, filesystem, network,
-  Git, database, or credential access. Model output is narrative; evidence comes only
-  from runtime code; never fabricate tests, metrics, or CI results.
-- PatchForge proposes; SentinelQA verifies against the pristine specification; Atlas
-  records; a human approves and merges. Draft PRs only; no auto-merge; silence is never
-  approval; SHIP / REVISE / REJECT come only from the configured human owner.
-- Memory carries knowledge, never authority: nothing in memory may change shipping
-  permissions, approval thresholds, security policy, tool authorization, spending limits,
-  autonomy rules, or destructive-action policy. Policy and risk never import memory.
-- Each agent's memory namespace is private; knowledge leaves only as `KnowledgeExport`.
-- Governing paths, the specification lock, the SentinelQA finding vocabulary, budgets,
-  and publication checks change only through an ADR and owner review.
-- Fail closed everywhere; secrets live only in the environment or CI secrets; never
-  commit `.env`, `.nexus/`, model outputs, patches, or bundles. Frozen Phase 5/6/7
-  evidence stays untouched.
+  Git, database, or credential access. Evidence comes only from runtime code.
+- The candidate never controls what correctness means: the pristine specification is
+  locked by Git objects; candidate test changes are rejected; the runner must report the
+  planted canary before any pass.
+- PatchForge proposes; SentinelQA verifies; a human approves and merges. Draft PRs only;
+  no auto-merge; silence is never approval; autonomy requires `sentinel_review`.
+- Memory carries knowledge, never authority; policy and risk never import memory.
+- Governing paths, the lock, the SentinelQA finding vocabulary, budgets, and publication
+  checks change only through an ADR and owner review.
+- Fail closed; secrets only in the environment; never commit `.env`, `.nexus/`, model
+  outputs, patches, bundles. Frozen Phase 5/6/7 evidence untouched.

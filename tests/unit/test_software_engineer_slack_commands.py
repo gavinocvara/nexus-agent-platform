@@ -222,9 +222,11 @@ def test_only_the_configured_owner_records_a_decision_once(
     )
     assert all(SECRET not in item.content for item in memories)
 
-    # A replay of the very same signed request cannot decide twice.
+    # A replay of the very same signed request is refused before it can mean anything.
     replay = handler.handle(_signed(body), body)
-    assert replay.status == 200 and "already_decided" in replay.text
+    assert replay.status == 401 and "replayed" in replay.text
+    again = _body("ship latest the plan is right, again")
+    assert "already_decided" in handler.handle(_signed(again), again).text
     unknown = _body(f"reject {UUID(int=1)} nope")
     assert "cycle_not_found" in handler.handle(_signed(unknown), unknown).text
 
@@ -236,7 +238,72 @@ def test_only_the_configured_owner_records_a_decision_once(
         slack_owner_user_id=None,
         clock=lambda: NOW,
     )
-    assert "not_owner" in nobody.handle(_signed(body), body).text
+    unowned = _body("ship latest from anyone")
+    assert "not_owner" in nobody.handle(_signed(unowned), unowned).text
+
+
+def _next_cycle(tmp_path: Path, state_root: Path, memory: EngineerMemoryStore) -> UUID:
+    """A newer cycle in the same state root, whose request becomes ``latest``."""
+
+    cycle_id = UUID(int=990)
+    settings = SoftwareEngineerSettings(  # type: ignore[call-arg]
+        _env_file=None,
+        enabled=True,
+        mode=CycleMode.DRY_RUN,
+        state_root=state_root,
+        memory_path=state_root / "memory.sqlite3",
+    )
+    later = NOW + timedelta(minutes=1)
+    record, _ = EngineeringCycle(
+        settings=settings,
+        inspector=RepositoryInspector(
+            tmp_path / "repo", git=GitRunner(tmp_path / "git-2"), clock=lambda: later
+        ),
+        memory=memory,
+        notifier=Notifier(RecordingTransport(), clock=lambda: later),
+        generator=_OnePlan(),
+        clock=lambda: later,
+        cycle_id=cycle_id,
+    ).run()
+    assert record.approval_request is not None
+    return record.approval_request.request_id
+
+
+def test_a_replayed_latest_command_never_decides_a_newer_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state_root, memory, owner_id = _state_with_request(tmp_path)
+    monkeypatch.setenv("NEXUS_SOFTWARE_ENGINEER_SLACK_SIGNING_SECRET", SECRET)
+    body = _body("reject latest not worth the churn")
+    headers = _signed(body)
+    first = _handler(state_root, memory, owner_id).handle(headers, body)
+    assert first.decision is not None and first.decision.verdict is OwnerVerdict.REJECT
+    newer = _next_cycle(tmp_path, state_root, memory)
+    assert newer != first.decision.request_id
+
+    # Captured and replayed inside the freshness window, after the receiver restarted.
+    later = NOW + timedelta(minutes=2)
+    restarted = SlackCommandHandler(
+        state_root=state_root,
+        memory=memory,
+        owner_id=owner_id,
+        slack_owner_user_id=OWNER_SLACK_ID,
+        clock=lambda: later,
+    )
+    replay = restarted.handle(headers, body)
+    assert replay.status == 401 and "replayed" in replay.text and replay.decision is None
+    assert load_owner_decision(state_root, newer) is None
+
+    # A fresh command from the owner still decides the newer request.
+    fresh = _body("ship latest this one is right")
+    decided = restarted.handle(_signed(fresh, at=later), fresh)
+    assert decided.decision is not None and decided.decision.request_id == newer
+
+    # A ledger that cannot be read cannot prove a request is new: refuse, never reset.
+    (state_root / "slack" / "replay_ledger.json").write_text("not json", encoding="utf-8")
+    other = _body("revise latest more tests")
+    broken = restarted.handle(_signed(other, at=later), other)
+    assert broken.status == 503 and "replay_ledger_unreadable" in broken.text
 
 
 def test_fastapi_app_relays_replies_and_statuses(
@@ -257,6 +324,10 @@ def test_fastapi_app_relays_replies_and_statuses(
         assert bad.status_code == 401 and "signature_invalid" in bad.json()["text"]
         unsigned = client.post("/slack/commands", content=body)
         assert unsigned.status_code == 401 and "signature_missing" in unsigned.json()["text"]
+        # Oversized bodies are refused before they are buffered or verified.
+        huge = b"text=" + b"a" * 30_000
+        refused = client.post("/slack/commands", content=huge, headers=_signed(huge))
+        assert refused.status_code == 413 and "body_too_large" in refused.json()["text"]
 
 
 def test_cli_serve_refuses_without_owner_id_and_secret(

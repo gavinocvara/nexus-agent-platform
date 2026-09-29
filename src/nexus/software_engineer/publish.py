@@ -107,10 +107,19 @@ class PublishSubmission:
     cycle_id: UUID
     diff_sha256: str
     published_by: ActorIdentity
-    authority: Literal["owner_decision", "autonomous_low_risk"]
+    authority: Literal["owner_decision", "autonomous_low_risk", "integration_exercise"]
     request_id: UUID | None = None
     decision_id: UUID | None = None
     allow_moved_base: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class PullRequestState:
+    state: str
+    draft: bool
+    merged: bool
+    auto_merge: bool
+    head_sha: str
 
 
 class Publisher(Protocol):
@@ -530,7 +539,12 @@ class GitHubDraftPullRequestPublisher:
                 },
             )
             remote_commit = _string(commit, "sha", "git/commits")
-            ref_status, _ = self._request(
+            # The remote SHA may differ from the local one (GitHub can sign API commits), so
+            # the commit is verified by what it contains: exactly the verified tree, on
+            # exactly the validated base, with the message and identities that were sent.
+            if not _commit_matches(commit, bundle):
+                raise PublishError("commit_mismatch")
+            ref_status, ref = self._request(
                 session,
                 "POST",
                 f"/repos/{self.repository}/git/refs",
@@ -540,6 +554,8 @@ class GitHubDraftPullRequestPublisher:
             if ref_status == 422:
                 raise PublishError("branch_exists")
             session.created_ref = submission.branch
+            if _string(_mapping(ref, "object", "git/refs"), "sha", "git/refs") != remote_commit:
+                raise PublishError("ref_mismatch")
             pull_status, pull = self._request(
                 session,
                 "POST",
@@ -559,6 +575,18 @@ class GitHubDraftPullRequestPublisher:
                 raise PublishError("draft_unsupported_or_rejected")
             number = _integer(pull, "number", "pulls")
             url = _string(pull, "html_url", "pulls")
+            head_sha = _string(_mapping(pull, "head", "pulls"), "sha", "pulls")
+            pull_base = _string(_mapping(pull, "base", "pulls"), "ref", "pulls")
+            if head_sha != remote_commit or pull_base != base_branch:
+                self._request(
+                    session,
+                    "PATCH",
+                    f"/repos/{self.repository}/pulls/{number}",
+                    json={"state": "closed"},
+                    ok=(200,),
+                )
+                self._delete_ref(session)
+                raise PublishError("pull_request_mismatch")
             if pull.get("draft") is not True:
                 self._request(
                     session,
@@ -593,6 +621,40 @@ class GitHubDraftPullRequestPublisher:
                 published_by=submission.published_by,
                 published_at=self.clock(),
             )
+
+    # -- read-only inspection (used by the owner-run integration exercise) -----------------
+
+    def default_branch_head(self) -> tuple[str, str]:
+        """``(default branch, head SHA)`` of the repository, read-only."""
+
+        with self._session() as session:
+            repo = self._get(session, f"/repos/{self.repository}")
+            branch = _string(repo, "default_branch", "repos")
+            ref = self._get(session, f"/repos/{self.repository}/git/ref/heads/{branch}")
+            return branch, _string(_mapping(ref, "object", "git/ref"), "sha", "git/ref")
+
+    def pull_request_state(self, number: int) -> PullRequestState:
+        with self._session() as session:
+            pull = self._get(session, f"/repos/{self.repository}/pulls/{number}")
+            merged = pull.get("merged")
+            draft = pull.get("draft")
+            return PullRequestState(
+                state=_string(pull, "state", "pulls"),
+                draft=draft is True,
+                merged=merged is True,
+                auto_merge=pull.get("auto_merge") is not None,
+                head_sha=_string(_mapping(pull, "head", "pulls"), "sha", "pulls"),
+            )
+
+    def branch_exists(self, branch: str) -> bool:
+        with self._session() as session:
+            status, _ = self._request(
+                session,
+                "GET",
+                f"/repos/{self.repository}/git/ref/heads/{branch}",
+                ok=(200, 404),
+            )
+            return status == 200
 
     def withdraw(self, published: PublishedChange, *, reason: str) -> None:
         """Close the draft pull request and delete its branch. Nothing else is touched."""
@@ -653,7 +715,8 @@ class GitHubDraftPullRequestPublisher:
             raise PublishError("transport_error", f"{stem} {type(exc).__name__}") from exc
         code = response.status_code
         if code in ok:
-            if code == 404:
+            # 204 No Content (a deleted reference) and an expected 404 carry no JSON body.
+            if code in (204, 404):
                 return code, {}
             try:
                 payload = response.json()
@@ -699,6 +762,41 @@ class _SessionContext:
                 self._publisher._delete_ref(self._session)
         finally:
             self._session.client.close()
+
+
+def _commit_matches(commit: Mapping[str, object], bundle: ChangeBundle) -> bool:
+    """The created commit carries the verified tree, the validated base as its only parent,
+    and the message, author, committer, and date that were sent."""
+
+    tree = commit.get("tree")
+    parents = commit.get("parents")
+    message = commit.get("message")
+    if not isinstance(tree, Mapping) or tree.get("sha") != bundle.tree_sha:
+        return False
+    if not isinstance(parents, list) or [
+        item.get("sha") if isinstance(item, Mapping) else None for item in parents
+    ] != [bundle.base_sha]:
+        return False
+    if not isinstance(message, str) or message.rstrip("\n") != bundle.message.rstrip("\n"):
+        return False
+    expected = datetime.fromisoformat(bundle.authored_at)
+    for role in ("author", "committer"):
+        person = commit.get(role)
+        if not isinstance(person, Mapping):
+            return False
+        date = person.get("date")
+        if (
+            person.get("name") != bundle.author_name
+            or person.get("email") != bundle.author_email
+            or not isinstance(date, str)
+        ):
+            return False
+        try:
+            if datetime.fromisoformat(normalize_iso8601(date)) != expected:
+                return False
+        except PublishError:
+            return False
+    return True
 
 
 def agent_publisher_identity() -> ActorIdentity:
@@ -748,6 +846,7 @@ __all__ = [
     "PublishError",
     "PublishSubmission",
     "Publisher",
+    "PullRequestState",
     "RecordingPublisher",
     "agent_publisher_identity",
     "bundle_from_branch",

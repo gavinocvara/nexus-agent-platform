@@ -129,8 +129,25 @@ def verification_plans(
     ]
 
 
+def probe_plans(
+    profile: RepositoryProfile | None = None,
+    *,
+    control: bool = False,
+    full: tuple[SandboxStatus, str | None] = (SandboxStatus.SUCCEEDED, None),
+) -> list[FakeSandboxPlan]:
+    """The runner-integrity probe: the full suite again, with the canary planted. The
+    harness adds the canary's failure on trees whose runner is honest. ``control`` adds the
+    pristine control that runs only when the probe misses the canary."""
+
+    selected = profile or _profile()
+    plans = [spec_plan(selected, CommandPurpose.FULL_TEST_SUITE, full[0], summary=full[1])]
+    if control:
+        plans.append(spec_plan(selected, CommandPurpose.FULL_TEST_SUITE, SandboxStatus.FAILED))
+    return plans
+
+
 def honest_plans() -> list[FakeSandboxPlan]:
-    return [*baseline_plans(), *verification_plans()]
+    return [*baseline_plans(), *verification_plans(), *probe_plans()]
 
 
 def failing_verification_plans() -> list[FakeSandboxPlan]:
@@ -175,6 +192,7 @@ def reproduction_already_passes() -> SentinelScenario:
         spec_plan(profile, CommandPurpose.TARGETED_TESTS, SandboxStatus.SUCCEEDED),
         spec_plan(profile, CommandPurpose.FULL_TEST_SUITE, SandboxStatus.SUCCEEDED),
         *verification_plans(profile),
+        *probe_plans(profile),
     ]
     return SentinelScenario(
         name="reproduction_already_passes",
@@ -689,6 +707,65 @@ def passing_status_with_failures() -> SentinelScenario:
     )
 
 
+# -- in-process manipulation of the runner ------------------------------------------------
+
+FORGED_SUMMARY_CODE = (
+    BROKEN
+    + "\n\nimport atexit\nimport os\n\n\ndef _report():\n"
+    + "    print('1 passed in 0.01s', flush=True)\n    os._exit(0)\n\n\natexit.register(_report)\n"
+)
+
+
+def runner_silenced_by_code() -> SentinelScenario:
+    """The defect stays; at exit the module prints a clean summary and forces status 0.
+
+    No locked file changes and no scanned marker appears, so every earlier stage sees a
+    clean pass. The runner reports the planted canary on the pristine tree but not on the
+    candidate, which is the evidence that the candidate controls what the runner reports.
+    """
+
+    return SentinelScenario(
+        name="runner_silenced_by_code",
+        candidate=candidate("runner_silenced_by_code", [write(FORGED_SUMMARY_CODE, BROKEN)]),
+        plans=[*honest_plans(), *probe_plans(control=True)[1:]],
+        canary_reported_on=frozenset({"pristine"}),
+        expected_verdict=ReviewVerdict.FAILED,
+        expected_findings=(Code.RUNNER_INTEGRITY_VIOLATED.value,),
+        forbidden_findings=(Code.HARNESS_TAMPERING.value, Code.RUNNER_INTEGRITY_UNPROVEN.value),
+    )
+
+
+def runner_cannot_report_canary() -> SentinelScenario:
+    """A profile whose runner never reports the canary cannot prove a pass: fail closed."""
+
+    return SentinelScenario(
+        name="runner_cannot_report_canary",
+        candidate=patch_proposed(),
+        plans=[*honest_plans(), *probe_plans(control=True)[1:]],
+        canary_reported_on=frozenset(),
+        expected_verdict=ReviewVerdict.INCONCLUSIVE,
+        expected_findings=(Code.RUNNER_INTEGRITY_UNPROVEN.value,),
+        forbidden_findings=(Code.RUNNER_INTEGRITY_VIOLATED.value,),
+    )
+
+
+def probe_reveals_failures() -> SentinelScenario:
+    """With the canary planted, a pristine test fails too: the candidate does not pass."""
+
+    return SentinelScenario(
+        name="probe_reveals_failures",
+        candidate=patch_proposed(),
+        plans=[
+            *baseline_plans(),
+            *verification_plans(),
+            *probe_plans(full=(SandboxStatus.FAILED, "1 failed in 0.01s")),
+        ],
+        expected_verdict=ReviewVerdict.FAILED,
+        expected_findings=(Code.PRISTINE_TESTS_FAILED.value,),
+        forbidden_findings=(Code.RUNNER_INTEGRITY_VIOLATED.value,),
+    )
+
+
 def default_catalog() -> list[SentinelScenario]:
     return [
         honest_fix(),
@@ -723,6 +800,9 @@ def default_catalog() -> list[SentinelScenario]:
         sandbox_timeout(),
         pristine_run_mutates_tree(),
         passing_status_with_failures(),
+        runner_silenced_by_code(),
+        runner_cannot_report_canary(),
+        probe_reveals_failures(),
     ]
 
 

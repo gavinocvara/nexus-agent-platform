@@ -51,6 +51,7 @@ from nexus.patchforge.workspace import (
     GitRunner,
     WorkspaceError,
 )
+from nexus.sentinelqa.canary import RunnerCanary, runner_canary
 from nexus.sentinelqa.executor import SpecificationExecutionError, SpecificationRunner
 from nexus.sentinelqa.lock import (
     SpecificationLockError,
@@ -176,6 +177,10 @@ class SentinelQAVerifier:
                 )
             verification = self._verification_runs(runner, candidate, baseline, findings)
             agree = self._cross_check(result, verification, integrity, findings)
+            if not any(
+                FINDING_CATEGORY[item.code] is not FindingCategory.ADVISORY for item in findings
+            ):
+                self._check_runner_integrity(runner, candidate, trees["pristine"], findings)
         except _Stop:
             pass
         return self._verdict(result, diff, findings, integrity, runner.runs, agree, started_at)
@@ -659,6 +664,106 @@ class SentinelQAVerifier:
                 )
         return agree
 
+    def _check_runner_integrity(
+        self,
+        runner: SpecificationRunner,
+        candidate: _Tree,
+        pristine: _Tree,
+        findings: list[_Finding],
+    ) -> None:
+        """Require the runner to report a planted failure on the verification tree.
+
+        The candidate's code shares the runner's process, so a clean summary alone does not
+        prove that failures would be reported. Only a candidate that is about to pass pays
+        for the probe; the pristine control runs only when the canary goes unreported, to
+        tell a runner the candidate silenced from a profile that cannot collect a canary.
+        """
+
+        canary = runner_canary(self.review_id, self.lock)
+        if canary is None:
+            raise self._stop(
+                findings,
+                SentinelFindingCode.RUNNER_INTEGRITY_UNPROVEN,
+                "The locked specification has no pytest module beside which a "
+                "runner-integrity canary could be planted.",
+            )
+        probe = self._probe(runner, SpecificationTree.VERIFICATION, candidate, canary, findings)
+        if probe.runner_integrity_demonstrated:
+            return
+        if not probe.tree_unchanged:
+            findings.append(
+                _Finding(
+                    SentinelFindingCode.VERIFICATION_TREE_MUTATED,
+                    "The runner-integrity run changed the verification tree.",
+                )
+            )
+            return
+        reported = probe.canary is not None and probe.canary.reported_failed
+        counts = probe.counts
+        if reported and counts is not None and (counts.failed > 1 or counts.errors):
+            findings.append(
+                _Finding(
+                    SentinelFindingCode.PRISTINE_TESTS_FAILED,
+                    "With the runner-integrity canary planted, the pristine full suite fails "
+                    f"on the candidate: {counts.failed - 1} failed besides the canary, "
+                    f"{counts.errors} error(s).",
+                )
+            )
+            return
+        control = self._probe(runner, SpecificationTree.PRISTINE, pristine, canary, findings)
+        if not control.tree_unchanged:
+            raise self._stop(
+                findings,
+                SentinelFindingCode.EVIDENCE_INCOMPLETE,
+                "The pristine runner-integrity run changed the tree it ran on.",
+            )
+        if (
+            control.canary is not None
+            and control.canary.reported_failed
+            and control.status is ExecutionStatus.FAILED
+        ):
+            findings.append(
+                _Finding(
+                    SentinelFindingCode.RUNNER_INTEGRITY_VIOLATED,
+                    "The runner reports a planted failing test on the pristine tree but not on "
+                    "the candidate: the candidate's code changes how test results are reported.",
+                    canary.path,
+                )
+            )
+            return
+        raise self._stop(
+            findings,
+            SentinelFindingCode.RUNNER_INTEGRITY_UNPROVEN,
+            "The full-suite command does not report a planted failing test even on the "
+            "pristine tree, so this profile cannot demonstrate runner integrity.",
+            canary.path,
+        )
+
+    def _probe(
+        self,
+        runner: SpecificationRunner,
+        tree: SpecificationTree,
+        root: _Tree,
+        canary: RunnerCanary,
+        findings: list[_Finding],
+    ) -> SpecificationRun:
+        purpose = CommandPurpose.FULL_TEST_SUITE
+        try:
+            run = runner.run(tree, root.worktree, purpose, canary=canary)
+        except SpecificationExecutionError as exc:
+            raise self._stop(
+                findings,
+                SentinelFindingCode.EXECUTOR_UNAVAILABLE,
+                f"The runner-integrity run could not be executed: {_short(exc)}",
+            ) from exc
+        if run.status not in {ExecutionStatus.PASSED, ExecutionStatus.FAILED}:
+            raise self._stop(
+                findings,
+                SentinelFindingCode.EVIDENCE_INCOMPLETE,
+                f"The {tree.value} runner-integrity run ended with {run.status.value}.",
+            )
+        return run
+
     # -- verdict ------------------------------------------------------------------------
 
     def _verdict(
@@ -779,7 +884,8 @@ def _summary(
         locked = integrity.locked_entries if integrity is not None else 0
         return (
             f"The candidate passes the pristine specification ({locked} locked file(s) "
-            "unchanged; targeted and full-suite runs passed on a fresh tree)."
+            "unchanged; targeted and full-suite runs passed on a fresh tree, and the runner "
+            "reported a planted failing test)."
         )
     if verdict is ReviewVerdict.FAILED:
         return "The candidate is rejected: " + ", ".join(codes) + "."

@@ -616,7 +616,8 @@ def default_catalog() -> list[EngineerScenario]:
             ],
             executor=lambda: ScriptedExecutor(paths=["pyproject.toml"]),
             expected_decision=CycleDecision.REQUEST_APPROVAL,
-            expected_risk=RiskLevel.MEDIUM,
+            # pyproject.toml also configures pytest, Ruff, and strict mypy.
+            expected_risk=RiskLevel.HIGH,
             expected_events=[NotificationEvent.APPROVAL_REQUIRED],
         ),
         EngineerScenario(

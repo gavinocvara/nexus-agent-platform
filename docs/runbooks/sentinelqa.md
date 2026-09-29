@@ -16,12 +16,14 @@ Its verdict is what Atlas requires before a human may approve a PatchForge job.
 | Specification lock | Content digests of every test, evaluation-config, and operator-declared file at the source commit, captured from Git objects, bound to the operator profile hash. |
 | Pristine tree | A fresh `.git`-free checkout of the source commit that matches the lock. |
 | Verification tree | The candidate with every locked file restored to pristine content and every candidate-added test or config file removed. |
+| Runner-integrity canary | A test module that must fail, planted for one run beside the locked test modules. Before a pass, the full-suite command must report it (and nothing else) as failed on the verification tree. |
 | Verdict | `passed`, `failed` (candidate rejected on evidence), or `inconclusive` (evidence could not be trusted). Only `passed` unlocks approval. |
 
 ## Deterministic gates (no Docker, no model)
 
 ```bash
-python -m pytest -q tests/unit/test_sentinelqa_*.py   # lock, parser, verifier, catalog, Atlas
+python -m pytest -q tests/unit/test_sentinelqa_*.py   # lock, parser, verifier, catalog, Atlas,
+                                                      # canary against a real pytest
 python -m nexus.sentinelqa                            # adversarial catalog, replayed twice
 python -m nexus.patchforge.benchmark_corpus           # Benchmark v0 with SentinelQA verdicts
 ```
@@ -65,9 +67,12 @@ source commit at review time and both must agree.
 - `integrity`: locked entry counts, modified/deleted/non-regular paths, evaluation-config
   changes, candidate-added tests that were excluded, restored paths, and what the
   candidate still changes once the specification is restored.
-- `runs`: up to five attested executions (pristine reproduction, targeted, full suite;
-  verification targeted, full suite) with command and policy hashes, status, parsed
-  counts, and tree fingerprints before and after.
+- `runs`: up to seven attested executions (pristine reproduction, targeted, full suite;
+  verification targeted, full suite; the runner-integrity probe; and, only when the probe
+  misses the canary, its pristine control) with command and policy hashes, status, parsed
+  counts, and tree fingerprints before and after. Probe runs carry `canary` (planted path,
+  content hash, and whether the runner reported it as failed). A `passed` verdict always
+  has a verification probe whose only failure is the canary, with exit status 1.
 - `patchforge_checks_agree`: whether PatchForge's passing checks reproduced independently.
 
 ## Finding codes
@@ -79,13 +84,15 @@ source commit at review time and both must agree.
 | `harness_tampering` | rejection | An added line outside the specification reaches into the test harness: imports `pytest`/`_pytest`/`pluggy`/`unittest`, edits `sys.modules`, replaces `__import__`, registers pytest plugins or hooks, reads `PYTEST_*` variables, touches assertion rewriting, installs a tracer or audit hook, or rebinds `sys.excepthook`. |
 | `protected_path_changed` / `sensitive_path_changed` | rejection | Defense in depth over the operator profile and sensitive-path rules. |
 | `patch_apply_failed` | rejection | The patch does not apply to its own base commit. |
-| `pristine_tests_failed` | rejection | The pristine targeted or full suite fails on the verification tree. |
+| `pristine_tests_failed` | rejection | The pristine targeted or full suite fails on the verification tree, including in the runner-integrity probe. |
+| `runner_integrity_violated` | rejection | The runner reports the planted canary as failed on the pristine tree but not on the candidate: the candidate's code forges the summary, forces the exit status, patches reports, or swallows failures. |
 | `tests_skipped` / `tests_missing` | rejection | More skips/xfails than the pristine baseline; fewer accounted tests, more deselections, or no tests at all. |
 | `verification_tree_mutated` | rejection | A verification run changed the tree. |
 | `independent_validation_disagrees` | rejection | PatchForge attested a passing check that fails independently. |
 | `unrecorded_change` | rejection | The patch changes a path the attested diff does not list. |
 | `no_code_change` | rejection | Restoring the specification leaves nothing of the candidate. |
 | `not_a_proposal` / `identity_mismatch` / `pristine_reference_unverifiable` / `evidence_incomplete` / `executor_unavailable` | unverifiable | Nothing to verify, mismatched bindings, an untrustworthy source or lock, missing or contradictory evidence, or no executor. |
+| `runner_integrity_unproven` | unverifiable | No locked pytest module shows where to plant the canary, or the full-suite command does not report it even on the pristine tree. |
 
 ## Operator guidance
 
@@ -97,6 +104,13 @@ source commit at review time and both must agree.
   plugins that add unknown summary tokens, yield `evidence_incomplete`.
 - Candidate-added tests are excluded from verification. They may still be valuable; review
   them as part of the human approval, not as evidence of correctness.
+- The canary is planted in the directory holding the most locked `test_*.py`/`*_test.py`
+  modules. The full-suite command must collect that directory and print pytest's short
+  summary (the default `-rfE`); `-rN`, a custom `python_files`/`python_functions`, or a
+  full suite that targets another directory yields `runner_integrity_unproven`. A
+  passing candidate costs one extra full-suite run; a suspicious one costs two.
+- The canary catches manipulation that is not aware of it. Code that recognises and
+  spares the canary is not caught; ADR 0011 records this residual risk.
 
 ## Not yet built
 

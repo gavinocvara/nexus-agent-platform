@@ -173,9 +173,15 @@ python -m nexus.software_engineer serve-slack --host 127.0.0.1 --port 8787
 
 Grammar: `/nexus ship|revise|reject [<cycle-id>|latest] <reason>`. Every request must
 carry a valid Slack `v0` HMAC signature (checked with the signing secret from the
-environment) inside the replay window, and come from the configured owner member id;
-anything else is refused with a stable code (`signature_invalid`, `timestamp_stale`,
-`not_owner`, `already_decided`, ...) and records nothing. A SHIP from Slack records the
+environment) inside the replay window, must not repeat a signed request already seen in
+that window, and must come from the configured owner member id; anything else is refused
+with a stable code (`signature_invalid`, `timestamp_stale`, `replayed`, `not_owner`,
+`already_decided`, `body_too_large`, ...) and records nothing. Seen signatures are kept as
+digests in `<state_root>/slack/replay_ledger.json`, so a restart does not reopen the
+window; if that file is unreadable every command is refused (`replay_ledger_unreadable`)
+until the owner removes it. Prefer an explicit cycle id over `latest` when a new cycle may
+have finished since the notification you are answering: `latest` is resolved when the
+command arrives, and the reply names the request that was decided. A SHIP from Slack records the
 decision only: publishing remains the owner-run `publish` step, so a compromised Slack
 account can at most say "ship" about an already-validated draft, never open or merge one.
 The receiver never reads secrets from Slack messages and never echoes them.
@@ -201,16 +207,65 @@ NEXUS_SOFTWARE_ENGINEER_ENABLED=true python -m nexus.software_engineer publish -
    default branch still points at the validated base (`--allow-moved-base` overrides,
    and the record keeps both SHAs), that the base exists remotely, and that the branch
    does not; uploads each blob and checks its SHA against the local one; creates the
-   tree and checks it against the local tree SHA; creates the commit and the branch
-   reference; opens a **draft** pull request whose body carries the approval request,
-   the decision, and the evidence hashes. If the repository rejects drafts the branch is
-   deleted again. It never merges and never touches the base branch.
+   tree and checks it against the local tree SHA; creates the commit and checks what it
+   contains (exactly the verified tree, the validated base as its only parent, the message,
+   author, committer, and date that were sent; the SHA itself may differ if GitHub signs
+   it); creates the branch reference and checks it points at that commit; opens a
+   **draft** pull request whose body carries the approval request, the decision, and the
+   evidence hashes, and checks that its head is that commit and its base the default
+   branch. If the repository rejects drafts, or the pull request shows anything else, the
+   pull request is closed and the branch deleted again. It never merges and never touches
+   the base branch.
 5. The `PublishedChange` is written to `.nexus/software_engineer/publications/<request_id>.json`
    and remembered as a validated fact with the decision id as provenance.
 
 Error codes are stable (`publish_credentials_missing`, `publish_base_moved`,
-`publish_branch_exists`, `publish_tree_mismatch`, `gates_not_passed`, `patch_mismatch`,
+`publish_branch_exists`, `publish_tree_mismatch`, `publish_commit_mismatch`,
+`publish_ref_mismatch`, `publish_pull_request_mismatch`, `gates_not_passed`, `patch_mismatch`,
 `already_published`, ...) and never include response bodies or the token.
+
+## First live exercises (owner-run, not yet performed)
+
+No real GitHub or Slack call has been made. Run these once, in this order, before relying
+on either integration. Neither is part of a cycle, and neither is run by the scheduler.
+
+**GitHub publisher.** The first real publication must not be a real change:
+`exercise-github` publishes one purpose-built file (`integration-exercise/
+nexus-publisher-<id>.md` on branch `nexus/integration-exercise/<id>`) through the production
+publisher and withdraws it. Without `--confirm-live` it only prints the plan.
+
+```bash
+git fetch origin && git checkout <default branch> && git pull --ff-only   # base must be local
+export NEXUS_SOFTWARE_ENGINEER_REPOSITORY_URL=https://github.com/<owner>/<repo>
+export NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN=...   # fine-grained: this repository only,
+                                                  # Contents + Pull requests read/write
+NEXUS_SOFTWARE_ENGINEER_ENABLED=true python -m nexus.software_engineer exercise-github
+NEXUS_SOFTWARE_ENGINEER_ENABLED=true python -m nexus.software_engineer exercise-github --confirm-live
+```
+
+It records eight checks in `<state_root>/exercises/<id>.json` and exits 0 only when all
+passed and nothing remains: `repository_identity` (token and repository), `base_available_locally`,
+`bundle_rederived` (local blob and tree integrity), `moved_base_refused` (refused before
+any write), `draft_published` (remote blob, tree, commit, reference, and pull-request
+integrity), `draft_not_merged` (open, draft, not merged, no auto-merge, head is the
+verified commit), `duplicate_refused` (the existing branch is refused before any write),
+and `withdrawn` (pull request closed, branch deleted). If `cleaned_up` is false, close the
+pull request and delete the branch by hand; the record names both. The exercise found one
+defect before any live run: the publisher could not read GitHub's empty `204` reply to a
+branch deletion, so every real withdrawal would have reported failure.
+
+**Slack owner commands.** Host `serve-slack` (above) behind HTTPS, then:
+
+1. Run a `dry_run` cycle that produces an approval request (a plan changes nothing).
+2. From a Slack account that is *not* the owner, send `/nexus reject latest test`:
+   expect `Refused: not_owner.` and no decision file.
+3. As the owner, send `/nexus bogus`: expect `Refused: command_unparsable.`
+4. As the owner, send `/nexus revise latest live exercise`: expect `Recorded REVISE`, a
+   decision under `<state_root>/decisions/`, and an owner-decision memory.
+5. Send the same command again: expect `Refused: already_decided.` (a replay of the
+   captured request would be `replayed`; `tests/unit/test_software_engineer_slack_commands.py`
+   covers stale, forged, replayed, and oversized requests, which Slack itself cannot send).
+6. Confirm nothing was published and the checkout is unchanged: Slack only records.
 
 ## Single run and interrupted runs
 
@@ -250,4 +305,4 @@ Test repair (blocked by SentinelQA-lite's byte-level specification rule); memory
 consolidation; a hosted deployment of the Slack receiver (today it runs wherever the
 owner starts it). No real GitHub or Slack call has
 been made yet: the publisher, issue source, and Slack receiver are exercised only against
-fakes in tests. See ADR 0012.
+fakes in tests; the owner-run exercises above are prepared but not performed. See ADR 0012.

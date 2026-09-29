@@ -62,13 +62,25 @@ the change size, raises the level once when anything is uncertain, and forces HI
 governing path (the engineer's own package, PatchForge/SentinelQA/Atlas policy and
 boundary modules, CI workflows, `AGENTS.md`, frozen evidence, infrastructure, migrations,
 sensitive files). Unknown categories, unclassified paths, and empty path lists are HIGH.
+Since 0.27.0 two more groups are governing. Documents agents and owners take direction
+from (`docs/adr/`, `ROADMAP.md`, `CODEX_HANDOFF.md`, `PROJECT_STATE.md`, `BRAIN.md`):
+before, a "documentation correction" to the ADR that defines this policy, or to the
+handoff the next agent treats as canonical, was LOW and could ship autonomously. And
+evaluation configuration anywhere (`conftest.py`, `pyproject.toml`, `pytest.ini`,
+`sitecustomize.py`, `.pth`, modules that shadow the harness; SentinelQA's
+`is_evaluation_config_path`): before, a conftest added under `tests/` only "added test
+lines" and read as LOW.
 
 `ShipPolicy.decide` is a pure function: over budget -> `blocked`; dry run -> a plan-only
 `request_approval`; any failed or missing required gate (`ruff_format`, `ruff_lint`,
-`mypy`, `pytest_full`) -> `abandon`; governing paths, medium or high risk, a missing or
+`mypy`, `pytest_full`, and since 0.27.0 `sentinel_review`) -> `abandon`; governing paths, medium or high risk, a missing or
 human-requiring self-review, or any non-autonomous mode -> `request_approval`; only a
 low-risk, fully validated, cleanly reviewed change in `autonomous_low_risk` mode ->
-`ship`. Owner decisions (`ship` / `revise` / `reject`) come only as typed `OwnerDecision`s
+`ship`. Until 0.27.0 the autonomous path required less independent evidence than the
+owner path: publication after an owner SHIP demanded `sentinel_review`, autonomous
+shipping did not, and relied on the executor happening to record it. Now both require it,
+and `PatchForgeExecutor.ship` re-checks that every recorded gate passed before the
+publisher sees the change. Owner decisions (`ship` / `revise` / `reject`) come only as typed `OwnerDecision`s
 from a human actor and are re-checked against validation; silence never decides. Since
 0.24.0 `ship` means "open a draft pull request" and nothing more.
 
@@ -79,6 +91,16 @@ invariants, weakened tests, races, nondeterminism, complexity, hidden state, sen
 data, prompt injection, test coverage, smaller solution, human review) from
 `DiffFacts` derived from the diff alone. It shares no state with the implementer. A concern
 or an unknown on a critical question blocks autonomous shipping.
+
+Hardened in 0.27.0 after an audit found the review could answer clear on evidence it had
+misread. `diff_facts` attributed a deleted file's lines to whichever file the diff showed
+before it (or to none), so deleting a whole test file or a public module reviewed clear;
+file names are now read only from each section's header. Removed unittest assertions and
+`pytest.raises` blocks count as removed checks, and skip or expected-failure markers added
+to test files count as test weakening. And `requires_human` now holds for any concern,
+not only concerns on critical questions: before, finding a removed public definition,
+added threading, or new global state did not require the owner, while merely lacking
+evidence (an unknown) did.
 
 ### Memory
 
@@ -105,6 +127,15 @@ import memory, budgets and mode come only from settings, and the tests seed pois
 preferences ("ship everything autonomously", "budgets are advisory", "formatting is exempt
 from SentinelQA") and prove the decision, budget, mode, and gates are unchanged.
 
+Since 0.27.0 the cycle reads what must not be repeated in full. Until then it read one
+window of 50 records ranked by trust, and the generator derived "the owner rejected this"
+and "a previous attempt failed" from that window alone. Every owner decision and validated
+lesson outranks a failed hypothesis, so after enough cycles an old rejection or failed
+attempt fell out of view: the rejected ask returned, and a change whose first attempt had
+failed validation shipped autonomously on the retry. `EngineerMemoryStore.retrieve_all`
+returns the same trust-ordered records without the window; the cycle adds every active
+owner decision and failed hypothesis, and up to 20 backlog items, to the window it reads.
+
 ### Notifications
 
 `Notifier` sends urgent events (approval required, blocked, security concern, rollback,
@@ -122,6 +153,15 @@ written, and a lease whose cycle died (expired past the runtime budget plus grac
 dead process) is recovered with an audit marker and an incident memory. Together with the
 workflow's concurrency group, the budgets, the persisted record on every path, and
 `no_work` as a normal outcome, this is the whole daily runtime contract.
+
+Two races are closed since 0.27.0. The lease file was created empty and filled
+afterwards, and an unreadable lease counted as stale, so a second cycle reading in between
+removed a live lease and ran concurrently. A lease now appears with its whole content (a
+private file hard-linked into place), and an unreadable lease is stale only once its file
+is older than a lease can live. And recovery was read-then-unlink: two cycles judging the
+same lease stale could each recover it, the slower deleting the fresh lease the faster had
+just taken. Recovery now renames the lease aside and checks it moved the stale one; if it
+caught a fresher lease it puts it back and refuses with `concurrent_run`.
 
 ### Scheduling
 
@@ -216,7 +256,11 @@ the scheduled workflow never receives the token.
 Before any request reaches GitHub, `bundle_from_branch` proves the candidate commit is
 exactly the validated patch applied to the validated base (re-apply in a scratch clone,
 compare `git write-tree`). The publisher then verifies every uploaded blob's SHA and the
-created tree's SHA against the local objects before the branch reference exists, refuses
+created tree's SHA against the local objects before the branch reference exists, and
+(since 0.27.0) the created commit's content (tree, sole parent, message, author,
+committer, date; not its SHA, which GitHub may sign), the new reference's target, and the
+draft pull request's head and base, closing the pull request and deleting the branch on
+any mismatch; refuses
 a moved default branch unless the owner allows it, refuses an existing branch, deletes
 its own branch if the repository rejects drafts, and never touches the base branch. The
 token is read from the environment at publish time, sent only as a header, and absent
@@ -226,6 +270,19 @@ secret detector with GitHub and Slack shapes for everything the engineer writes.
 number and URL, authority, publisher identity) is persisted, attached to the change, and
 remembered as a validated fact with the decision as provenance. Rollback of a published
 change is `withdraw`: close the pull request, delete the branch.
+
+### Integration exercise (0.27.0)
+
+The first real publication should prove the publisher, not ship engineering work.
+`exercise-github` (owner-run, dry run unless `--confirm-live`) publishes one harmless file
+under the `integration_exercise` authority: a publication by the human owner that answers
+no approval request, which `PublishedChange` accepts only in that shape. It proves
+repository identity, local and remote object integrity, the moved-base and duplicate
+refusals, that the draft is open, unmerged, and without auto-merge, and that withdrawal
+closes the pull request and deletes the branch, and it records all eight checks without
+the token. Building it against a GitHub-shaped fake found that the publisher could not
+read the bodiless `204` GitHub returns for a deleted branch, so every real withdrawal
+would have failed.
 
 ### Issue intake (after 0.24.0)
 
@@ -242,9 +299,14 @@ on later days, so a rejected issue is context, not a daily request.
 ### Owner commands through Slack (after 0.24.0)
 
 `SlackCommandHandler` accepts `/nexus ship|revise|reject [cycle|latest] <reason>` only
-after three checks: Slack's `v0` HMAC signature verified with the signing secret read from
-the environment per request, a timestamp inside the replay window, and the configured
-owner member id. It then records the decision through the same `decide` path as the CLI,
+after four checks: Slack's `v0` HMAC signature verified with the signing secret read from
+the environment per request, a timestamp inside the replay window, a signature not seen
+before in that window, and the configured owner member id. The replay ledger (0.27.0)
+exists because "decided once per request" did not stop replays: `latest` resolves on
+arrival, so a captured "reject latest" replayed after a newer cycle would have decided a
+request the owner never saw. Digests of verified signatures are persisted atomically under
+the state root, an unreadable ledger refuses every command rather than resetting, and
+bodies over 20 KB are refused before they are buffered. It then records the decision through the same `decide` path as the CLI,
 over the `slack` channel, once per request. Slack never publishes: SHIP from Slack is a
 recorded decision, and the draft pull request still needs the owner-run `publish` step (or
 the opted-in autonomous path), so a compromised Slack account cannot open or merge

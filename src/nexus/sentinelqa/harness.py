@@ -3,7 +3,9 @@
 A scenario runs a PatchForge E2E scenario to obtain a candidate, captures the
 specification lock from the untouched source repository, optionally tampers with the
 evidence (source history, lock, artifact) the way an adversary or an outage would, and
-then reviews the candidate with a scripted or oracle sandbox. Fixed clocks and
+then reviews the candidate with a scripted or oracle sandbox. Scripted sandboxes never run
+repository code, so the harness reports a planted runner-integrity canary the way an
+honest pytest would, on the trees where the scenario's runner is honest. Fixed clocks and
 content-derived identifiers make every verdict replay byte for byte.
 """
 
@@ -35,6 +37,7 @@ from nexus.patchforge.sandbox import (
     SandboxStatus,
 )
 from nexus.patchforge.workspace import GitRunner
+from nexus.sentinelqa.canary import report_planted_canaries
 from nexus.sentinelqa.lock import capture_specification_lock
 from nexus.sentinelqa.models import (
     FindingCategory,
@@ -45,7 +48,8 @@ from nexus.sentinelqa.models import (
 from nexus.sentinelqa.verifier import SentinelQAVerifier
 
 _SENTINEL_NAMESPACE = UUID("b4e2c7a9-1d3f-4b5e-8a6c-9f0e1d2c3b4a")
-MAX_SPECIFICATION_RUNS = 5
+MAX_SPECIFICATION_RUNS = 7
+HONEST_RUNNER_TREES = frozenset({"pristine", "candidate"})
 
 
 @dataclass(slots=True)
@@ -71,7 +75,8 @@ class SentinelScenario:
     expected_verdict: ReviewVerdict
     plans: Sequence[FakeSandboxPlan] = ()
     """Scripted answers, in order: pristine reproduction, targeted, full suite; then
-    verification targeted and full suite."""
+    verification targeted and full suite; then the runner-integrity probe and, only if
+    the probe misses the canary, its pristine control."""
 
     expected_findings: Sequence[str] = ()
     forbidden_findings: Sequence[str] = ()
@@ -79,6 +84,9 @@ class SentinelScenario:
     sandbox_factory: SandboxFactory | None = None
     sandbox_hook: SandboxHook | None = None
     """Fault injection inside the Nth SentinelQA execution, before its result."""
+    canary_reported_on: frozenset[str] = HONEST_RUNNER_TREES
+    """Trees (``pristine``, ``candidate``) whose runner reports a planted canary. A
+    candidate that silences the runner is modelled by leaving out ``candidate``."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,20 +180,44 @@ class SentinelRun:
                 "passed without both verification runs",
             )
             check(all(item.tree_unchanged for item in verification), "passed on a mutated tree")
+            check(
+                any(item.runner_integrity_demonstrated for item in verification),
+                "passed without demonstrated runner integrity",
+            )
         return problems
 
 
 class _RecordingSandbox:
-    def __init__(self, inner: SandboxExecutor, hook: SandboxHook | None) -> None:
+    def __init__(
+        self,
+        inner: SandboxExecutor,
+        hook: SandboxHook | None,
+        canary_reported_on: frozenset[str] = HONEST_RUNNER_TREES,
+    ) -> None:
         self.inner = inner
         self.hook = hook
+        self.canary_reported_on = canary_reported_on
         self.requests: list[SandboxRequest] = []
 
     def execute(self, request: SandboxRequest) -> SandboxExecution:
         self.requests.append(request)
         if self.hook is not None:
             self.hook(len(self.requests), request.workspace)
-        return self.inner.execute(request)
+        execution = self.inner.execute(request)
+        # SentinelQA trees live at <review>/<pristine|candidate>/worktree.
+        if request.workspace.parent.name in self.canary_reported_on:
+            return report_planted_canaries(execution, request.workspace)
+        return execution
+
+
+class HonestCanaryRunner:
+    """Wrap a sandbox that never runs repository code so it reports planted canaries."""
+
+    def __init__(self, inner: SandboxExecutor) -> None:
+        self.inner = inner
+
+    def execute(self, request: SandboxRequest) -> SandboxExecution:
+        return report_planted_canaries(self.inner.execute(request), request.workspace)
 
 
 class SentinelQAHarness:
@@ -220,7 +252,7 @@ class SentinelQAHarness:
             if scenario.sandbox_factory is not None
             else FakeSandbox(scenario.plans, clock=self._clock, id_factory=execution_ids)
         )
-        sandbox = _RecordingSandbox(inner, scenario.sandbox_hook)
+        sandbox = _RecordingSandbox(inner, scenario.sandbox_hook, scenario.canary_reported_on)
         verifier = SentinelQAVerifier(
             task=context.run.task,
             profile=profile,
@@ -329,7 +361,9 @@ def with_lock(context: SentinelContext, lock: SpecificationLock) -> SentinelCont
 
 
 __all__ = [
+    "HONEST_RUNNER_TREES",
     "MAX_SPECIFICATION_RUNS",
+    "HonestCanaryRunner",
     "SentinelContext",
     "SentinelQAHarness",
     "SentinelRun",

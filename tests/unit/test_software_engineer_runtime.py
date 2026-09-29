@@ -119,13 +119,64 @@ def test_stale_and_orphaned_leases_are_recovered_with_an_audit_marker(tmp_path: 
     assert interrupted is not None and "process gone" in interrupted.reason
     assert lease.cycle_id == UUID(int=5) and orphan.cycle_id == UUID(int=4)
     release_run_lease(lease)
-    # An unreadable lease file is treated as stale, without inventing a cycle to blame.
+    # An unreadable lease is stale only once it is older than a lease can live, and even
+    # then no cycle is invented to blame.
     (state / LEASE_FILENAME).write_text("not json")
+    old = (NOW - timedelta(seconds=60 + GRACE_SECONDS + 1)).timestamp()
+    os.utime(state / LEASE_FILENAME, (old, old))
     lease, interrupted = acquire_run_lease(
         state, cycle_id=UUID(int=6), now=NOW, max_runtime_seconds=60
     )
     assert interrupted is None and lease.cycle_id == UUID(int=6)
     release_run_lease(lease)
+
+
+def test_a_lease_that_is_still_being_written_is_never_stolen(tmp_path: Path) -> None:
+    """A lease file used to be created empty and filled afterwards; a second cycle reading
+    it in between treated it as stale, removed it, and ran concurrently."""
+
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / LEASE_FILENAME).write_text("")
+    fresh = NOW.timestamp()
+    os.utime(state / LEASE_FILENAME, (fresh, fresh))
+    with pytest.raises(RunLeaseError, match="concurrent_run"):
+        acquire_run_lease(state, cycle_id=UUID(int=7), now=NOW, max_runtime_seconds=600)
+    assert (state / LEASE_FILENAME).read_text() == ""
+    # A created lease is complete the moment it exists, and no temporary file is left.
+    lease, _ = acquire_run_lease(
+        tmp_path / "other", cycle_id=UUID(int=8), now=NOW, max_runtime_seconds=600
+    )
+    assert json.loads(lease.path.read_text())["cycle_id"] == str(UUID(int=8))
+    assert sorted(item.name for item in lease.path.parent.iterdir()) == [LEASE_FILENAME]
+
+
+def test_two_recoveries_of_one_stale_lease_never_both_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Both cycles judge the same lease stale. The first recovers it and holds a fresh
+    lease; the second, still acting on its stale reading, must not delete that lease."""
+
+    from nexus.software_engineer import runtime
+
+    state = tmp_path / "state"
+    stale, _ = acquire_run_lease(state, cycle_id=UUID(int=1), now=NOW, max_runtime_seconds=60)
+    later = stale.expires_at + timedelta(seconds=1)
+    first, interrupted = acquire_run_lease(
+        state, cycle_id=UUID(int=2), now=later, max_runtime_seconds=60
+    )
+    assert interrupted is not None and interrupted.cycle_id == UUID(int=1)
+    # The second cycle read the lease before the first replaced it.
+    original_read = runtime._read
+    readings = iter([stale])
+    monkeypatch.setattr(runtime, "_read", lambda path: next(readings, None) or original_read(path))
+    with pytest.raises(RunLeaseError, match="concurrent_run"):
+        acquire_run_lease(state, cycle_id=UUID(int=3), now=later, max_runtime_seconds=60)
+    monkeypatch.setattr(runtime, "_read", original_read)
+    holder = json.loads((state / LEASE_FILENAME).read_text())
+    assert holder["cycle_id"] == str(UUID(int=2)), "the fresh lease was taken"
+    assert not list(state.glob(f"{LEASE_FILENAME}.retired-*"))
+    release_run_lease(first)
 
 
 def test_cycle_refuses_a_concurrent_run_and_records_a_recovered_interruption(
