@@ -75,7 +75,8 @@ source commit at review time and both must agree.
 | Code | Category | Cause |
 | --- | --- | --- |
 | `specification_modified` / `specification_deleted` / `specification_not_regular_file` | rejection | A locked test or data file changed, disappeared, or became a symlink/directory. |
-| `evaluation_config_altered` | rejection | `conftest.py`, `pytest.ini`, `.pytest.ini`, `tox.ini`, `setup.cfg`, `pyproject.toml`, `sitecustomize.py`, `usercustomize.py`, or a `.pth` file was added, changed, or removed anywhere. |
+| `evaluation_config_altered` | rejection | `conftest.py`, `pytest.ini`, `.pytest.ini`, `tox.ini`, `setup.cfg`, `pyproject.toml`, `sitecustomize.py`, `usercustomize.py`, a `.pth` file, or a module or package that would shadow the harness (`pytest.py`, `_pytest.py`, `pluggy.py`, `unittest.py`, `doctest.py`, or anything under a `pytest/`, `_pytest/`, `pluggy/`, `unittest/`, `site-packages/`, `__pypackages__/` directory) was added, changed, or removed anywhere. |
+| `harness_tampering` | rejection | An added line outside the specification reaches into the test harness: imports `pytest`/`_pytest`/`pluggy`/`unittest`, edits `sys.modules`, replaces `__import__`, registers pytest plugins or hooks, reads `PYTEST_*` variables, touches assertion rewriting, installs a tracer or audit hook, or rebinds `sys.excepthook`. |
 | `protected_path_changed` / `sensitive_path_changed` | rejection | Defense in depth over the operator profile and sensitive-path rules. |
 | `patch_apply_failed` | rejection | The patch does not apply to its own base commit. |
 | `pristine_tests_failed` | rejection | The pristine targeted or full suite fails on the verification tree. |

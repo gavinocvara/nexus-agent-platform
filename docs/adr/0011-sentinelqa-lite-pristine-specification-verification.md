@@ -93,6 +93,21 @@ pristine run that mutates its tree.
 already permits human approval only when that verdict is `passed`; SentinelQA can never
 approve.
 
+### The harness itself is part of the specification boundary (0.25.x)
+
+Two evasions do not touch a locked file and were added to the rejection vocabulary. A
+module or package that would shadow the runner on the import path (`pytest.py`,
+`_pytest/`, `pluggy/`, `unittest.py`, `site-packages/`, ...) counts as evaluation
+configuration, so `evaluation_config_altered` fires wherever it appears. Code under test
+that reaches into the runner is `harness_tampering`: SentinelQA scans the added lines of
+the patch outside tests and configuration for imports of the harness, `sys.modules`
+edits, `__import__` replacement, plugin registration, `PYTEST_*` reads, assertion-rewrite
+hooks, tracers, and `sys.excepthook` rebinding. A skip marker added to a pristine test
+remains `specification_modified`. The adversarial catalog carries a scenario for each.
+What SentinelQA-lite still cannot see is in-process manipulation that leaves counts and
+outcomes intact without any of these markers; the Docker runner proof and out-of-process
+oracles remain deferred.
+
 ### Execution reuses the sandbox boundary
 
 `SpecificationRunner` executes only operator-profile commands through any

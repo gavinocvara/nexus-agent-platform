@@ -52,9 +52,18 @@ EVALUATION_CONFIG_NAMES = frozenset(
         "pyproject.toml",
         "sitecustomize.py",
         "usercustomize.py",
+        # Modules that would shadow the test harness itself when placed on the import path.
+        "pytest.py",
+        "_pytest.py",
+        "pluggy.py",
+        "unittest.py",
+        "doctest.py",
     }
 )
 EVALUATION_CONFIG_SUFFIXES = frozenset({".pth"})
+EVALUATION_CONFIG_DIRECTORIES = frozenset(
+    {"_pytest", "pytest", "pluggy", "unittest", "site-packages", "__pypackages__"}
+)
 
 
 class SpecificationKind(StrEnum):
@@ -200,6 +209,7 @@ class SentinelFindingCode(StrEnum):
     TESTS_SKIPPED = "tests_skipped"
     TESTS_MISSING = "tests_missing"
     VERIFICATION_TREE_MUTATED = "verification_tree_mutated"
+    HARNESS_TAMPERING = "harness_tampering"
     INDEPENDENT_VALIDATION_DISAGREES = "independent_validation_disagrees"
     UNRECORDED_CHANGE = "unrecorded_change"
     NO_CODE_CHANGE = "no_code_change"
@@ -226,6 +236,7 @@ FINDING_CATEGORY: dict[SentinelFindingCode, FindingCategory] = {
     SentinelFindingCode.TESTS_SKIPPED: FindingCategory.REJECTION,
     SentinelFindingCode.TESTS_MISSING: FindingCategory.REJECTION,
     SentinelFindingCode.VERIFICATION_TREE_MUTATED: FindingCategory.REJECTION,
+    SentinelFindingCode.HARNESS_TAMPERING: FindingCategory.REJECTION,
     SentinelFindingCode.INDEPENDENT_VALIDATION_DISAGREES: FindingCategory.REJECTION,
     SentinelFindingCode.UNRECORDED_CHANGE: FindingCategory.REJECTION,
     SentinelFindingCode.NO_CODE_CHANGE: FindingCategory.REJECTION,
@@ -382,13 +393,22 @@ def verdict_for(categories: set[FindingCategory]) -> ReviewVerdict:
 
 
 def is_evaluation_config_path(path: str) -> bool:
-    name = path.rsplit("/", 1)[-1]
-    return name in EVALUATION_CONFIG_NAMES or any(
-        name.endswith(suffix) for suffix in EVALUATION_CONFIG_SUFFIXES
+    """Configuration and start-up hooks that shape how the specification is evaluated,
+    plus any module or package that would shadow the test harness on the import path."""
+
+    parts = [part for part in path.split("/") if part]
+    if not parts:
+        return False
+    name = parts[-1]
+    return (
+        name in EVALUATION_CONFIG_NAMES
+        or any(name.endswith(suffix) for suffix in EVALUATION_CONFIG_SUFFIXES)
+        or any(part in EVALUATION_CONFIG_DIRECTORIES for part in parts[:-1])
     )
 
 
 __all__ = [
+    "EVALUATION_CONFIG_DIRECTORIES",
     "EVALUATION_CONFIG_NAMES",
     "EVALUATION_CONFIG_SUFFIXES",
     "FINDING_CATEGORY",

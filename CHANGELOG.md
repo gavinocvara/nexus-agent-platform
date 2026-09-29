@@ -6,6 +6,14 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 ## Unreleased
 
+- SentinelQA-lite: the harness is inside the specification boundary. Modules or packages
+  that would shadow the runner (`pytest.py`, `_pytest/`, `pluggy/`, `unittest.py`,
+  `site-packages/`, ...) are evaluation configuration; a new rejection finding
+  `harness_tampering` catches added source lines that import the harness, edit
+  `sys.modules`, replace `__import__`, register pytest plugins or hooks, read `PYTEST_*`,
+  hook assertion rewriting, install tracers, or rebind `sys.excepthook`. Three adversarial
+  scenarios join the gate (`pytest_module_shadowed`, `harness_patched_from_source`,
+  `test_marked_skip`), for 32 in total, plus unit tests for the scanner.
 - Resident Software Engineer: enforceable cost accounting. `PriceTable` (owner-supplied
   USD per million input / output tokens, `NEXUS_SOFTWARE_ENGINEER_MODEL_PRICE_INPUT_PER_MTOK`
   and `_OUTPUT_PER_MTOK`) prices every model run from the client's token counts; the cost

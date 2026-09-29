@@ -73,6 +73,7 @@ from nexus.sentinelqa.models import (
     is_evaluation_config_path,
     verdict_for,
 )
+from nexus.sentinelqa.tamper import harness_tampering_lines
 
 _FINDING_NAMESPACE = UUID("7a1d4c2b-3e5f-4a6b-8c9d-0e1f2a3b4c5e")
 _VERIFICATION_PURPOSES = (CommandPurpose.TARGETED_TESTS, CommandPurpose.FULL_TEST_SUITE)
@@ -163,6 +164,7 @@ class SentinelQAVerifier:
             changed = self._changed_files(candidate)
             self._check_recorded_changes(diff, changed, findings)
             integrity, restore, remove = self._inspect_integrity(candidate, changed, findings)
+            self._check_harness_tampering(patch, findings)
             integrity = self._build_verification_tree(
                 candidate, trees["pristine"], integrity, restore, remove, findings
             )
@@ -416,6 +418,23 @@ class SentinelQAVerifier:
                 )
             )
         self._stop_if_unverifiable(findings)
+
+    def _check_harness_tampering(self, patch: bytes, findings: list[_Finding]) -> None:
+        """Code under test that reaches into the test harness redefines correctness."""
+
+        def is_specification(path: str) -> bool:
+            return is_evaluation_config_path(path) or path_matches(
+                path, self.profile.test_path_prefixes
+            )
+
+        for path, detail in harness_tampering_lines(patch, is_specification=is_specification):
+            findings.append(
+                _Finding(
+                    SentinelFindingCode.HARNESS_TAMPERING,
+                    f"The candidate's code reaches into the test harness ({detail}).",
+                    path,
+                )
+            )
 
     def _inspect_integrity(
         self, tree: _Tree, changed: set[str], findings: list[_Finding]

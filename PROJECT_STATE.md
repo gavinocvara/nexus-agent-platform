@@ -43,7 +43,7 @@ pristine targeted and full suites with tree fingerprints and count rules, and cr
 PatchForge's attested checks. Any unverifiable evidence is `inconclusive`; any rejection
 finding is `failed`; only a clean review is `passed`, and only `passed` lets a human
 approve in Atlas. SentinelQA has no model, no network, no ground truth, and never
-approves. Gates: `python -m nexus.sentinelqa` (29 adversarial scenarios, replayed
+approves. Gates: `python -m nexus.sentinelqa` (32 adversarial scenarios, replayed
 byte-identically), `tests/unit/test_sentinelqa_*.py`, and Benchmark v0 agreement
 (`reference` 5/5 passed, `fix_and_edit_tests` 5/5 failed with `specification_modified`,
 zero disagreements).
@@ -58,7 +58,7 @@ zero disagreements).
 | `pytest -q` (unit + service, integration deselected) | see "Test counts" |
 | `python -m nexus.patchforge.e2e_catalog` | 23 scenarios passed, byte-identical |
 | `python -m nexus.patchforge.benchmark_corpus` | passed; SentinelQA agreement 100% |
-| `python -m nexus.sentinelqa` | 29 scenarios passed, byte-identical |
+| `python -m nexus.sentinelqa` | 32 scenarios passed, byte-identical |
 | `python -m nexus.software_engineer.evaluation` | 30 judgment scenarios passed, byte-identical |
 | `python -m nexus.lab.scenarios validate` | 5 scenarios |
 | `python -m nexus.software_engineer preflight` | `enabled=False mode=dry_run prices_set=False max_cost_usd=0.0 model_recipes_allowed=False sandbox=none slack_webhook_present=False github_token_present=False publish_from_cycle=False read_issues=False slack_owner_user_id_set=False` |
