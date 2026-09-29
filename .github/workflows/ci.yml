@@ -45,6 +45,9 @@ jobs:
       - name: Validate PatchForge deterministic E2E
         run: python -m nexus.patchforge.e2e_catalog
 
+      - name: Validate PatchForge Benchmark v0
+        run: python -m nexus.patchforge.benchmark_corpus
+
       - name: Validate deterministic investigator boundary
         run: python -m pytest tests/unit/test_aegisops_contracts.py tests/unit/test_aegisops_runtime.py tests/unit/test_aegisops_evaluation.py
 

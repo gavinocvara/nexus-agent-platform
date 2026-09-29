@@ -40,6 +40,7 @@ from nexus.patchforge.sandbox import (
     FakeSandbox,
     FakeSandboxPlan,
     SandboxExecution,
+    SandboxExecutor,
     SandboxRequest,
 )
 from nexus.patchforge.workspace import (
@@ -60,6 +61,11 @@ SandboxHook = Callable[[int, Path], None]
 """Fault injection run inside the Nth sandbox execution, before its planned result."""
 
 ScriptStep = RuntimeToolAction | Exception | WorkspaceHook
+
+SandboxFactory = Callable[
+    [RepositoryProfile, Callable[[], datetime], Callable[[], UUID]], "SandboxExecutor"
+]
+"""Build a scenario-specific executor from the profile, clock, and execution-ID factory."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +98,7 @@ class E2EScenario:
     sandbox_hook: SandboxHook | None = None
     fail_cleanup: bool = False
     fail_lease_renewal_at: int | None = None
+    sandbox_factory: SandboxFactory | None = None
     expected_phase_reached: PatchForgePhase = PatchForgePhase.CLOSED
     expected_implementation_loops: int = 0
     expected_findings: Sequence[str] = ()
@@ -103,6 +110,7 @@ class E2ERun:
     completion: RuntimeCompletion
     result: PatchResult
     source_sha: str
+    root: Path
     workspace_removed: bool
     source_refs_after: str
     source_refs_before: str
@@ -129,7 +137,6 @@ class E2ERun:
             if not condition:
                 problems.append(message)
 
-        # Scenario expectations.
         check(result.outcome is scenario.expected_outcome, "unexpected outcome")
         check(result.failure is scenario.expected_failure, "unexpected failure")
         check(result.phase_reached is scenario.expected_phase_reached, "unexpected phase")
@@ -139,6 +146,19 @@ class E2ERun:
         )
         codes = {item.code for item in result.policy_findings}
         check(set(scenario.expected_findings) <= codes, "expected finding missing")
+        return problems + self.invariant_problems()
+
+    def invariant_problems(self) -> list[str]:
+        """Universal PatchForge invariants that must hold for every run, whatever its outcome."""
+
+        result = self.result
+        snapshot = self.completion.snapshot
+        problems: list[str] = []
+
+        def check(condition: bool, message: str) -> None:
+            if not condition:
+                problems.append(message)
+
         # Lifecycle: a closed transcript that always ends by cleaning up.
         transitions = snapshot.transitions
         check(transitions[0].source is PatchForgePhase.CREATED, "transcript start")
@@ -202,15 +222,17 @@ class ScriptedEngine:
 
 
 class _HookedSandbox:
-    """Delegate to a FakeSandbox while letting a scenario change the tree during a run."""
+    """Record every request and let a scenario change the tree during a run."""
 
-    def __init__(self, inner: FakeSandbox, hook: SandboxHook | None) -> None:
+    def __init__(self, inner: SandboxExecutor, hook: SandboxHook | None) -> None:
         self.inner = inner
         self.hook = hook
         self.calls = 0
+        self.requests: list[SandboxRequest] = []
 
     def execute(self, request: SandboxRequest) -> SandboxExecution:
         self.calls += 1
+        self.requests.append(request)
         if self.hook is not None:
             self.hook(self.calls, request.workspace)
         return self.inner.execute(request)
@@ -349,14 +371,13 @@ class PatchForgeE2EHarness:
             root / "source",
             lease_duration=timedelta(minutes=5),
         )
-        sandbox = _HookedSandbox(
-            FakeSandbox(
-                scenario.sandbox_plans,
-                clock=clock,
-                id_factory=self._counter(scenario, "execution"),
-            ),
-            scenario.sandbox_hook,
+        execution_ids = self._counter(scenario, "execution")
+        inner: SandboxExecutor = (
+            scenario.sandbox_factory(profile, clock, execution_ids)
+            if scenario.sandbox_factory is not None
+            else FakeSandbox(scenario.sandbox_plans, clock=clock, id_factory=execution_ids)
         )
+        sandbox = _HookedSandbox(inner, scenario.sandbox_hook)
         gateway = ToolGateway(
             identity=identity,
             task=task,
@@ -391,10 +412,11 @@ class PatchForgeE2EHarness:
             completion=completion,
             result=attestor.attest(completion),
             source_sha=source_sha,
+            root=root,
             workspace_removed=workspace_removed,
             source_refs_before=source_refs_before,
             source_refs_after=self._source_refs(git, root / "source"),
-            sandbox_requests=tuple(sandbox.inner.requests),
+            sandbox_requests=tuple(sandbox.requests),
             artifacts=artifacts,
         )
 

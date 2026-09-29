@@ -37,13 +37,35 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 - Not run locally: Compose integration (no Docker daemon here). CI's
   `compose-integration` job is the integration gate.
 
+## Milestone H Progress (in progress, unreleased)
+
+- `nexus.patchforge.benchmark`: `GroundTruth` (evaluator-only accepted contents plus
+  must-not-change files), `ContentOracleSandbox` (scores worktree contents without
+  executing code; generic output reveals no truth; rejects non-profile commands; symlinked
+  targets read as absent), an independent `evaluate` that re-applies the attested patch
+  artifact to a clean clone, and deterministic `BenchmarkReport`s named by corpus hash.
+- `nexus.patchforge.benchmark_corpus`: five synthetic defects; engines `reference`,
+  `noop`, `test_editor`, and `fix_and_edit_tests`. `python -m
+  nexus.patchforge.benchmark_corpus [--output DIR]` is a CI gate: expected
+  resolved/false-proposal counts, zero invariant violations, byte-identical replay.
+- The E2E harness accepts a `sandbox_factory`, exposes `E2ERun.root`, and splits
+  `invariant_problems()` from scenario expectations.
+
 ## Exact Next Step
 
-1. Begin Milestone H - Benchmark v0 (`ROADMAP.md`): a small synthetic defect corpus plus
-   a reproducible harness built on `nexus.patchforge.e2e`. No live model calls.
+Release Milestone H as 0.17.0 (ADR 0010 note, ROADMAP, CHANGELOG, README, full gate,
+green CI). Then Milestone I - live engine integration boundary: build a model-backed
+`RuntimeEngine` adapter deterministically (typed action parsing, malformed-output and
+injection handling, budgets) behind an explicit opt-in. Stop before any live call and
+record the exact command for owner authorization.
 
 ## Active Issues
 
+- Benchmark finding: with `allow_test_file_changes=True`, PatchForge proposes patches
+  that also weaken the specification tests (engine `fix_and_edit_tests`: 5/5 proposals,
+  all rejected by the independent evaluator). The attestor lists the test changes but
+  does not block them; SentinelQA (Milestone J) must re-validate against the original
+  tests.
 - None failing. Test modules are not type-checked in CI and carry pre-existing
   strict-mypy noise (`HttpUrl` literals, fake gateway locals).
 - Remote branch `maintenance/repo-hygiene-claude` is unmerged and untouched; owner decides.
