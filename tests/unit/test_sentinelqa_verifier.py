@@ -23,6 +23,7 @@ from nexus.patchforge.models import DiffSummary, PatchResult
 from nexus.patchforge.sandbox import FakeSandbox, SandboxExecutor
 from nexus.patchforge.workspace import GitRunner
 from nexus.sentinelqa.catalog import honest_plans
+from nexus.sentinelqa.harness import HonestCanaryRunner
 from nexus.sentinelqa.lock import capture_specification_lock
 from nexus.sentinelqa.models import (
     SENTINELQA_AGENT_ID,
@@ -89,7 +90,7 @@ def _review(
         profile=profile,
         lock=lock,
         artifact_store=artifacts or run.artifacts,
-        sandbox=sandbox or FakeSandbox(honest_plans(), clock=lambda: NOW),
+        sandbox=HonestCanaryRunner(sandbox or FakeSandbox(honest_plans(), clock=lambda: NOW)),
         git=git,
         clock=lambda: NOW,
         review_id=REVIEW_ID,
@@ -254,6 +255,13 @@ def test_verdict_contract_refuses_a_pass_without_evidence(
         verdict.model_copy(update={"runs": []}).model_validate(
             verdict.model_copy(update={"runs": []}).model_dump()
         )
+    without_probe = [item for item in verdict.model_dump()["runs"] if item["canary"] is None]
+    with pytest.raises(ValueError, match="demonstrated runner integrity"):
+        SentinelVerdict.model_validate({**verdict.model_dump(), "runs": without_probe})
+    unreported = verdict.model_dump()
+    unreported["runs"][-1]["canary"]["reported_failed"] = False
+    with pytest.raises(ValueError, match="demonstrated runner integrity"):
+        SentinelVerdict.model_validate(unreported)
     with pytest.raises(ValueError, match="does not follow from its findings"):
         SentinelVerdict.model_validate({**verdict.model_dump(), "verdict": ReviewVerdict.FAILED})
     digest = sha256(b"x").hexdigest()
@@ -266,7 +274,7 @@ def test_reproduction_commands_need_no_pytest_summary(tmp_path: Path, candidate:
 
     from nexus.patchforge.policy import CommandPurpose
     from nexus.patchforge.sandbox import SandboxStatus
-    from nexus.sentinelqa.catalog import baseline_plans, verification_plans
+    from nexus.sentinelqa.catalog import baseline_plans, probe_plans, verification_plans
     from nexus.sentinelqa.harness import spec_plan
 
     profile = candidate.scenario.profile
@@ -279,6 +287,7 @@ def test_reproduction_commands_need_no_pytest_summary(tmp_path: Path, candidate:
         ),
         *baseline_plans(profile)[1:],
         *verification_plans(profile),
+        *probe_plans(profile),
     ]
     verdict = _review(tmp_path, candidate, sandbox=FakeSandbox(plans, clock=lambda: NOW))
     assert verdict.verdict is ReviewVerdict.PASSED

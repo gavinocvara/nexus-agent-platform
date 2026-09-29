@@ -48,7 +48,7 @@ from nexus.patchforge.sandbox import (
     SandboxStatus,
 )
 from nexus.patchforge.workspace import GitRunner
-from nexus.sentinelqa.harness import review_candidate
+from nexus.sentinelqa.harness import HonestCanaryRunner, review_candidate
 
 BENCHMARK_VERSION = "patchforge-benchmark-v0"
 BENCHMARK_TIME = datetime(2026, 1, 1, tzinfo=UTC)
@@ -241,8 +241,14 @@ def evaluate(
     if result.outcome is PatchOutcome.PATCH_PROPOSED and result.diff is not None:
         ids = _counter(f"{task.name}:sentinelqa")
         oracle = ContentOracleSandbox(task.profile, task.truth, clock=lambda: now, id_factory=ids)
+        # The oracle never runs repository code; it reports SentinelQA's planted
+        # runner-integrity canary the way an honest pytest would.
         _lock, verdict = review_candidate(
-            run, sandbox=oracle, work_root=work / "sentinelqa", now=now, git=git
+            run,
+            sandbox=HonestCanaryRunner(oracle),
+            work_root=work / "sentinelqa",
+            now=now,
+            git=git,
         )
         (work / "sentinelqa").mkdir(parents=True, exist_ok=True)
         (work / "sentinelqa" / "verdict.json").write_text(

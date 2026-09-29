@@ -3,7 +3,8 @@
 The runner accepts any ``SandboxExecutor`` (the Docker sandbox in production, a scripted
 or oracle sandbox in deterministic gates). It fingerprints the tree before and after the
 command so a test run that changes the tree is visible, and it takes test counts only
-from the runner's own summary line.
+from the runner's own summary line. A runner-integrity probe plants the review's canary
+for the duration of one full-suite run and records whether the runner reported it.
 """
 
 from __future__ import annotations
@@ -23,8 +24,9 @@ from nexus.patchforge.sandbox import (
     SandboxRequest,
     SandboxStatus,
 )
+from nexus.sentinelqa.canary import CanaryError, RunnerCanary, plant_canary, remove_canary
 from nexus.sentinelqa.lock import tree_sha256
-from nexus.sentinelqa.models import SpecificationRun, SpecificationTree
+from nexus.sentinelqa.models import RunnerCanaryRecord, SpecificationRun, SpecificationTree
 from nexus.sentinelqa.pytest_summary import parse_pytest_summary
 
 _RUN_NAMESPACE = UUID("2c8a7d1e-5b3f-4e0a-9c6d-7f1e2a3b4c5d")
@@ -58,10 +60,19 @@ class SpecificationRunner:
         self.clock = clock
         self.runs: list[SpecificationRun] = []
 
-    def run(self, tree: SpecificationTree, root: Path, purpose: CommandPurpose) -> SpecificationRun:
+    def run(
+        self,
+        tree: SpecificationTree,
+        root: Path,
+        purpose: CommandPurpose,
+        *,
+        canary: RunnerCanary | None = None,
+    ) -> SpecificationRun:
         command = self.profile.commands.get(purpose)
         if command is None:
             raise SpecificationExecutionError(f"Profile defines no {purpose} command")
+        if canary is not None and purpose is not CommandPurpose.FULL_TEST_SUITE:
+            raise SpecificationExecutionError("Only the full-suite command carries a canary")
         sequence = len(self.runs) + 1
         request = SandboxRequest(
             run_id=self.review_id,
@@ -70,13 +81,22 @@ class SpecificationRunner:
             command=command,
             policy=self.profile.sandbox,
         )
-        before = tree_sha256(root)
-        started_at = self._now()
+        if canary is not None:
+            try:
+                plant_canary(root, canary)
+            except (CanaryError, OSError) as exc:
+                raise SpecificationExecutionError("The canary could not be planted") from exc
         try:
-            execution = self.sandbox.execute(request)
-        except SandboxError as exc:
-            raise SpecificationExecutionError(str(exc)) from exc
-        after = tree_sha256(root)
+            before = tree_sha256(root)
+            started_at = self._now()
+            try:
+                execution = self.sandbox.execute(request)
+            except SandboxError as exc:
+                raise SpecificationExecutionError(str(exc)) from exc
+            after = tree_sha256(root)
+        finally:
+            if canary is not None:
+                remove_canary(root, canary)
         status = _STATUS[execution.status]
         conclusive = status in {ExecutionStatus.PASSED, ExecutionStatus.FAILED}
         record = SpecificationRun(
@@ -96,6 +116,15 @@ class SpecificationRunner:
             output_truncated=execution.output_truncated,
             started_at=started_at,
             completed_at=max(started_at, self._now(), execution.completed_at),
+            canary=(
+                RunnerCanaryRecord(
+                    path=canary.path,
+                    sha256=canary.sha256,
+                    reported_failed=conclusive and canary.reported_failed(execution.stdout),
+                )
+                if canary is not None
+                else None
+            ),
         )
         self.runs.append(record)
         return record

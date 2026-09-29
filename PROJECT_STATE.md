@@ -25,7 +25,7 @@ Update it at every checkpoint. Rules live in `AGENTS.md`; execution order in
 | Atlas thin control plane | Complete (Phase 8) | `nexus.atlas`, ADR 0009 |
 | PatchForge A-H | Complete | `nexus.patchforge`, ADR 0010 |
 | PatchForge I (model engine boundary) | Built; live run not executed | `nexus.patchforge.engine`, `nexus.patchforge.live` |
-| PatchForge J (SentinelQA-lite) | Complete (0.19.0) + harness boundary (0.26.0: shadowing modules are config, `harness_tampering` finding, 32 adversarial scenarios) | `nexus.sentinelqa`, ADR 0011, `docs/runbooks/sentinelqa.md` |
+| PatchForge J (SentinelQA-lite) | Complete (0.19.0) + harness boundary (0.26.0: shadowing modules are config, `harness_tampering` finding) + runner-integrity canary (0.27.0: `runner_integrity_violated`/`unproven`, 35 adversarial scenarios) | `nexus.sentinelqa`, ADR 0011, `docs/runbooks/sentinelqa.md` |
 | PatchForge K (GitHub) | Draft-PR publication (0.24.0) and read-only issue intake complete via the resident engineer | `nexus.software_engineer.publish`, `nexus.software_engineer.issues`, ADR 0012 |
 | Resident Software Engineer | **Foundation (0.20.0, CI run 36549244409 green) + executor v1 for mechanical recipes (0.21.0) + controlled judgment evaluation (0.22.0) + model-backed recipes behind explicit spend confirmation (0.23.0) + owner-approved draft pull requests through a verified GitHub publisher (0.24.0) + Slack decisions and read-only issue intake (0.25.0, CI run 36559485287 green) + enforceable cost accounting (`5f79cfe`, CI run 36560056831 green)**, disabled by default | `nexus.software_engineer`, ADR 0012, `docs/runbooks/software-engineer.md` |
 | Engram, Kubernetes, AegisOps remediation | Deferred | `ROADMAP.md` |
@@ -43,7 +43,7 @@ pristine targeted and full suites with tree fingerprints and count rules, and cr
 PatchForge's attested checks. Any unverifiable evidence is `inconclusive`; any rejection
 finding is `failed`; only a clean review is `passed`, and only `passed` lets a human
 approve in Atlas. SentinelQA has no model, no network, no ground truth, and never
-approves. Gates: `python -m nexus.sentinelqa` (32 adversarial scenarios, replayed
+approves. Gates: `python -m nexus.sentinelqa` (35 adversarial scenarios, replayed
 byte-identically), `tests/unit/test_sentinelqa_*.py`, and Benchmark v0 agreement
 (`reference` 5/5 passed, `fix_and_edit_tests` 5/5 failed with `specification_modified`,
 zero disagreements).
@@ -58,7 +58,7 @@ zero disagreements).
 | `pytest -q` (unit + service, integration deselected) | see "Test counts" |
 | `python -m nexus.patchforge.e2e_catalog` | 23 scenarios passed, byte-identical |
 | `python -m nexus.patchforge.benchmark_corpus` | passed; SentinelQA agreement 100% |
-| `python -m nexus.sentinelqa` | 32 scenarios passed, byte-identical |
+| `python -m nexus.sentinelqa` | 35 scenarios passed, byte-identical |
 | `python -m nexus.software_engineer.evaluation` | 30 judgment scenarios passed, byte-identical |
 | `python -m nexus.lab.scenarios validate` | 5 scenarios |
 | `python -m nexus.software_engineer preflight` | all-off defaults: `enabled=False mode=dry_run prices_set=False max_cost_usd=0.0 model_recipes_allowed=False sandbox=none slack_webhook_present=False github_token_present=False publish_from_cycle=False read_issues=False slack_owner_user_id_set=False` |

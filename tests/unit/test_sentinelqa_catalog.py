@@ -49,12 +49,14 @@ def test_catalog_covers_every_fail_closed_case_from_the_brief() -> None:
         SentinelFindingCode.EXECUTOR_UNAVAILABLE,  # validation cannot be trusted
         SentinelFindingCode.NOT_A_PROPOSAL,
         SentinelFindingCode.NO_CODE_CHANGE,
+        SentinelFindingCode.RUNNER_INTEGRITY_VIOLATED,  # runner silenced in-process
+        SentinelFindingCode.RUNNER_INTEGRITY_UNPROVEN,  # runner cannot show a failure
     }
     assert {code.value for code in required} <= covered
     assert verdicts == {ReviewVerdict.PASSED, ReviewVerdict.FAILED, ReviewVerdict.INCONCLUSIVE}
 
 
-def test_honest_fix_replays_byte_identically_and_records_five_runs(tmp_path: Path) -> None:
+def test_honest_fix_replays_byte_identically_and_records_six_runs(tmp_path: Path) -> None:
     first = SentinelQAHarness(tmp_path / "first", now=NOW).run(honest_fix())
     second = SentinelQAHarness(tmp_path / "second", now=NOW).run(honest_fix())
     assert first.verdict_sha256 == second.verdict_sha256
@@ -66,8 +68,14 @@ def test_honest_fix_replays_byte_identically_and_records_five_runs(tmp_path: Pat
         SpecificationTree.PRISTINE,
         SpecificationTree.VERIFICATION,
         SpecificationTree.VERIFICATION,
+        SpecificationTree.VERIFICATION,
     ]
     assert all(item.tree_unchanged for item in verdict.runs)
+    # The last run is the runner-integrity probe: the planted canary, and only it, failed.
+    probe = verdict.runs[-1]
+    assert probe.canary is not None and probe.canary.reported_failed
+    assert probe.runner_integrity_demonstrated
+    assert [item.canary is None for item in verdict.runs[:-1]] == [True] * 5
     assert verdict.patchforge_checks_agree is True
     assert verdict.integrity is not None
     assert verdict.integrity.locked_entries == 1

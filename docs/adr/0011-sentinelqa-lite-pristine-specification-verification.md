@@ -104,16 +104,90 @@ the patch outside tests and configuration for imports of the harness, `sys.modul
 edits, `__import__` replacement, plugin registration, `PYTEST_*` reads, assertion-rewrite
 hooks, tracers, and `sys.excepthook` rebinding. A skip marker added to a pristine test
 remains `specification_modified`. The adversarial catalog carries a scenario for each.
-What SentinelQA-lite still cannot see is in-process manipulation that leaves counts and
-outcomes intact without any of these markers; the Docker runner proof and out-of-process
-oracles remain deferred.
+The marker scan alone did not close the in-process gap; the next section does, for
+manipulation that is not aware of SentinelQA.
+
+### Runner integrity: a planted failure the runner must report (0.27.0)
+
+**Problem, demonstrated.** The candidate's code runs in the runner's process. Against a
+real pytest (local-process sandbox, calculator fixture, defect left in place), three
+candidates received a `passed` verdict from 0.26.0 without touching a locked file or a
+scanned marker: an `atexit` handler that prints `1 passed` and calls `os._exit(0)`;
+`sys.modules.get("_pytest.reports")` patching every report to `passed`; and
+`_pytest.python.Function.runtest` wrapped to swallow exceptions. Summary, exit status, and
+counts were all consistent, so no evidence-consistency rule could object.
+
+**Alternatives considered.**
+
+1. *Extend the marker scan* (`os._exit`, `atexit`, `sys.modules.get`, `gc`, stack
+   inspection, string literals naming the harness). Rejected as the primary defense: each
+   pattern has a trivial spelling around it (`getattr`, `importlib`, encoded strings), and
+   several have legitimate uses in the code the resident engineer maintains, which builds
+   pytest commands itself.
+2. *A structured report channel* (JUnit XML or a trusted plugin writing a nonce-bound
+   result file). Rejected: anything the runner process writes, the candidate's code in the
+   same process can write too, and a nonce held in that process is readable by it. It also
+   requires changing operator commands, which SentinelQA never does.
+3. *Out-of-process isolation of the code under test* (per-test child processes judged by a
+   parent that never imports candidate code, or an RPC proxy between tests and code).
+   Rejected for now: collection imports the code, a child's exit status is as forgeable as
+   the summary, and transparent proxying of arbitrary Python objects is brittle. It remains
+   the only full answer and stays deferred with the Docker runner proof.
+4. *A known-answer positive control* (chosen): plant a test whose correct outcome is
+   known — it must fail — and require the runner to report it. Placing it inside the
+   existing full-suite runs would cost nothing extra but would change their pass semantics
+   and let a fail-fast option (`-x`, `--maxfail`) stop at the canary and skip real tests;
+   a dedicated probe run keeps every existing run and count rule unchanged.
+
+**Decision.** After the verification runs and the PatchForge cross-check, and only when
+no blocking finding exists, SentinelQA derives a canary from the review identity: a module
+`test_sentinelqa_canary_<token>.py` whose single test raises `AssertionError`, placed in the
+directory holding the most locked `test_*.py`/`*_test.py` modules. It plants the canary in
+the verification tree for exactly one run of the operator's full-suite command and removes
+it afterwards (`canary.py`, `SpecificationRunner.run(..., canary=...)`). The probe
+demonstrates runner integrity only if the runner names the canary in a `FAILED` short-summary
+line, the summary counts exactly one failure and no errors, the exit status is 1, and the
+tree is unchanged. Otherwise:
+
+- the canary is reported but other tests fail too: `pristine_tests_failed`;
+- the probe changed the tree: `verification_tree_mutated`;
+- the canary is not properly reported: SentinelQA runs the same probe on the *pristine*
+  tree as a control. If trusted code reports the canary, the candidate changed how results
+  are reported: `runner_integrity_violated` (rejection). If even the pristine tree does not,
+  the profile cannot demonstrate integrity: `runner_integrity_unproven` (unverifiable, so
+  the verdict is inconclusive and fails closed). No locked pytest module to plant beside is
+  also `runner_integrity_unproven`.
+
+`SentinelVerdict` enforces the rule in its contract: `passed` requires a verification-tree
+run that demonstrated runner integrity, so no caller can produce a pass without the probe.
+Scripted and content-oracle sandboxes never run repository code; the deterministic gates
+wrap them in `HonestCanaryRunner`, which reports planted canaries the way pytest does, and
+scenarios model a silenced runner by withholding that on the candidate tree. The real-pytest
+regressions live in `tests/unit/test_sentinelqa_runner_integrity.py`. A review now runs at
+most seven commands (five before, plus the probe and, only when needed, its control); an
+honest pass costs one extra full-suite run. The canary token is derived from the review, not
+secret: code in the same process can list the directory, so secrecy would add nothing.
+
+**Candidate-changed tests stay rejected.** SentinelQA does not start judging the merit of a
+candidate's changes to locked tests. Any such change remains `specification_modified` (or
+`evaluation_config_altered`), and candidate-added tests remain excluded from evidence. Test
+repair stays an owner decision (REVISE), because a candidate that may edit the
+specification defines what correct means.
+
+**Residual risk, accepted and recorded.** The canary catches manipulation that is not
+aware of it. Code written to recognise the canary (for example by listing test directories
+for files it did not expect) and to spare it while silencing the real tests is not caught,
+and neither is code that behaves correctly only when it detects a test run, or a candidate
+that satisfies the tests without solving the task. Such code is purpose-built against the
+reviewer and visible in the patch under human review. Closing it needs out-of-process
+execution of the code under test (alternative 3).
 
 ### Execution reuses the sandbox boundary
 
 `SpecificationRunner` executes only operator-profile commands through any
 `SandboxExecutor` (Docker in production; scripted `FakeSandbox` or the benchmark's
 content oracle in deterministic gates) under the operator's sandbox policy, with review-
-bound request identities and at most five runs per review. Test counts come from
+bound request identities and at most seven runs per review. Test counts come from
 pytest's summary line via a strict parser that returns nothing rather than guess.
 
 ### Gates
@@ -128,7 +202,8 @@ pytest's summary line via a strict parser that returns nothing rather than guess
   passes only with its own tests, a mutated verification tree, rewritten source history,
   tampered or incomplete locks, a lock for another profile, corrupted artifacts, an
   unavailable executor, a missing summary, a timeout, a pristine run that mutates its
-  tree, and a passing status with reported failures.
+  tree, a passing status with reported failures, a runner silenced by the candidate's
+  code, a runner that cannot report the canary, and a probe that reveals failures.
 - Benchmark v0 now reviews every proposal with SentinelQA and records whether the
   independent verdict agrees with the hidden ground truth. The gate requires
   `reference` 5/5 passed and `fix_and_edit_tests` 5/5 failed with
