@@ -138,8 +138,8 @@ No credential is present in this container; nothing here needs one.
 
 ## Highest-priority next task: owner-authorized live exercises
 
-1. Owner step: fast-forward `main` to the 0.27.0 branch (or open a PR) so CI runs on it;
-   agents do not push to `main`.
+1. Done: 0.27.0 is on `main` (PR #1, PR #2) with CI green. `main` push rules are in
+   `AGENTS.md` (runtime agents never; external assistants only with owner authorization).
 2. Owner step: `exercise-github` without, then with, `--confirm-live` (runbook, "First
    live exercises"). Record the exercise id, PR number, and any failed check here. Only
    then run the first real `decide` + `publish`, and only after that consider

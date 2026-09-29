@@ -9,7 +9,7 @@ Git and `CHANGELOG.md`, rules in `AGENTS.md`, the long-form resume state in
 | Item | Value |
 | --- | --- |
 | Version | `0.27.0` (`pyproject.toml`) |
-| Branch | `main` (0.27.0 landed via PR #1 and PR #2; agents never push to `main`, changes go through PRs) |
+| Branch | `main` (0.27.0 landed via PR #1 and PR #2; `main` push rules: `AGENTS.md` Invariants) |
 | origin/main | `b382922` (merge of PR #2) plus the handoff-correction PR that contains this file |
 | Working tree | clean at the checkpoint (`git status --short` empty) |
 | CI | green on `main`: run `36629573824` (PR #1 head) and run `36630698127` (`b382922`, push to `main`), both jobs `validate` and `compose-integration` passed. |
