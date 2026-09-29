@@ -7,9 +7,10 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 - Branch `main`; local `HEAD` must equal `origin/main` at every checkpoint
   (`git rev-parse HEAD origin/main`, `git diff HEAD`, `git diff origin/main...HEAD`).
-- NEXUS `0.17.0` (Milestone H - Benchmark v0) release
-  `693047c88ae2741d92adff25fe0452c6af61863c`; GitHub Actions run `36539315838` passed
-  both jobs. HEAD is the commit containing this file (`git rev-parse HEAD`).
+- NEXUS `0.18.0` (Milestone I deterministic boundary): the release is the commit that
+  set that version; record its SHA and GitHub Actions run here once CI is green. HEAD is
+  the commit containing this file (`git rev-parse HEAD`).
+- 0.17.0 Milestone H `693047c` (run `36539315838`) green.
 - 0.16.2 finalization-reserve hardening `1984b8e` (run `36537351468`) green.
 - Verified releases: 0.16.1 Milestone G `9b05cdc` (GitHub Actions run `36494052048`
   green); 0.15.0 Milestone F `d6d39d3` (run `36491013537` green).
@@ -52,7 +53,7 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 - The E2E harness accepts a `sandbox_factory`, exposes `E2ERun.root`, and splits
   `invariant_problems()` from scenario expectations.
 
-## Milestone I Progress (deterministic boundary done, unreleased)
+## Milestone I Summary (deterministic boundary)
 
 - `nexus.patchforge.engine`: provider-neutral `ModelClient`; `ModelBackedEngine` turns
   one `RuntimeTurn` into one strictly parsed action. It offers only the phase's tools
@@ -73,7 +74,7 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 ## Exact Next Step
 
-1. Release the deterministic Milestone I boundary (0.18.0): docs, full gate, green CI.
+1. Confirm 0.18.0 CI is green and record it here and in the CHANGELOG heading.
 2. STOP at the live-model authorization boundary. The owner must explicitly authorize
    the one cost-bearing live run (see "Live Run Command").
 3. After an authorized run: inspect the artifact, record the result in ADR 0010 and

@@ -124,7 +124,7 @@ Engram records the validated history.
   commit, reproduction, final-tree validation, diff, scope, and basic tamper checks
 - **G. Deterministic E2E (Complete):** scripted happy path and all required failure/partial paths
 - **H. Benchmark v0 (Complete):** small synthetic defect corpus and reproducible harness
-- **I. Live engine (Next):** explicit opt-in, one targeted task, artifact inspection, then stop
+- **I. Live engine (Boundary complete; live run awaits owner authorization):** explicit opt-in, one targeted task, artifact inspection, then stop
 - **J. SentinelQA-lite:** independent fresh-sandbox patch and validation verification
 - **K. GitHub:** issue intake, reviewed branch push, and draft PR only; never merge
 

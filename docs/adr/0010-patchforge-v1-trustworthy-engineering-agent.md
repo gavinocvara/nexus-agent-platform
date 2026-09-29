@@ -195,6 +195,24 @@ simplification: equivalent solutions count only if listed. The gate engines show
 allowing test changes lets PatchForge propose patches that weaken the specification
 tests; independent re-validation (Milestone J) must use the original tests.
 
+Milestone I (0.18.0) adds the model boundary without making any live call.
+`ModelBackedEngine` sits behind a provider-neutral `ModelClient` and turns each turn into
+one strictly parsed action:
+- it offers only the phase's tools;
+- tool arguments are parsed in JSON mode against the gateway's contracts;
+- previous results are escaped, bounded untrusted data;
+- a model-call budget is enforced, and each call leaves a hash-only audit record;
+- malformed, unknown, disallowed, or invalid output is an engine failure, with no
+  repair retries.
+
+The model never gains authority: ToolGateway, Runtime, and Attestor are unchanged.
+
+A live run (`python -m nexus.patchforge.live run`) requires
+`NEXUS_PATCHFORGE_LIVE_ENABLED=true`, the API key in the ignored environment, and
+`--confirm-live`. It runs exactly one Benchmark v0 task with the content-oracle sandbox
+(no repository code executes), evaluates it independently, writes artifacts under
+`.nexus/`, and stops. The first live run awaits explicit owner authorization.
+
 ## Budgets And Runtime
 
 PatchForge uses the closed phases:

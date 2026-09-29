@@ -8,6 +8,22 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
+## 0.18.0 — PatchForge Milestone I: model engine boundary
+
+- `ModelBackedEngine` behind a provider-neutral `ModelClient`: one strictly parsed action
+  per turn, only the phase's tools, JSON-mode argument parsing, escaped and bounded
+  untrusted tool output, a model-call budget, and hash-only call audit records.
+  Malformed or unauthorized output is an engine failure, with no retries.
+- `python -m nexus.patchforge.live`:
+  - `preflight` makes no network call and reports only whether the key is present;
+  - `run` requires `NEXUS_PATCHFORGE_LIVE_ENABLED=true`, the key, and `--confirm-live`,
+    runs one Benchmark v0 task with the content-oracle sandbox, evaluates it
+    independently, writes artifacts under `.nexus/`, and stops.
+- `OpenAIResponsesClient` requests a strict single-action JSON schema with no SDK retries.
+- The E2E harness declares the engine identity; deterministic gates must be `scripted`.
+- `.env.example` documents the opt-in `NEXUS_PATCHFORGE_LIVE_*` settings.
+- No live model call has been made.
+
 ## 0.17.0 — PatchForge Milestone H: Benchmark v0 (`693047c`)
 
 - Five synthetic defects with evaluator-only ground truth (`nexus.patchforge.benchmark`,
