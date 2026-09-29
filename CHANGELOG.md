@@ -6,6 +6,16 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 ## Unreleased
 
+- Resident Software Engineer: read-only GitHub issue intake (`nexus.software_engineer.issues`),
+  opt-in through `NEXUS_SOFTWARE_ENGINEER_READ_ISSUES`. Open issues (never pull requests)
+  become bounded, hashed, instruction-scanned `issue` signals; at most three per cycle
+  become `Investigate issue #N` candidates of category `unknown` derived from untrusted
+  text (a plan for the owner when bug-labelled, report-only otherwise). Owner REJECT
+  decisions are now honoured by the candidate generator: the same ask is zeroed and
+  blocked on later days. The scheduled workflow gains `issues: read` and passes its own
+  token for the read. Any GitHub failure is one warning signal, never a failed cycle.
+- Resident Software Engineer: `bundle_from_branch` normalizes Git author dates so Git 2.55
+  (`Z`) and older Git (`+00:00`) produce the same bundle (CI fix, `ebca518`).
 - Resident Software Engineer evaluation: two publication scenarios join the judgment gate.
   `autonomous_draft_publication` (a LOW-risk change in `autonomous_low_risk` mode with a
   publisher ships as a draft pull request recorded on the change) and

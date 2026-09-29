@@ -25,6 +25,7 @@ from nexus.software_engineer.config import EngineerDisabledError, SoftwareEngine
 from nexus.software_engineer.cycle import CandidateExecutor, EngineeringCycle
 from nexus.software_engineer.executor import PatchForgeExecutor
 from nexus.software_engineer.inspect import RepositoryInspector
+from nexus.software_engineer.issues import GitHubIssueSource
 from nexus.software_engineer.memory import EngineerMemoryStore
 from nexus.software_engineer.models import CycleMode, OwnerVerdict
 from nexus.software_engineer.notify import (
@@ -42,7 +43,21 @@ from nexus.software_engineer.publish import (
 from nexus.software_engineer.sandbox import LocalProcessSandbox
 
 
-def _inspector(arguments: argparse.Namespace) -> RepositoryInspector:
+def _issue_source(settings: SoftwareEngineerSettings) -> GitHubIssueSource | None:
+    """Issue intake is the engineer's only network read; it exists only when opted in."""
+
+    if not settings.read_issues:
+        return None
+    return GitHubIssueSource(
+        settings.repository_url,
+        token_env=settings.github_read_token_env,
+        max_issues=settings.max_issues,
+    )
+
+
+def _inspector(
+    arguments: argparse.Namespace, settings: SoftwareEngineerSettings
+) -> RepositoryInspector:
     repo = Path(arguments.repo).resolve()
     git = GitRunner(Path(arguments.state_root) / "git-runtime")
     return RepositoryInspector(
@@ -50,6 +65,7 @@ def _inspector(arguments: argparse.Namespace) -> RepositoryInspector:
         git=git,
         clock=lambda: datetime.now(UTC),
         artifacts_dir=Path(arguments.artifacts).resolve() if arguments.artifacts else None,
+        issue_source=_issue_source(settings),
     )
 
 
@@ -166,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
             f"slack_webhook_present={slack} "
             f"github_token_present={_github_token_present(settings)} "
             f"publish_from_cycle={settings.publish_from_cycle} "
+            f"read_issues={settings.read_issues} "
             f"state_root={settings.state_root} memory_path={settings.memory_path} "
             f"max_runtime_seconds={settings.max_runtime_seconds} "
             f"max_changed_files={settings.max_changed_files} "
@@ -192,7 +209,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     if arguments.command == "inspect":
-        inspector = _inspector(arguments)
+        inspector = _inspector(arguments, settings)
         for signal in inspector.collect(arguments.since):
             flags = " [instruction-like]" if signal.instruction_like else ""
             print(f"{signal.severity.value:7} {signal.kind.value:14} {signal.summary}{flags}")
@@ -231,7 +248,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     cycle = EngineeringCycle(
         settings=settings,
-        inspector=_inspector(arguments),
+        inspector=_inspector(arguments, settings),
         memory=EngineerMemoryStore(settings.memory_path),
         notifier=notifier,
         executor=_executor(settings, arguments),

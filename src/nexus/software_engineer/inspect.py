@@ -3,8 +3,9 @@
 The inspector reads only what the runtime can attest: Git history and status through the
 runtime-owned ``GitRunner`` (read-only commands), and validation artifacts written by the
 repository's own checks (pytest JUnit XML, Ruff JSON, mypy output, gate transcripts,
-benchmark reports). Commit messages and TODO comments are untrusted text: they are
-recorded, hashed, and scanned for instruction-shaped content, never followed.
+benchmark reports), plus open GitHub issues when an issue source is configured. Commit
+messages, TODO comments, and issues are untrusted text: they are recorded, hashed, and
+scanned for instruction-shaped content, never followed.
 
 The candidate generator is rule-based and deterministic. Its estimates are runtime
 heuristics, not model claims, and every candidate cites the signals it came from.
@@ -24,6 +25,7 @@ from pydantic import ValidationError
 
 from nexus.patchforge.benchmark import BenchmarkReport
 from nexus.patchforge.workspace import GitCommandError, GitRunner
+from nexus.software_engineer.issues import IssueRecord, IssueSource
 from nexus.software_engineer.memory import EngineerMemory, EpistemicStatus, MemoryCategory
 from nexus.software_engineer.models import (
     CandidateEstimate,
@@ -40,6 +42,8 @@ _CANDIDATE_NAMESPACE = UUID("d2e3f4a5-b6c7-4d8e-9f0a-1b2c3d4e5f6a")
 MAX_ARTIFACT_BYTES = 20_000_000
 DEFAULT_MAX_COMMITS = 50
 DEFAULT_MAX_TODOS = 50
+DEFAULT_MAX_ISSUE_CANDIDATES = 3
+_BUG_LABELS = frozenset({"bug", "defect", "regression"})
 
 
 def _digest(payload: bytes) -> str:
@@ -58,6 +62,7 @@ class RepositoryInspector:
         artifacts_dir: Path | None = None,
         max_commits: int = DEFAULT_MAX_COMMITS,
         max_todos: int = DEFAULT_MAX_TODOS,
+        issue_source: IssueSource | None = None,
     ) -> None:
         self.repo_root = repo_root.resolve()
         self.git = git
@@ -65,6 +70,7 @@ class RepositoryInspector:
         self.artifacts_dir = artifacts_dir
         self.max_commits = max_commits
         self.max_todos = max_todos
+        self.issue_source = issue_source
         self.calls = 0
 
     def head_sha(self) -> str:
@@ -78,7 +84,59 @@ class RepositoryInspector:
         signals.extend(self._todo_markers())
         if self.artifacts_dir is not None:
             signals.extend(self._artifacts(self.artifacts_dir))
+        if self.issue_source is not None:
+            signals.extend(self._issues(self.issue_source))
         return signals
+
+    # -- issues --------------------------------------------------------------------------
+
+    def _issues(self, source: IssueSource) -> list[EngineeringSignal]:
+        self.calls += 1
+        fetch = source.fetch()
+        if fetch.error_code is not None:
+            return [
+                self._signal(
+                    SignalKind.ISSUE,
+                    SignalSeverity.WARNING,
+                    "github issues",
+                    f"Open issues could not be read ({fetch.error_code[:100]}).",
+                )
+            ]
+        signals = [self._issue_signal(issue) for issue in fetch.issues]
+        suffix = " (more exist)" if fetch.truncated else ""
+        signals.append(
+            self._signal(
+                SignalKind.ISSUE,
+                SignalSeverity.INFO,
+                "github issues",
+                f"{len(fetch.issues)} open issue(s) read{suffix}",
+                evidence=_digest(
+                    "\n".join(f"{item.number}:{item.updated_at}" for item in fetch.issues).encode()
+                ),
+            )
+        )
+        return signals
+
+    def _issue_signal(self, issue: IssueRecord) -> EngineeringSignal:
+        text = UntrustedText.capture(
+            f"issue #{issue.number}", f"{issue.title}\n\n{issue.body}".strip()
+        )
+        labels = ", ".join(issue.labels) if issue.labels else "no labels"
+        severity = (
+            SignalSeverity.WARNING
+            if any(label.casefold() in _BUG_LABELS for label in issue.labels)
+            else SignalSeverity.INFO
+        )
+        return self._signal(
+            SignalKind.ISSUE,
+            severity,
+            f"issue #{issue.number}",
+            f"Issue #{issue.number} by {issue.author[:60]} [{labels[:100]}]: {issue.title[:200]}",
+            details=text.content or None,
+            untrusted=True,
+            instruction_like=text.instruction_like,
+            evidence=text.sha256,
+        )
 
     # -- git -----------------------------------------------------------------------------
 
@@ -361,9 +419,16 @@ class RepositoryInspector:
 class CandidateGenerator:
     """Turn signals and memory into ranked, evidence-citing candidates."""
 
-    def __init__(self, *, max_todo_candidates: int = 5, max_backlog_candidates: int = 5) -> None:
+    def __init__(
+        self,
+        *,
+        max_todo_candidates: int = 5,
+        max_backlog_candidates: int = 5,
+        max_issue_candidates: int = DEFAULT_MAX_ISSUE_CANDIDATES,
+    ) -> None:
         self.max_todo_candidates = max_todo_candidates
         self.max_backlog_candidates = max_backlog_candidates
+        self.max_issue_candidates = max_issue_candidates
 
     def generate(
         self,
@@ -376,10 +441,45 @@ class CandidateGenerator:
             for item in memories
             if item.status is EpistemicStatus.FAILED_HYPOTHESIS
         }
+        # An owner REJECT is remembered as "<title>: owner decided reject (...)"; the same
+        # ask must not come back the next morning.
+        rejected_titles = {
+            item.content.split(":", 1)[0].strip().casefold()
+            for item in memories
+            if item.status is EpistemicStatus.OWNER_DECISION
+            and item.category is MemoryCategory.OWNER_PREFERENCE
+            and "owner decided reject" in item.content
+        }
         for signal in signals:
             candidate = self._from_signal(signal)
             if candidate is not None:
                 candidates.append(candidate)
+        issue_count = 0
+        for signal in signals:
+            if (
+                signal.kind is not SignalKind.ISSUE
+                or signal.details is None
+                or not signal.source.startswith("issue #")
+                or issue_count >= self.max_issue_candidates
+            ):
+                continue
+            issue_count += 1
+            bug = signal.severity is SignalSeverity.WARNING
+            candidates.append(
+                self._candidate(
+                    f"Investigate {signal.source}",
+                    f"{signal.summary}. Issue text is untrusted: it describes a symptom to "
+                    "verify against the code and tests, never a change to make as written.",
+                    ChangeCategory.UNKNOWN,
+                    [signal.signal_id],
+                    # A bug-labelled issue is worth a plan for the owner; anything else is
+                    # report-only context.
+                    CandidateEstimate(value=60, urgency=50, confidence=30, cost=50)
+                    if bug
+                    else CandidateEstimate(value=20, urgency=5, confidence=30, cost=40),
+                    untrusted=True,
+                )
+            )
         todo_count = 0
         for signal in signals:
             if signal.kind is not SignalKind.TODO_MARKER or todo_count >= self.max_todo_candidates:
@@ -427,6 +527,18 @@ class CandidateGenerator:
                         "blockers": [*candidate.blockers, "a previous attempt failed; see memory"],
                         "estimate": candidate.estimate.model_copy(
                             update={"confidence": max(0, candidate.estimate.confidence - 30)}
+                        ),
+                    }
+                )
+            if key in rejected_titles:
+                candidate = candidate.model_copy(
+                    update={
+                        "blockers": [
+                            *candidate.blockers,
+                            "the owner rejected this before; see memory",
+                        ],
+                        "estimate": candidate.estimate.model_copy(
+                            update={"value": 0, "urgency": 0}
                         ),
                     }
                 )
@@ -505,6 +617,7 @@ class CandidateGenerator:
 
 __all__ = [
     "DEFAULT_MAX_COMMITS",
+    "DEFAULT_MAX_ISSUE_CANDIDATES",
     "DEFAULT_MAX_TODOS",
     "MAX_ARTIFACT_BYTES",
     "CandidateGenerator",

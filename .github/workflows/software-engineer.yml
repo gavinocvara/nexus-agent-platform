@@ -19,6 +19,7 @@ on:
 
 permissions:
   contents: read
+  issues: read
 
 concurrency:
   group: resident-software-engineer
@@ -42,6 +43,9 @@ jobs:
       NEXUS_SOFTWARE_ENGINEER_MAX_MODEL_CALLS: ${{ vars.NEXUS_SOFTWARE_ENGINEER_MAX_MODEL_CALLS || '0' }}
       NEXUS_SOFTWARE_ENGINEER_MAX_OUTPUT_TOKENS: ${{ vars.NEXUS_SOFTWARE_ENGINEER_MAX_OUTPUT_TOKENS || '0' }}
       OPENAI_API_KEY: ${{ secrets.NEXUS_SOFTWARE_ENGINEER_OPENAI_API_KEY }}
+      # Issue intake is read-only and opt-in; the workflow token has issues: read only.
+      NEXUS_SOFTWARE_ENGINEER_READ_ISSUES: ${{ vars.NEXUS_SOFTWARE_ENGINEER_READ_ISSUES || 'false' }}
+      NEXUS_SOFTWARE_ENGINEER_GITHUB_READ_TOKEN: ${{ github.token }}
       NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL: ${{ secrets.NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL }}
 
     steps:

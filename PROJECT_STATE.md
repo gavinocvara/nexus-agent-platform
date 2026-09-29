@@ -26,7 +26,7 @@ Update it at every checkpoint. Rules live in `AGENTS.md`; execution order in
 | PatchForge A-H | Complete | `nexus.patchforge`, ADR 0010 |
 | PatchForge I (model engine boundary) | Built; live run not executed | `nexus.patchforge.engine`, `nexus.patchforge.live` |
 | PatchForge J (SentinelQA-lite) | Complete (0.19.0, CI run 36546322678 green) | `nexus.sentinelqa`, ADR 0011, `docs/runbooks/sentinelqa.md` |
-| PatchForge K (GitHub) | Draft-PR publication complete via the resident engineer's publisher (0.24.0); issue intake not started | `nexus.software_engineer.publish`, ADR 0012 |
+| PatchForge K (GitHub) | Draft-PR publication (0.24.0) and read-only issue intake complete via the resident engineer | `nexus.software_engineer.publish`, `nexus.software_engineer.issues`, ADR 0012 |
 | Resident Software Engineer | **Foundation (0.20.0, CI run 36549244409 green) + executor v1 for mechanical recipes (0.21.0) + controlled judgment evaluation (0.22.0) + model-backed recipes behind explicit spend confirmation (0.23.0) + owner-approved draft pull requests through a verified GitHub publisher (0.24.0)**, disabled by default | `nexus.software_engineer`, ADR 0012, `docs/runbooks/software-engineer.md` |
 | Engram, Kubernetes, AegisOps remediation | Deferred | `ROADMAP.md` |
 
@@ -87,6 +87,7 @@ zero disagreements).
 | Brain v1 | `NEXUS_BRAIN_MODE` | `disabled` | frozen evaluation only |
 | Resident Software Engineer | `NEXUS_SOFTWARE_ENGINEER_ENABLED`, `_MODE`, `_SANDBOX`, `_MODEL`, `_CONFIRM_MODEL_SPEND`, `_MAX_MODEL_CALLS`, `_MAX_OUTPUT_TOKENS`, `_SLACK_WEBHOOK_URL` (secret), `OPENAI_API_KEY` (secret) | off, `dry_run`, `none`, unset, `false`, `0`, `0`, unset, unset | GitHub Actions variables gate the scheduled workflow; `propose` + `local_process` lets mechanical recipes produce verified branches in the uploaded artifact |
 | Resident Software Engineer publishing | `NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN` (local env only; fine-grained, this repo, contents + pull requests write), `_PUBLISH_FROM_CYCLE` | unset, `false` | Used only by the owner-run `publish` command after `decide --verdict ship`; the scheduled workflow never receives it |
+| Resident Software Engineer issue intake | `NEXUS_SOFTWARE_ENGINEER_READ_ISSUES`, `_MAX_ISSUES`, `_GITHUB_READ_TOKEN` (optional, `issues: read`) | `false`, `20`, unset | The workflow passes `github.token` (permissions `contents: read`, `issues: read`); issues are untrusted signals |
 
 No credential is present in this container; nothing here needs one.
 
@@ -120,6 +121,7 @@ No credential is present in this container; nothing here needs one.
 | Controlled judgment evaluation (30 scenarios incl. autonomous draft publication and publisher refusal, CI gate) | **Done** (`evaluation.py`) |
 | Model-backed recipes (type annotation, micro bug fix, defensive check) | **Done** (`PatchForgeExecutor.model_engine_factory`), off until model + confirmation + budgets + key |
 | Owner decisions (`decide`) and publication (`publish`) as draft pull requests | **Done** (`approval.py`, `publish.py`, CLI); tree re-derived from the validated patch, remote blob/tree SHAs verified, never merges |
+| GitHub issue intake (read-only, opt-in, untrusted signals; owner REJECT honoured by the generator) | **Done** (`issues.py`, `inspect.py`) |
 | Slack-delivered owner commands | Not built (`decide` CLI today) |
 | Autonomous low-risk shipping in production | Possible only with `PUBLISH_FROM_CYCLE=true` + `autonomous_low_risk` + token; off by default; scheduled workflow never gets the token |
 
@@ -133,8 +135,7 @@ No credential is present in this container; nothing here needs one.
    CLI; the publisher and approval flow stay unchanged behind it.
 3. The first owner-authorized model-recipe run (a real type or micro-bug fix on this
    repository) once the owner sets the model, confirmation, budgets, and key.
-4. SentinelQA review of candidate-changed tests so test repair can leave plan-only mode;
-   GitHub issue intake (Milestone K remainder) through the same trust boundary.
+4. SentinelQA review of candidate-changed tests so test repair can leave plan-only mode.
 
 ## Resume commands
 

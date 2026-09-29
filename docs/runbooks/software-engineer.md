@@ -27,6 +27,9 @@ with a change is open a draft pull request after the owner says SHIP; a human me
 | `NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN_ENV` | `NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN` | Name of the variable that holds the GitHub token used by `publish`. |
 | `NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN` | unset | Fine-grained token for this repository only: contents and pull requests write, nothing else. Read at publish time, sent as a header, never stored. The scheduled workflow never receives it. |
 | `NEXUS_SOFTWARE_ENGINEER_PUBLISH_FROM_CYCLE` | `false` | Lets an `autonomous_low_risk` cycle open draft pull requests itself when the token is present. Keep it false unless the owner has decided otherwise in a reviewed commit. |
+| `NEXUS_SOFTWARE_ENGINEER_READ_ISSUES` | `false` | Read open GitHub issues (never pull requests) as untrusted signals; the engineer's only network read. |
+| `NEXUS_SOFTWARE_ENGINEER_GITHUB_READ_TOKEN` | unset | Optional read-only token for issue intake (`issues: read`); the workflow passes its own token. Never stored. |
+| `NEXUS_SOFTWARE_ENGINEER_MAX_ISSUES` | `20` | Most recently updated open issues read per cycle (1-100). |
 
 Mode, budgets, and owner identity are governing settings. The engineer never edits them.
 
@@ -53,6 +56,19 @@ positive `NEXUS_SOFTWARE_ENGINEER_MAX_MODEL_CALLS` and `NEXUS_SOFTWARE_ENGINEER_
 and `OPENAI_API_KEY` in the environment (in the workflow: the
 `NEXUS_SOFTWARE_ENGINEER_OPENAI_API_KEY` secret). Missing any of them leaves the candidate
 as an approval-only plan. `preflight` prints `model_recipes_allowed`.
+
+## Issues as signals
+
+With `NEXUS_SOFTWARE_ENGINEER_READ_ISSUES=true` the inspector lists the most recently
+updated open issues through the GitHub REST API (pull requests excluded, bodies bounded to
+4000 characters) and records each as an `issue` signal: untrusted text, hashed, scanned
+for instruction-shaped content, `warning` severity when labelled `bug`, `defect`, or
+`regression`, `info` otherwise. Up to three issues per cycle become candidates titled
+`Investigate issue #N`: a bug-labelled issue is worth an approval-only plan (category
+`unknown`, derived from untrusted text, so never autonomous); anything else is report-only
+context. Once the owner answers such a request with REJECT, the remembered preference
+keeps the same ask at zero value on later days. A GitHub error or rate limit becomes one
+`warning` signal and never fails the cycle.
 
 ## Judgment evaluation
 

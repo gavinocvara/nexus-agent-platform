@@ -14,6 +14,7 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from nexus.atlas.models import Identifier
+from nexus.software_engineer.issues import GITHUB_READ_TOKEN_ENV_DEFAULT
 from nexus.software_engineer.models import CycleBudget, CycleMode
 from nexus.software_engineer.publish import GITHUB_TOKEN_ENV_DEFAULT
 
@@ -78,6 +79,19 @@ class SoftwareEngineerSettings(BaseSettings):
     nothing else). It is read only while publishing and never stored, logged, or remembered.
     The scheduled workflow does not receive it."""
 
+    read_issues: bool = False
+    """Read open GitHub issues (never pull requests) as untrusted signals. Off by default
+    because it is the engineer's only network read; the scheduled workflow passes its
+    read-only token so the read works on private repositories."""
+
+    github_read_token_env: str = Field(
+        default=GITHUB_READ_TOKEN_ENV_DEFAULT, min_length=1, max_length=100
+    )
+    """Name of the environment variable holding a read-only token for issue intake
+    (``issues: read``). Optional: public repositories can be read without one."""
+
+    max_issues: int = Field(default=20, ge=1, le=100)
+
     publish_from_cycle: bool = False
     """Let an ``autonomous_low_risk`` cycle open a draft pull request itself when the token is
     present. Off, every cycle only proposes; publishing happens through ``decide`` and
@@ -128,6 +142,7 @@ class SoftwareEngineerSettings(BaseSettings):
 
 
 __all__ = [
+    "GITHUB_READ_TOKEN_ENV_DEFAULT",
     "GITHUB_TOKEN_ENV_DEFAULT",
     "SLACK_WEBHOOK_ENV_DEFAULT",
     "EngineerDisabledError",

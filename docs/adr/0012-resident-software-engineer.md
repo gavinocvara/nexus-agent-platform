@@ -199,10 +199,23 @@ number and URL, authority, publisher identity) is persisted, attached to the cha
 remembered as a validated fact with the decision as provenance. Rollback of a published
 change is `withdraw`: close the pull request, delete the branch.
 
+### Issue intake (after 0.24.0)
+
+Open GitHub issues are the first network read the engineer makes, and it is opt-in
+(`read_issues`). `GitHubIssueSource` lists the most recently updated open issues with at
+most the `issues: read` scope, excludes pull requests, bounds titles and bodies, and turns
+every failure into a stable error code. The inspector records each issue as an untrusted
+`issue` signal (hashed, instruction-scanned, `warning` when bug-labelled); the generator
+turns at most three per cycle into `Investigate issue #N` candidates of category `unknown`
+derived from untrusted text, which the risk classifier and policy therefore keep out of
+autonomous shipping. Owner rejections are remembered as preferences and zero the same ask
+on later days, so a rejected issue is context, not a daily request.
+
 ## Deferred
 
-- GitHub issue intake (the remainder of PatchForge Milestone K) and any publisher that
-  fast-forwards `main`; the engineer will not merge.
+- Any publisher that fast-forwards `main`; the engineer will not merge. Issue comments and
+  reactions as owner signals stay outside the trust boundary until commands arrive through
+  a signature-verified channel.
 - Test repair and any recipe that must change tests wait for SentinelQA to review
   candidate-added or changed tests; today they remain approval-only plans.
 - Price tables for cost accounting; until then token and call budgets bound spending.

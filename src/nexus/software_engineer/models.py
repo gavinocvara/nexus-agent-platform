@@ -142,6 +142,7 @@ class SignalKind(StrEnum):
     TODO_MARKER = "todo_marker"
     DEPENDENCY = "dependency"
     OWNER_MESSAGE = "owner_message"
+    ISSUE = "issue"
 
 
 class SignalSeverity(StrEnum):
