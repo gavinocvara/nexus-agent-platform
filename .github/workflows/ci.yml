@@ -54,6 +54,11 @@ jobs:
       - name: Validate SentinelQA adversarial gate
         run: python -m nexus.sentinelqa
 
+      - name: Validate resident Software Engineer boundary
+        run: |
+          python -m pytest tests/unit/test_software_engineer_*.py
+          python -m nexus.software_engineer preflight
+
       - name: Validate deterministic investigator boundary
         run: python -m pytest tests/unit/test_aegisops_contracts.py tests/unit/test_aegisops_runtime.py tests/unit/test_aegisops_evaluation.py
 

@@ -19,6 +19,7 @@ against a baseline before adoption.
 | Atlas | Thin v1 | Local control plane: typed jobs, policy, review, approval, audit | ADR 0009 |
 | PatchForge | In progress | Contracts through Benchmark v0 plus an opt-in model engine boundary | ADR 0010 |
 | SentinelQA-lite | Built | Independent verification against the pristine specification; fail-closed verdicts gate Atlas approval | ADR 0011, `docs/runbooks/sentinelqa.md` |
+| Resident Software Engineer | Foundation (disabled by default) | Bounded daily cycle: inspect, rank, plan, risk-classify, self-review, ask the owner; private memory; Slack notifier | ADR 0012, `docs/runbooks/software-engineer.md` |
 | Engram | Planned | Shared validated knowledge | `ROADMAP.md` |
 
 Lab request path:
@@ -29,7 +30,8 @@ Client -> Gateway -> Users
 ```
 
 Code lives under `src/nexus/` (`services`, `lab`, `observability`, `diagnostics`,
-`aegisops`, `evaluation`, `brain`, `atlas`, `patchforge`, `sentinelqa`).
+`aegisops`, `evaluation`, `brain`, `atlas`, `patchforge`, `sentinelqa`,
+`software_engineer`).
 
 ## Install
 
@@ -103,6 +105,11 @@ Alloy. None of these is safe for a normal deployment.
   specification is rejected; evidence that cannot be trusted is inconclusive. Only a
   passed verdict unlocks human approval.
 - Each agent's memory is private. Brain v1 is disabled by default and fails closed.
+- The resident Software Engineer is disabled by default (`NEXUS_SOFTWARE_ENGINEER_ENABLED`),
+  runs in `dry_run` mode unless the owner changes it, classifies every change by risk,
+  never ships anything that touches its own governing rules, and treats silence as no
+  decision. Its memory is a private namespace; its Slack credential lives only in the
+  environment.
 - Secrets, `.env`, and local state under `.nexus/` are never committed.
 
 ## Documentation Map

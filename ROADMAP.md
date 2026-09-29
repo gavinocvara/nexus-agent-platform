@@ -139,10 +139,12 @@ Each step needs explicit owner authorization:
 
 1. SentinelQA beyond lite (Phase 12): Docker runner proof, candidate-added test review,
    requirements-to-tests, browser/API evidence, selector/DOM benchmark
-2. Resident Software Engineer: a bounded daily engineering cycle over this repository
-   (inspect, prioritize, propose, validate, self-review, classify risk, ship only
-   low-risk changes autonomously, otherwise request owner approval through Slack), with
-   an isolated private memory; it never merges its own work without policy approval
+2. Resident Software Engineer (ADR 0012): a bounded daily engineering cycle over this
+   repository (inspect, prioritize, propose, validate, self-review, classify risk, ship
+   only low-risk changes autonomously, otherwise request owner approval through Slack),
+   with an isolated private memory; it never merges its own work without policy approval.
+   Foundation complete and disabled by default; the PatchForge + SentinelQA executor,
+   model-backed investigation, and Slack-delivered owner commands are the next steps
 3. Deferred, in an order chosen when authorized:
    - Phase 9: AegisOps specialists, verifier, and approval-gated remediation with
      recovery verification

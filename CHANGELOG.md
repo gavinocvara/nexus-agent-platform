@@ -8,6 +8,43 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
+## 0.20.0 — Resident Software Engineer foundation
+
+- New `nexus.software_engineer` package (ADR 0012), disabled by default
+  (`NEXUS_SOFTWARE_ENGINEER_ENABLED=false`, `mode=dry_run`, no model, zero model-call and
+  cost budgets):
+  - strict contracts for signals, candidates, risk, gates, self-review, change summaries,
+    approval requests, owner decisions, budgets, cycle records, and reports;
+  - `classify_change`: category floor, path sensitivity, size, uncertainty raises the
+    level, governing paths (own package, PatchForge/SentinelQA/Atlas boundaries, CI,
+    `AGENTS.md`, frozen evidence, infrastructure, sensitive files) are always HIGH;
+  - `ShipPolicy`: budget, dry-run, failed or missing gates, governing paths, risk,
+    self-review, mode, and owner decisions decide ship / request approval / abandon /
+    blocked; silence never approves;
+  - `UntrustedText` and `OwnerCommand`: repository text and messages are data and are
+    scanned for instruction-shaped content; only the configured human owner decides;
+  - `EngineerMemoryStore`: private namespace `software_engineer.resident` with typed
+    categories, epistemic status (observation, inference, owner decision, validated
+    fact, failed hypothesis), provenance, confidence, validity, versioning, dedup,
+    correction, invalidation, trust-ordered retrieval, secret and instruction refusal;
+  - `RepositoryInspector` and `CandidateGenerator`: Git history and status, TODO markers,
+    pytest/Ruff/mypy/gate/benchmark artifacts, deterministic ranking with cited evidence;
+  - `SelfReviewer` over `DiffFacts`; `Notifier` with urgent-now / aggregate-daily
+    behavior, retries, per-cycle caps, secret blocking, and a `SlackWebhookTransport`
+    that reads the webhook only from the environment;
+  - `EngineeringCycle`: the closed phase machine with budgets, a dry-run executor,
+    persisted canonical records and reports, memory writes only from validated evidence
+    or owner decisions, and failure handling that always leaves a record;
+  - `python -m nexus.software_engineer {preflight,inspect,cycle}` and a disabled-by-default
+    scheduled GitHub Actions workflow with a read-only token.
+- Tests cover configuration defaults, risk tables, every policy refusal, owner decisions,
+  injection detection, memory rules and isolation, notifier behavior and Slack transport,
+  diff facts and review, inspection and ranking, and the cycle end to end (no-work,
+  dry-run approval request, autonomous ship with scripted executor, propose mode, failed
+  gate and blocked retry, governing paths, weakened tests, budget exhaustion, notifier
+  outage, dirty tree, prompt injection, CLI).
+- Runbook `docs/runbooks/software-engineer.md`.
+
 ## 0.19.0 — PatchForge Milestone J: SentinelQA-lite independent verification
 
 - New `nexus.sentinelqa` package (ADR 0011): `SpecificationLock` captured from the Git

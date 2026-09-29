@@ -1,0 +1,74 @@
+name: Resident Software Engineer
+
+# Disabled by default. The job runs only when the repository variable
+# NEXUS_SOFTWARE_ENGINEER_ENABLED is exactly "true". It never pushes: the workflow token
+# is read-only, and the engineer's mode defaults to dry_run (observe, prioritize, plan,
+# report). A Slack webhook is optional and lives only in a repository secret.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry_run (default) or propose"
+        required: false
+        default: "dry_run"
+  schedule:
+    - cron: "17 6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: resident-software-engineer
+  cancel-in-progress: false
+
+jobs:
+  engineering-cycle:
+    if: ${{ vars.NEXUS_SOFTWARE_ENGINEER_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      NEXUS_SOFTWARE_ENGINEER_ENABLED: "true"
+      NEXUS_SOFTWARE_ENGINEER_MODE: ${{ inputs.mode || vars.NEXUS_SOFTWARE_ENGINEER_MODE || 'dry_run' }}
+      NEXUS_SOFTWARE_ENGINEER_OWNER_ID: ${{ vars.NEXUS_SOFTWARE_ENGINEER_OWNER_ID || 'owner' }}
+      NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL: ${{ secrets.NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package and dev tooling
+        run: python -m pip install -e ".[dev]"
+
+      - name: Produce validation artifacts for inspection
+        run: |
+          mkdir -p artifacts/benchmark
+          python -m ruff check . --output-format json > artifacts/ruff.json || true
+          python -m mypy > artifacts/mypy.txt || true
+          python -m pytest -q --junitxml=artifacts/pytest.xml || true
+          python -m nexus.patchforge.e2e_catalog > artifacts/e2e.txt 2>&1 || true
+          python -m nexus.patchforge.benchmark_corpus --output artifacts/benchmark > artifacts/benchmark.txt 2>&1 || true
+          python -m nexus.sentinelqa > artifacts/sentinelqa.txt 2>&1 || true
+
+      - name: Preflight
+        run: python -m nexus.software_engineer preflight
+
+      - name: Run one engineering cycle
+        run: python -m nexus.software_engineer cycle --artifacts artifacts
+
+      - name: Upload cycle record and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resident-engineer-cycle
+          path: |
+            .nexus/software_engineer/cycles
+            artifacts
+          retention-days: 30

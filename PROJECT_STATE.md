@@ -8,12 +8,12 @@ Update it at every checkpoint. Rules live in `AGENTS.md`; execution order in
 
 | Item | Value |
 | --- | --- |
-| Version | `0.19.0` (`pyproject.toml`) |
+| Version | `0.20.0` (`pyproject.toml`) |
 | HEAD | the commit containing this file (`git rev-parse HEAD`) |
 | origin/main | must equal HEAD at a checkpoint (`git rev-parse origin/main`) |
 | Working tree | clean at the checkpoint (`git status --short` empty) |
 | Toolchain | Python 3.12, Ruff, strict mypy, pytest, Docker Compose |
-| Local setup used for 0.19.0 | `uv venv --python 3.12 <outside repo>` then `uv pip install -e ".[dev]"` |
+| Local setup used for 0.19.0 and 0.20.0 | `uv venv --python 3.12 <outside repo>` then `uv pip install -e ".[dev]"` |
 
 ## What exists (architecture status)
 
@@ -25,9 +25,9 @@ Update it at every checkpoint. Rules live in `AGENTS.md`; execution order in
 | Atlas thin control plane | Complete (Phase 8) | `nexus.atlas`, ADR 0009 |
 | PatchForge A-H | Complete | `nexus.patchforge`, ADR 0010 |
 | PatchForge I (model engine boundary) | Built; live run not executed | `nexus.patchforge.engine`, `nexus.patchforge.live` |
-| PatchForge J (SentinelQA-lite) | **Complete in 0.19.0** | `nexus.sentinelqa`, ADR 0011, `docs/runbooks/sentinelqa.md` |
+| PatchForge J (SentinelQA-lite) | Complete (0.19.0, CI run 36546322678 green) | `nexus.sentinelqa`, ADR 0011, `docs/runbooks/sentinelqa.md` |
 | PatchForge K (GitHub intake, branch push, draft PR) | Not started | — |
-| Resident Software Engineer | **Not started; next** | planned `nexus.software_engineer` |
+| Resident Software Engineer | **Foundation complete in 0.20.0**, disabled by default; executor next | `nexus.software_engineer`, ADR 0012, `docs/runbooks/software-engineer.md` |
 | Engram, Kubernetes, AegisOps remediation | Deferred | `ROADMAP.md` |
 
 ## SentinelQA-lite (0.19.0) in one paragraph
@@ -48,18 +48,19 @@ byte-identically), `tests/unit/test_sentinelqa_*.py`, and Benchmark v0 agreement
 (`reference` 5/5 passed, `fix_and_edit_tests` 5/5 failed with `specification_modified`,
 zero disagreements).
 
-## Validation record (0.19.0, local, Linux)
+## Validation record (0.20.0, local, Linux)
 
 | Check | Result |
 | --- | --- |
 | `uv pip check` | compatible |
 | `ruff format --check .` / `ruff check .` | clean (182 files) |
-| `mypy` (strict, `nexus` package) | clean (101 files) |
+| `mypy` (strict, `nexus` package) | clean (114 files) |
 | `pytest -q` (unit + service, integration deselected) | see "Test counts" |
 | `python -m nexus.patchforge.e2e_catalog` | 23 scenarios passed, byte-identical |
 | `python -m nexus.patchforge.benchmark_corpus` | passed; SentinelQA agreement 100% |
 | `python -m nexus.sentinelqa` | 29 scenarios passed, byte-identical |
 | `python -m nexus.lab.scenarios validate` | 5 scenarios |
+| `python -m nexus.software_engineer preflight` | `enabled=False mode=dry_run slack_webhook_present=False` |
 | `docker compose config --quiet` | valid |
 | Compose integration (`RUN_INTEGRATION=1`) | not run locally (no Docker daemon); CI job `compose-integration` |
 | Live model calls | none, ever, in this repository's history |
@@ -70,6 +71,7 @@ zero disagreements).
 - 0.18.0 baseline: 670 passed, 23 deselected.
 - 0.19.0: 744 passed, 23 deselected (SentinelQA adds lock, summary,
   verifier, catalog, and Atlas-flow tests).
+- 0.20.0: 807 passed, 23 deselected (63 resident-engineer tests added).
 
 ## Credentials and enablement
 
@@ -78,50 +80,54 @@ zero disagreements).
 | AegisOps live investigator | `NEXUS_AGENT_ENABLED`, `OPENAI_API_KEY` | off | key only in ignored `.env` |
 | PatchForge live run | `NEXUS_PATCHFORGE_LIVE_ENABLED`, `OPENAI_API_KEY`, `--confirm-live` | off | owner authorization required; now SentinelQA-reviewed |
 | Brain v1 | `NEXUS_BRAIN_MODE` | `disabled` | frozen evaluation only |
-| Resident Software Engineer (planned) | `NEXUS_SOFTWARE_ENGINEER_ENABLED`, Slack secrets | off | must never spend money on a fresh clone |
+| Resident Software Engineer | `NEXUS_SOFTWARE_ENGINEER_ENABLED`, `NEXUS_SOFTWARE_ENGINEER_MODE`, `NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL` (secret) | off, `dry_run`, unset | GitHub Actions variable `NEXUS_SOFTWARE_ENGINEER_ENABLED=true` gates the scheduled workflow |
 
 No credential is present in this container; nothing here needs one.
 
 ## Known failures, blockers, debt
 
-- None failing. SentinelQA's runner lacks a Docker integration proof (deterministic gates
-  use scripted/oracle sandboxes). Test modules are not mypy-checked in CI.
+- None failing. The resident engineer plans and proposes but cannot produce code changes
+  until its executor exists. SentinelQA's runner lacks a Docker integration proof
+  (deterministic gates use scripted/oracle sandboxes). Test modules are not mypy-checked
+  in CI.
 - Remote branch `maintenance/repo-hygiene-claude` is unmerged; owner decides.
 - Live PatchForge run: deliberately unexecuted. Justified only after the owner authorizes
   cost; it is now reviewed by SentinelQA end to end.
 
-## Highest-priority next task: Resident Software Engineer foundation
+## Resident Software Engineer status (0.20.0)
 
-Design decided from the repository's architecture (see also `ROADMAP.md`):
+| Capability | Status |
+| --- | --- |
+| Settings, budgets, default-off | Done (`config.py`) |
+| Contracts (signals, candidates, risk, gates, review, change, approval, owner decision, budgets, record, report) | Done (`models.py`) |
+| Risk classifier with governing paths and uncertainty escalation | Done (`risk.py`) |
+| Ship policy (ship / request approval / abandon / blocked; owner decisions; silence never approves) | Done (`policy.py`) |
+| Trust boundary (untrusted text scanning, owner command authorization) | Done (`trust.py`) |
+| Private memory (categories, epistemic status, provenance, dedup, correction, invalidation) | Done (`memory.py`) |
+| Repository inspection and candidate generation | Done, artifact-driven (`inspect.py`) |
+| Self-review from diff facts | Done, deterministic (`review.py`) |
+| Notifier + Slack webhook transport (mocked in tests) | Done (`notify.py`) |
+| Daily report and approval request rendering | Done (`report.py`) |
+| Cycle state machine, persistence, failure handling | Done (`cycle.py`) |
+| CLI and scheduled workflow (read-only token, variable-gated) | Done |
+| Executor (PatchForge + SentinelQA + gates on an isolated branch; ship by fast-forward) | **Not built**; `DryRunExecutor` only |
+| Model-backed investigation | Not built (no model configured; budgets zero) |
+| Slack-delivered owner commands | Not built (typed `OwnerCommand` via code) |
+| Autonomous low-risk shipping in production | Disabled; exercised only with scripted executors in tests |
 
-1. Package `nexus.software_engineer`. Settings `NEXUS_SOFTWARE_ENGINEER_*` with
-   `enabled=False` by default; budgets (runtime, turns, tool calls, tokens, files, diff
-   bytes, money when measurable).
-2. Contracts: `EngineeringSignal` (typed observation from git/CI/tests/lint/benchmarks),
-   `EngineeringCandidate` (issue or improvement with evidence, value, urgency, confidence,
-   cost, risk), `RiskLevel` LOW/MEDIUM/HIGH with a rule-based classifier that escalates on
-   uncertainty and treats any touch of policy, permissions, secrets, budgets, evaluator,
-   frozen evidence, CI, or its own governing code as HIGH.
-3. Cycle state machine mirroring PatchForge's closed phases: observe -> understand ->
-   prioritize -> investigate -> plan -> implement -> test -> self_review -> assess_risk ->
-   decide (ship | request_approval | abandon) -> observe_results -> learn -> report.
-   "Nothing worth changing today" is a successful outcome.
-4. Implementation and validation run through PatchForge + SentinelQA (this repository as
-   the operator profile), never through a new shell tool. Atlas holds the job, review, and
-   human approval.
-5. Private memory namespace `software_engineer.resident` with typed categories
-   (repository knowledge, lessons, owner preferences, decisions, incidents, backlog,
-   self-evaluation), provenance, confidence, verification level (observation, inference,
-   owner_decision, validated_fact, failed_hypothesis), versioning, dedup, invalidation.
-   Reuse the Brain v1 SQLite pattern; do not share the AegisOps namespace.
-6. Notifier abstraction with a Slack adapter (webhook/bot token from env only, mocked in
-   tests), event types DAILY_REPORT, BUG_FIXED, IMPROVEMENT_COMPLETED, APPROVAL_REQUIRED,
-   BLOCKED, TEST_REGRESSION, BENCHMARK_REGRESSION, SECURITY_CONCERN, ROLLBACK_OCCURRED,
-   ENGINEERING_CYCLE_FAILED; aggregation, retry, no secrets in logs or memory.
-7. Scheduling: GitHub Actions `workflow_dispatch` + cron, gated on a repository variable
-   and secrets, dry-run by default; manual `python -m nexus.software_engineer cycle`.
-8. Adversarial evaluation suite for the engineer (injection in issue text, requests to
-   weaken safety, missing credentials, Slack outage, budget exhaustion, owner rejection).
+## Highest-priority next task: resident engineer executor
+
+1. `CandidateExecutor` implementation: provision an isolated branch from HEAD, build a
+   `RepositoryProfile` for this repository (commands: ruff format check, ruff check,
+   mypy, pytest full/targeted; test prefixes `tests`; protected paths = governing
+   paths), run PatchForge for the candidate, capture the `SpecificationLock` first and have
+   SentinelQA verify the result, map gates to `GateResult`s with evidence hashes, and
+   return a `ChangeSummary` with a rollback reference. `ship` fast-forwards only an
+   approved branch; `rollback` reverts by commit.
+2. Wire the executor in `__main__` behind `mode != dry_run`; keep the workflow's default
+   mode `dry_run`.
+3. Adversarial evaluation of the executor: injected issue text, request to weaken safety
+   controls, flaky test, unrelated failing test, merge conflict, dirty tree.
 
 ## Resume commands
 
