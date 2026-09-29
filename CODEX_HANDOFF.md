@@ -7,9 +7,10 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 - Branch `main`; local `HEAD` must equal `origin/main` at every checkpoint
   (`git rev-parse HEAD origin/main`, `git diff HEAD`, `git diff origin/main...HEAD`).
-- NEXUS `0.16.2` (finalization-reserve hardening), release
-  `1984b8e09fe1d4766b55271ef88844e3b8647eaf`; GitHub Actions run `36537351468` passed
-  both jobs. HEAD is the commit containing this file (`git rev-parse HEAD`).
+- NEXUS `0.17.0` (Milestone H - Benchmark v0): the release is the commit that set that
+  version; record its SHA and GitHub Actions run here once CI is green. HEAD is the
+  commit containing this file (`git rev-parse HEAD`).
+- 0.16.2 finalization-reserve hardening `1984b8e` (run `36537351468`) green.
 - Verified releases: 0.16.1 Milestone G `9b05cdc` (GitHub Actions run `36494052048`
   green); 0.15.0 Milestone F `d6d39d3` (run `36491013537` green).
 
@@ -37,7 +38,7 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 - Not run locally: Compose integration (no Docker daemon here). CI's
   `compose-integration` job is the integration gate.
 
-## Milestone H Progress (in progress, unreleased)
+## Milestone H Summary
 
 - `nexus.patchforge.benchmark`: `GroundTruth` (evaluator-only accepted contents plus
   must-not-change files), `ContentOracleSandbox` (scores worktree contents without
@@ -53,8 +54,7 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 ## Exact Next Step
 
-Release Milestone H as 0.17.0 (ADR 0010 note, ROADMAP, CHANGELOG, README, full gate,
-green CI). Then Milestone I - live engine integration boundary: build a model-backed
+After 0.17.0 CI is green and recorded: Milestone I - live engine integration boundary: build a model-backed
 `RuntimeEngine` adapter deterministically (typed action parsing, malformed-output and
 injection handling, budgets) behind an explicit opt-in. Stop before any live call and
 record the exact command for owner authorization.

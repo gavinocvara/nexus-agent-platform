@@ -123,8 +123,8 @@ Engram records the validated history.
 - **F. Attestor (Complete):** runtime workspace fingerprints, runtime-owned proposal
   commit, reproduction, final-tree validation, diff, scope, and basic tamper checks
 - **G. Deterministic E2E (Complete):** scripted happy path and all required failure/partial paths
-- **H. Benchmark v0 (Next):** small synthetic defect corpus and reproducible harness
-- **I. Live engine:** explicit opt-in, one targeted task, artifact inspection, then stop
+- **H. Benchmark v0 (Complete):** small synthetic defect corpus and reproducible harness
+- **I. Live engine (Next):** explicit opt-in, one targeted task, artifact inspection, then stop
 - **J. SentinelQA-lite:** independent fresh-sandbox patch and validation verification
 - **K. GitHub:** issue intake, reviewed branch push, and draft PR only; never merge
 

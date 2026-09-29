@@ -8,6 +8,22 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 Nothing yet.
 
+## 0.17.0 — PatchForge Milestone H: Benchmark v0
+
+- Five synthetic defects with evaluator-only ground truth (`nexus.patchforge.benchmark`,
+  `nexus.patchforge.benchmark_corpus`).
+- `ContentOracleSandbox` scores worktree contents against the ground truth without
+  executing repository code or revealing the truth.
+- An independent evaluator re-applies each attested patch artifact to a clean clone; a
+  task counts as resolved only if PatchForge proposed a patch and the evaluator confirms
+  it.
+- Deterministic engines: `reference` (5/5 resolved), `noop` (0/5), `test_editor` (0/5),
+  and `fix_and_edit_tests` (5 proposals, all rejected as false proposals).
+- `python -m nexus.patchforge.benchmark_corpus` is a new CI gate: expected counts, zero
+  invariant violations, and byte-identical reports on replay.
+- The E2E harness accepts a custom sandbox factory and separates universal invariants
+  from scenario expectations.
+
 ## 0.16.2 — PatchForge finalization-reserve hardening (`1984b8e`)
 
 - A finalize-phase call refused because it would take the report's reserved call or

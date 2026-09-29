@@ -185,6 +185,16 @@ transition (`budget_exhausted`, or the earlier primary failure) and a
 action ends finalization. The refused call never executed, so no budget is consumed or
 restored. Every other failure during `finalize` still ends finalization directly.
 
+Milestone H (0.17.0) adds Benchmark v0. Ground truth (accepted file contents plus files
+that must not change) is evaluator-only. A `ContentOracleSandbox` answers test commands
+by comparing worktree contents with it, without executing repository code, and reveals
+nothing about it. An independent evaluator re-applies the attested patch artifact to a
+clean clone. A task is resolved only when PatchForge proposed a patch and the evaluator
+confirms it; any other proposal is a false proposal. Content-hash ground truth is a v0
+simplification: equivalent solutions count only if listed. The gate engines show that
+allowing test changes lets PatchForge propose patches that weaken the specification
+tests; independent re-validation (Milestone J) must use the original tests.
+
 ## Budgets And Runtime
 
 PatchForge uses the closed phases:
