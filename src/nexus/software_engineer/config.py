@@ -15,6 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from nexus.atlas.models import Identifier
 from nexus.software_engineer.models import CycleBudget, CycleMode
+from nexus.software_engineer.publish import GITHUB_TOKEN_ENV_DEFAULT
 
 SLACK_WEBHOOK_ENV_DEFAULT = "NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL"
 
@@ -70,6 +71,17 @@ class SoftwareEngineerSettings(BaseSettings):
     only when a message is sent and is never stored, logged, or remembered."""
 
     slack_channel_label: str = Field(default="#nexus-engineering", min_length=1, max_length=100)
+
+    github_token_env: str = Field(default=GITHUB_TOKEN_ENV_DEFAULT, min_length=1, max_length=100)
+    """Name of the environment variable holding a fine-grained GitHub token that may create
+    branches and draft pull requests on the repository (contents and pull requests: write,
+    nothing else). It is read only while publishing and never stored, logged, or remembered.
+    The scheduled workflow does not receive it."""
+
+    publish_from_cycle: bool = False
+    """Let an ``autonomous_low_risk`` cycle open a draft pull request itself when the token is
+    present. Off, every cycle only proposes; publishing happens through ``decide`` and
+    ``publish`` after the owner's SHIP. A draft pull request is never a merge."""
     max_notifications_per_cycle: int = Field(default=5, ge=1, le=50)
     schedule_cron: str = Field(default="17 6 * * *", min_length=9, max_length=100)
     """Documented intent only; the GitHub Actions workflow owns the real schedule."""
@@ -115,4 +127,9 @@ class SoftwareEngineerSettings(BaseSettings):
             )
 
 
-__all__ = ["SLACK_WEBHOOK_ENV_DEFAULT", "EngineerDisabledError", "SoftwareEngineerSettings"]
+__all__ = [
+    "GITHUB_TOKEN_ENV_DEFAULT",
+    "SLACK_WEBHOOK_ENV_DEFAULT",
+    "EngineerDisabledError",
+    "SoftwareEngineerSettings",
+]

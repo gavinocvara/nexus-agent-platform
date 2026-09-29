@@ -17,10 +17,19 @@ from uuid import UUID
 from pydantic import AwareDatetime, Field, StringConstraints
 
 from nexus.atlas.models import ActorIdentity, ActorType, StrictModel
+from nexus.brain.models import contains_secret as _contains_brain_secret
 from nexus.patchforge.engine import render_untrusted
 from nexus.software_engineer.models import OwnerVerdict
 
 MAX_UNTRUSTED_CHARS = 20_000
+_CREDENTIAL_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}"),
+    re.compile(r"hooks\.slack\.com/services/\S+", re.IGNORECASE),
+    re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\b(?:api[_-]?key|token|secret|password)\s*[=:]\s*['\"]?[A-Za-z0-9_\-]{16,}", re.I),
+)
 _INSTRUCTION_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     (name, re.compile(pattern, re.IGNORECASE))
     for name, pattern in (
@@ -82,6 +91,16 @@ class UntrustedText(StrictModel):
         return render_untrusted({"source": self.source, "content": self.content}, limit)
 
 
+def contains_credential(text: str) -> bool:
+    """True when text looks like a secret the engineer handles: model keys, GitHub tokens,
+    Slack webhooks or tokens, cloud keys, or an assignment of one. Used before anything is
+    remembered, notified, rendered into a pull request, or written to a report."""
+
+    return _contains_brain_secret(text) or any(
+        pattern.search(text) for pattern in _CREDENTIAL_PATTERNS
+    )
+
+
 def detect_instruction_like_text(text: str) -> list[str]:
     """Names of instruction-shaped patterns found in text. Flagging is not obeying."""
 
@@ -115,5 +134,6 @@ __all__ = [
     "TrustError",
     "UntrustedText",
     "authorize_owner_command",
+    "contains_credential",
     "detect_instruction_like_text",
 ]

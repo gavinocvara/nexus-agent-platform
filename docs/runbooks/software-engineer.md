@@ -6,7 +6,8 @@
 repository: observe, understand, prioritize, investigate, plan, implement, test,
 self-review, assess risk, decide, observe results, learn, report. It is disabled by
 default, changes no code in `dry_run` mode, needs no model, and cannot approve, merge, or
-push. Owner decisions come only from the configured human owner.
+push. Owner decisions come only from the configured human owner. The most it can ever do
+with a change is open a draft pull request after the owner says SHIP; a human merges.
 
 ## Configuration
 
@@ -23,6 +24,9 @@ push. Owner decisions come only from the configured human owner.
 | `NEXUS_SOFTWARE_ENGINEER_MAX_*` | see `config.py` | Runtime, turns, tool calls, model calls, tokens, cost, changed files, diff bytes. |
 | `NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_ENV` | `NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL` | Name of the variable that holds the Slack incoming-webhook URL. |
 | `NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL` | unset | The secret itself. Only in the process environment or a GitHub secret; never in Git, logs, memory, or records. |
+| `NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN_ENV` | `NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN` | Name of the variable that holds the GitHub token used by `publish`. |
+| `NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN` | unset | Fine-grained token for this repository only: contents and pull requests write, nothing else. Read at publish time, sent as a header, never stored. The scheduled workflow never receives it. |
+| `NEXUS_SOFTWARE_ENGINEER_PUBLISH_FROM_CYCLE` | `false` | Lets an `autonomous_low_risk` cycle open draft pull requests itself when the token is present. Keep it false unless the owner has decided otherwise in a reviewed commit. |
 
 Mode, budgets, and owner identity are governing settings. The engineer never edits them.
 
@@ -33,9 +37,10 @@ Only mechanical recipes run without a model: `formatting` (`ruff format src`) an
 ToolGateway, Runtime, Attestor), is verified by SentinelQA against the pristine tests, and
 ends as a commit on a local branch `nexus/software-engineer/<cycle>` under
 `.nexus/software_engineer/runs/<cycle>/<candidate>/branch`, next to `candidate.patch`,
-`patch_result.json`, and `sentinel_verdict.json`. Nothing is pushed. In the scheduled
-workflow these files are in the uploaded artifact; apply the patch or fetch the branch
-from the artifact after deciding SHIP.
+`patch_result.json`, and `sentinel_verdict.json`. The cycle pushes nothing. After the
+owner records SHIP, `publish` turns that branch into a draft pull request (see
+"Publishing an approved change"). In the scheduled workflow these files are in the
+uploaded artifact; unpack it at the repository root of a local checkout to publish.
 
 Executing a recipe needs `NEXUS_SOFTWARE_ENGINEER_MODE=propose` (or
 `autonomous_low_risk`) and `NEXUS_SOFTWARE_ENGINEER_SANDBOX=local_process`. The local
@@ -80,15 +85,24 @@ python -m nexus.sentinelqa > artifacts/sentinelqa.txt 2>&1 || true
 
 Outputs: `.nexus/software_engineer/cycles/<cycle_id>.json` (the `CycleRecord`),
 `<cycle_id>.report.md`, and `latest.*`. The CLI prints the report and a one-line summary
-and exits 1 when the cycle recorded a failure.
+and exits 1 when the cycle recorded a failure. Owner steps:
+
+```bash
+python -m nexus.software_engineer decide --cycle latest --verdict ship --reason "why"
+NEXUS_SOFTWARE_ENGINEER_ENABLED=true NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN=... \
+  python -m nexus.software_engineer publish --cycle latest
+```
 
 ## Daily operation
 
 `.github/workflows/software-engineer.yml` runs daily and on demand only when the
 repository variable `NEXUS_SOFTWARE_ENGINEER_ENABLED` is `true`. Set
 `NEXUS_SOFTWARE_ENGINEER_MODE` (variable) and `NEXUS_SOFTWARE_ENGINEER_SLACK_WEBHOOK_URL`
-(secret) to change mode or enable Slack. The workflow token is read-only; the record and
-report are uploaded as a workflow artifact.
+(secret) to change mode or enable Slack. The workflow token is read-only and no GitHub
+write token is passed in, so a scheduled cycle can never publish. The record, report,
+evidence files, and candidate branch clone are uploaded as the `resident-engineer-cycle`
+artifact; unpack it at the root of a local checkout (it restores
+`.nexus/software_engineer/...`) before running `decide` and `publish`.
 
 ## Reading a cycle
 
@@ -99,26 +113,59 @@ report are uploaded as a workflow artifact.
 - `gates`: per-gate status with evidence hashes. A `ship` never has a failed gate.
 - `approval_request`: the READY FOR REVIEW block the owner receives, with `dry_run` set
   when nothing was executed.
+- `change.publication`: present only after a draft pull request was opened: repository,
+  branch, base and remote commit SHAs, tree SHA, pull request number and URL, and who
+  authorized it (`owner_decision` or `autonomous_low_risk`).
 - `memory_writes`: ids of new memories; `notifications`: delivery evidence (hash only).
 - `failure`: `budget_exhausted`, `credentials_missing`, `executor_error`,
   `validation_failed`, `policy_denied`, or `internal_error`.
 
 ## Answering an approval request
 
-Owner decisions are typed. Until Slack commands exist, record one from code or a small
-script:
+Owner decisions are typed and recorded once per request:
 
-```python
-from nexus.software_engineer.cycle import record_owner_decision
-from nexus.software_engineer.trust import OwnerCommand
-
-decision = record_owner_decision(
-    store, request=request, command=OwnerCommand(...), owner_id="owner", now=now
-)
+```bash
+python -m nexus.software_engineer decide --cycle <cycle-id|latest> \
+  --verdict ship|revise|reject --reason "one sentence"
 ```
 
-`record_owner_decision` refuses non-human actors and any actor other than the configured
-owner, and remembers the decision as an owner preference. Silence is never a decision.
+`decide` reads the cycle record, builds an `OwnerCommand` for the configured owner over
+the `cli` channel, records an `OwnerDecision` in
+`.nexus/software_engineer/decisions/<request_id>.json`, and remembers the verdict as an
+owner preference. It refuses a cycle without an approval request and a request that was
+already decided. Silence is never a decision; `revise` and `reject` never publish.
+
+## Publishing an approved change
+
+```bash
+export NEXUS_SOFTWARE_ENGINEER_GITHUB_TOKEN=...   # fine-grained, this repository only
+NEXUS_SOFTWARE_ENGINEER_ENABLED=true python -m nexus.software_engineer publish --cycle <id>
+```
+
+`publish` fails closed at every step:
+
+1. The cycle must have an approval request, a change with a local branch, a recorded SHIP
+   decision by the configured owner, and every recorded gate passed (including
+   `sentinel_review`); a request is published at most once.
+2. `candidate.patch` must hash to the change's `diff_sha256`.
+3. `bundle_from_branch` proves the branch commit is exactly that patch applied to the
+   validated base: it re-applies the patch on the base in a scratch clone and compares
+   `git write-tree` with the commit's tree. Symlinks, submodules, type changes, and
+   oversized files are refused.
+4. `GitHubDraftPullRequestPublisher` reads the token from the environment, checks that the
+   default branch still points at the validated base (`--allow-moved-base` overrides,
+   and the record keeps both SHAs), that the base exists remotely, and that the branch
+   does not; uploads each blob and checks its SHA against the local one; creates the
+   tree and checks it against the local tree SHA; creates the commit and the branch
+   reference; opens a **draft** pull request whose body carries the approval request,
+   the decision, and the evidence hashes. If the repository rejects drafts the branch is
+   deleted again. It never merges and never touches the base branch.
+5. The `PublishedChange` is written to `.nexus/software_engineer/publications/<request_id>.json`
+   and remembered as a validated fact with the decision id as provenance.
+
+Error codes are stable (`publish_credentials_missing`, `publish_base_moved`,
+`publish_branch_exists`, `publish_tree_mismatch`, `gates_not_passed`, `patch_mismatch`,
+`already_published`, ...) and never include response bodies or the token.
 
 ## Failure recovery
 
@@ -132,13 +179,16 @@ owner, and remembers the decision as an owner preference. Silence is never a dec
 
 ## Rollback
 
-Every `ChangeSummary` carries `rollback_reference`. When a post-ship gate regresses, the
-cycle calls the executor's `rollback`, records a `RollbackRecord`, and sends
-`rollback_occurred`. Until a real executor exists nothing ships, so nothing can need a
-rollback.
+Every `ChangeSummary` carries `rollback_reference`. A published change is a draft pull
+request on its own branch: closing the pull request and deleting the branch is the whole
+rollback, and `main` was never touched. When a cycle that shipped autonomously observes a
+gate regression it calls the executor's `rollback`, which asks the publisher to
+`withdraw` (close the pull request, delete the branch), records a `RollbackRecord`, and
+sends `rollback_occurred`. An owner can do the same by hand at any time.
 
 ## Not yet built
 
-A publisher that pushes approved branches and fast-forwards `main`; test repair (blocked
-by SentinelQA-lite's byte-level specification rule); Slack-delivered owner commands;
-memory consolidation; price tables for cost accounting. See ADR 0012.
+Slack-delivered owner commands (today: the `decide` CLI); test repair (blocked by
+SentinelQA-lite's byte-level specification rule); GitHub issue intake; memory
+consolidation; price tables for cost accounting. No real GitHub call has been made yet:
+the publisher is exercised only against a fake API in tests. See ADR 0012.

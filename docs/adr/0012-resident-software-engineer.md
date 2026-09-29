@@ -69,7 +69,8 @@ sensitive files). Unknown categories, unclassified paths, and empty path lists a
 human-requiring self-review, or any non-autonomous mode -> `request_approval`; only a
 low-risk, fully validated, cleanly reviewed change in `autonomous_low_risk` mode ->
 `ship`. Owner decisions (`ship` / `revise` / `reject`) come only as typed `OwnerDecision`s
-from a human actor and are re-checked against validation; silence never decides.
+from a human actor and are re-checked against validation; silence never decides. Since
+0.24.0 `ship` means "open a draft pull request" and nothing more.
 
 ### Self-review
 
@@ -171,11 +172,37 @@ treats tests as the specification. Spending needs a model, an explicit
 environment; without any one of them the candidate stays an approval-only plan. Model
 calls and tokens are accounted in the cycle's usage; engine call records are hash-only.
 
+### Publication as draft pull requests (0.24.0)
+
+"Ship" never means merge. The only publisher is `GitHubDraftPullRequestPublisher`: it
+creates a branch and a draft pull request through the GitHub REST API and a human merges.
+Two paths lead to it. The owner path is two explicit CLI steps: `decide` records a typed
+`OwnerDecision` (SHIP, REVISE, or REJECT) for a cycle's approval request, once; `publish`
+opens the draft pull request only for a SHIP by the configured owner, only when every
+recorded gate (including `sentinel_review`) passed, and only once per request. The
+autonomous path exists but is off: `PatchForgeExecutor.ship` publishes the change it
+produced in that cycle when a publisher is configured, which the CLI does only when
+`publish_from_cycle` is true, the mode is `autonomous_low_risk`, and the token is present;
+the scheduled workflow never receives the token.
+
+Before any request reaches GitHub, `bundle_from_branch` proves the candidate commit is
+exactly the validated patch applied to the validated base (re-apply in a scratch clone,
+compare `git write-tree`). The publisher then verifies every uploaded blob's SHA and the
+created tree's SHA against the local objects before the branch reference exists, refuses
+a moved default branch unless the owner allows it, refuses an existing branch, deletes
+its own branch if the repository rejects drafts, and never touches the base branch. The
+token is read from the environment at publish time, sent only as a header, and absent
+from records, memories, reports, and errors; `contains_credential` extends the shared
+secret detector with GitHub and Slack shapes for everything the engineer writes. A
+`PublishedChange` (repository, branch, base and remote SHAs, tree SHA, pull request
+number and URL, authority, publisher identity) is persisted, attached to the change, and
+remembered as a validated fact with the decision as provenance. Rollback of a published
+change is `withdraw`: close the pull request, delete the branch.
+
 ## Deferred
 
-- A publisher that pushes an approved candidate branch and fast-forwards `main` with a
-  deliberately supplied write token; until then nothing ships and `autonomous_low_risk`
-  is exercised only with scripted executors in tests.
+- GitHub issue intake (the remainder of PatchForge Milestone K) and any publisher that
+  fast-forwards `main`; the engineer will not merge.
 - Test repair and any recipe that must change tests wait for SentinelQA to review
   candidate-added or changed tests; today they remain approval-only plans.
 - Price tables for cost accounting; until then token and call budgets bound spending.

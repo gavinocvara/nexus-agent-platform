@@ -8,63 +8,61 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 
 - Branch `main`; local `HEAD` must equal `origin/main` at every checkpoint
   (`git rev-parse HEAD origin/main`, `git diff HEAD`, `git diff origin/main...HEAD`).
-- NEXUS `0.23.0` (resident Software Engineer model-backed recipes) is the commit
-  containing this file (`git rev-parse HEAD`). Record its CI run in `PROJECT_STATE.md`
-  once green.
-- Previous: 0.22.0 evaluation `f10a5ef`; 0.21.0 executor v1 `aad015d` (run `36551163992`
-  green) + `fddcf16` (run `36551242679` green); 0.20.0 foundation `c045de8` (run
-  `36549244409` green); 0.19.0 Milestone J SentinelQA-lite `09b8c99` (run
-  `36546322678` green); 0.18.0 `b613072` (run `36540394002` green).
+- NEXUS `0.24.0` (resident Software Engineer owner-approved draft pull requests) is the
+  commit containing this file (`git rev-parse HEAD`). Record its CI run in
+  `PROJECT_STATE.md` once green.
+- Previous: `2632597` marker-scanner fix (run `36554057081` green); 0.23.0 model
+  recipes `035e0f5` (run `36553508853` green); 0.22.0 evaluation `f10a5ef` (run `36552400237`); 0.21.0
+  executor v1 `aad015d` + `fddcf16`; 0.20.0 foundation `c045de8`; 0.19.0 SentinelQA-lite
+  `09b8c99`; 0.18.0 `b613072`. All green.
 
-## Completed Unit: Resident Software Engineer model-backed recipes (0.23.0)
+## Completed Unit: owner-approved draft pull requests (0.24.0)
 
-- Model recipes (`type_annotation`, `micro_bug_fix`, `defensive_check`) run PatchForge's
-  `ModelBackedEngine` inside `PatchForgeExecutor` under the same governance as mechanical
-  recipes; spending needs model + `confirm_model_spend` + positive call/token budgets +
-  `OPENAI_API_KEY`, else the candidate is an approval-only plan. Tested with a scripted
-  client; no live call was made.
-- 0.22.0: `nexus.software_engineer.evaluation`: 28 judgment scenarios (every case in the owner's
-  brief) with scripted executors and transports, universal invariants, byte-identical
-  replay, and a CI step. Cycle changes: worthless candidates are never selected; observed
-  regressions are notified; changed files and diff bytes are shipping limits, not hard
-  budgets.
-- 0.21.0: `PatchForgeExecutor` (mechanical recipes `formatting` and `dead_code_removal`) runs the
-  real PatchForge path from the operator checkout, has SentinelQA verify the attested
-  patch, maps checks and verdict to gates with evidence hashes, and materializes a local
-  `nexus/software-engineer/<cycle>` branch. `can_ship` is False: validated changes become
-  approval requests. `LocalProcessSandbox` (explicit enablement, scrubbed environment,
-  bounds, no shell, no `.git`) serves ephemeral runners without Docker.
-- Policy: plan-only outcomes and unshippable ship decisions become approval requests.
-  SentinelQA: reproduction commands need no pytest summary.
-- 0.20.0 (foundation) shipped in `c045de8`: contracts, risk, policy, trust, memory,
-  inspection, self-review, notifier, cycle, CLI, scheduled workflow, ADR 0012, runbook.
+- `nexus.software_engineer.publish`: `Publisher` protocol, `GitHubDraftPullRequestPublisher`
+  (REST: blobs, tree, commit, ref, draft PR; blob and tree SHAs verified against local
+  objects; moved base, existing branch, rejected drafts, bad credentials fail closed;
+  self-created branch deleted on failure; never merges), `bundle_from_branch` (re-applies
+  the validated patch on the base in a scratch clone and compares `git write-tree`),
+  `render_pull_request`, `RecordingPublisher` for tests.
+- `nexus.software_engineer.approval` + CLI `decide` / `publish`: typed `OwnerDecision`
+  once per request; publication only for SHIP by the configured owner with every gate
+  passed, once; `PublishedChange` persisted under `publications/` and remembered as a
+  validated fact.
+- `PatchForgeExecutor(publisher=...)`: `can_ship`, `ship` (only the change it produced),
+  `rollback` withdraws a published change. CLI wires a cycle publisher only with
+  `PUBLISH_FROM_CYCLE=true` + `autonomous_low_risk` + token; the workflow never gets the
+  token and now uploads the branch clone and evidence (hidden paths included).
+- `contains_credential` (trust module) adds GitHub/Slack/cloud secret shapes to every
+  memory, notification, report, and pull-request text check.
 
-## Validation (0.23.0 local release gate, Linux, Python 3.12.3)
+## Validation (0.24.0 local release gate, Linux, Python 3.12.3)
 
-- Ruff format and lint clean; strict mypy clean (118 files).
-- pytest: 854 passed, 23 deselected (0.22.0: 849; 0.21.0: 818; 0.20.0: 807).
+- Ruff format and lint clean; strict mypy clean (120 files).
+- pytest: 864 passed, 23 deselected (0.23.0: 854 passed, 23 deselected).
 - `python -m nexus.patchforge.e2e_catalog`: 23 scenarios passed, byte-identical replay.
 - `python -m nexus.patchforge.benchmark_corpus`: passed (SentinelQA agreement included).
 - `python -m nexus.sentinelqa`: 29 scenarios passed, byte-identical replay.
 - `python -m nexus.software_engineer.evaluation`: 28 scenarios passed, byte-identical.
 - `python -m nexus.lab.scenarios validate`: 5 scenarios. `docker compose config`: valid.
-- `python -m nexus.software_engineer preflight`: `enabled=False mode=dry_run sandbox=none`.
-- Not run locally: Compose integration (no Docker daemon). CI's `compose-integration`
-  job is the integration gate. Frozen `docs/experiments/` unchanged.
+- `python -m nexus.software_engineer preflight`: `enabled=False mode=dry_run sandbox=none
+  github_token_present=False publish_from_cycle=False`.
+- Not run locally: Compose integration (no Docker daemon); CI's `compose-integration`
+  job is the integration gate. No real GitHub or model call was made. Frozen
+  `docs/experiments/` unchanged.
 
 ## Exact Next Step
 
-1. Publisher for approved candidate branches (push + draft PR, never merge) with a
-   deliberately supplied write token, only after an `OwnerDecision(ship)`. Then the
-   first owner-authorized model-recipe run, Slack-delivered `OwnerCommand`s, and
-   SentinelQA review of candidate-changed tests. See `PROJECT_STATE.md`.
-2. The live PatchForge run remains unexecuted and owner-authorized only; it is
-   SentinelQA-reviewed end to end.
+1. Owner step, no code: one `propose` + `local_process` cycle, `decide --verdict ship`,
+   `publish` with a fine-grained token; verify the draft PR and record the outcome in
+   `PROJECT_STATE.md`. Do not enable `PUBLISH_FROM_CYCLE` before that.
+2. Then Slack-delivered `OwnerCommand`s (signature-verified) replacing the `decide` CLI;
+   the first owner-authorized model-recipe run; SentinelQA review of candidate-changed
+   tests; GitHub issue intake. The live PatchForge run stays owner-authorized only.
 
 ## Active Issues
 
-- The engineer produces verified branches only for mechanical recipes and cannot publish
-  them; other categories are approval-only plans.
+- Publishing is untested against the real GitHub API (fake API only); the first real run
+  may surface API-shape differences (draft support on the plan, date normalization).
 - SentinelQA's runner has no Docker integration proof yet.
 - Test modules are not type-checked in CI and carry pre-existing strict-mypy noise.
 - Remote branch `maintenance/repo-hygiene-claude` is unmerged and untouched; owner decides.
@@ -72,14 +70,16 @@ Current state only. History lives in Git, `CHANGELOG.md`, and the ADRs. Rules li
 ## Critical Constraints
 
 - Atlas remains the outer policy, review, approval, persistence, and audit boundary.
-  SentinelQA reviews; the resident engineer proposes; humans approve.
+  SentinelQA reviews; the resident engineer proposes; humans approve and merge. A draft
+  pull request is the engineer's maximum reach.
 - ToolGateway is the only engineering capability boundary; the model never gets Git.
 - Runtime-attested evidence is authoritative; model output is narrative only.
 - Governing paths (`GOVERNING_PATH_PREFIXES` in `nexus.software_engineer.risk`), the
-  specification lock, and finding vocabularies are safety controls: changes need an ADR
-  and owner review, never a silent edit by an agent.
+  specification lock, finding vocabularies, and the publication checks are safety
+  controls: changes need an ADR and owner review, never a silent edit by an agent.
 - No unrestricted shell, network, secrets, memory/Brain, GitHub mutation, or live model
-  calls without explicit owner authorization. The owner's API key and Slack webhook stay
-  in ignored local state or CI secrets only.
+  calls without explicit owner authorization. The owner's API key, Slack webhook, and
+  GitHub token stay in ignored local state or CI secrets only; the scheduled workflow's
+  token is read-only.
 - Preserve phase budgets, the finalization reserve, disabled parallel calls, bounded
   loops, cleanup on every path, and Phase 5/6/7 frozen evidence (do not clean `.nexus/`).

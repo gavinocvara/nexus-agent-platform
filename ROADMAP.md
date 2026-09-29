@@ -128,7 +128,10 @@ Engram records the validated history.
 - **J. SentinelQA-lite (Complete):** specification lock from Git objects, fresh-tree
   verification against the pristine tests only, fail-closed verdicts, adversarial gate,
   Benchmark v0 agreement check, Atlas review gating (ADR 0011)
-- **K. GitHub:** issue intake, reviewed branch push, and draft PR only; never merge
+- **K. GitHub (Draft PR publication complete; issue intake pending):** the resident
+  engineer's `GitHubDraftPullRequestPublisher` (ADR 0012, 0.24.0) creates a branch and a
+  draft PR through the REST API after an owner SHIP, verifying the remote tree against
+  the locally validated one; never merge. Issue intake remains unbuilt
 
 PatchForge memory, large benchmarks, automatic improvement adoption, Kubernetes, Engram,
 and free-form multi-agent planning remain deferred.
@@ -143,8 +146,10 @@ Each step needs explicit owner authorization:
    repository (inspect, prioritize, propose, validate, self-review, classify risk, ship
    only low-risk changes autonomously, otherwise request owner approval through Slack),
    with an isolated private memory; it never merges its own work without policy approval.
-   Foundation complete and disabled by default; the PatchForge + SentinelQA executor,
-   model-backed investigation, and Slack-delivered owner commands are the next steps
+   Foundation, PatchForge + SentinelQA executor, controlled evaluation, model-backed
+   recipes, and owner-approved draft-PR publication are complete and disabled by
+   default; Slack-delivered owner commands and the first owner-authorized model run are
+   the next steps
 3. Deferred, in an order chosen when authorized:
    - Phase 9: AegisOps specialists, verifier, and approval-gated remediation with
      recovery verification

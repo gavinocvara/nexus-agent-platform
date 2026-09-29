@@ -6,11 +6,47 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 ## Unreleased
 
-- Resident Software Engineer: the marker scanner counts only comments (`#.*TODO|FIXME|XXX`),
-  so a marker word inside a string, docstring, or the scanner's own pattern is no longer a
-  signal; marker candidates are report-only (score never positive) instead of becoming
-  daily approval requests. Found by the first real dry-run cycle over this repository,
-  which flagged the scanner itself.
+Nothing yet.
+
+## 0.24.0 — Resident Software Engineer owner-approved draft pull requests
+
+- `nexus.software_engineer.publish`: a `Publisher` protocol and
+  `GitHubDraftPullRequestPublisher` that creates a branch and a **draft** pull request
+  through the GitHub REST API (blobs, tree, commit, reference, pull request), never a
+  merge and never the base branch. Every uploaded blob and the created tree are checked
+  against the local object SHAs before the reference exists; a moved default branch, an
+  existing branch, rejected drafts, and rejected credentials fail closed, and a branch the
+  publisher created is deleted if the pull request cannot be opened. The token comes from
+  the environment at publish time and never appears in records, memories, errors, or
+  reports.
+- `bundle_from_branch` proves a candidate commit is exactly the validated patch applied to
+  the validated base by re-applying the patch in a scratch clone and comparing
+  `git write-tree` with the commit's tree; symlinks, submodules, type changes, and
+  oversized files are refused.
+- `nexus.software_engineer.approval` and two CLI commands: `decide` records the owner's
+  SHIP / REVISE / REJECT for a cycle's approval request once, as a typed `OwnerDecision`
+  and an owner-preference memory; `publish` opens the draft pull request only for a SHIP
+  by the configured owner, only when every recorded gate passed, only once per request,
+  and remembers the `PublishedChange` as a validated fact with the decision as provenance.
+- `PatchForgeExecutor` accepts a publisher: `can_ship` becomes true, `ship` publishes
+  exactly the change it produced in that cycle, and `rollback` withdraws a published
+  change (close the pull request, delete the branch). The CLI wires a publisher into a
+  cycle only when `NEXUS_SOFTWARE_ENGINEER_PUBLISH_FROM_CYCLE=true`, the mode is
+  `autonomous_low_risk`, and the token is present; the scheduled workflow never receives
+  the token, so scheduled cycles cannot publish.
+- `ChangeSummary.publication` and the `PublishedChange` contract; `contains_credential`
+  in the trust module extends the shared secret detector with GitHub token, Slack webhook
+  and token, and cloud key shapes for everything the engineer notifies, remembers, or
+  renders.
+- The scheduled workflow uploads the candidate branch clone and evidence files (with
+  hidden paths) so the owner can `decide` and `publish` from a local checkout.
+- Marker scanner fix (from `2632597`): only comment markers count, and marker candidates
+  are report-only rather than daily approval requests.
+- Tests drive the publisher against a fake GitHub API (`httpx.MockTransport`) that
+  computes real blob SHAs: the happy path end to end from a real propose-mode cycle,
+  tampering, wrong owner, moved base, existing branch, tree mismatch, unsupported drafts,
+  missing and rejected credentials, autonomous ship and withdraw, and the CLI. No real
+  GitHub call was made.
 
 ## 0.23.0 — Resident Software Engineer model-backed recipes (no live calls)
 

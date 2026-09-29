@@ -5,15 +5,17 @@ mechanical recipe it provisions a disposable PatchForge workspace from the opera
 checkout, runs the recipe's fixed script through the real ToolGateway, Runtime, and
 Attestor, has SentinelQA verify the attested patch against the pristine specification,
 maps the runtime-attested checks and the verdict to gate results, and materializes the
-candidate as a commit on a local branch in a separate clone. It cannot ship: publishing a
-branch or fast-forwarding ``main`` needs a publisher the owner has not configured, so the
-policy turns every validated change into an approval request.
+candidate as a commit on a local branch in a separate clone. Without a publisher it cannot
+ship, so the policy turns every validated change into an approval request. With one, and
+only in ``autonomous_low_risk`` mode, shipping means opening a draft pull request that a
+human merges; the engineer never pushes ``main``.
 """
 
 from __future__ import annotations
 
 import os
 from collections.abc import Callable
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid5
@@ -50,6 +52,14 @@ from nexus.software_engineer.models import (
     RollbackRecord,
     ValidationGate,
 )
+from nexus.software_engineer.publish import (
+    Publisher,
+    PublishError,
+    PublishSubmission,
+    agent_publisher_identity,
+    bundle_from_branch,
+    render_pull_request,
+)
 from nexus.software_engineer.recipes import (
     MECHANICAL_RECIPES,
     MODEL_RECIPE_FOR_CATEGORY,
@@ -63,6 +73,18 @@ from nexus.software_engineer.recipes import (
 )
 
 _EXECUTOR_NAMESPACE = UUID("f4a5b6c7-d8e9-4f0a-b1c2-d3e4f5a6b7c8")
+
+
+@dataclass(frozen=True, slots=True)
+class _Produced:
+    """What one cycle produced, kept so ``ship`` publishes exactly that and nothing else."""
+
+    candidate: EngineeringCandidate
+    root: Path
+    change: ChangeSummary
+    gates: tuple[GateResult, ...]
+
+
 BRANCH_PREFIX = "nexus/software-engineer"
 COMMIT_AUTHOR_NAME = "NEXUS Resident Engineer"
 COMMIT_AUTHOR_EMAIL = "resident-engineer@nexus.invalid"
@@ -91,7 +113,11 @@ _ALL_GATES = (
 class PatchForgeExecutor:
     """Produce validated mechanical changes through PatchForge and SentinelQA."""
 
-    can_ship = False
+    @property
+    def can_ship(self) -> bool:
+        """Shipping exists only as a draft pull request through a configured publisher."""
+
+        return self.publisher is not None
 
     def __init__(
         self,
@@ -105,6 +131,7 @@ class PatchForgeExecutor:
         commands: Callable[[Recipe], RecipeCommands] | None = None,
         lease_duration: timedelta = timedelta(hours=2),
         model_engine_factory: Callable[[], RuntimeEngine] | None = None,
+        publisher: Publisher | None = None,
     ) -> None:
         self.repo_root = repo_root.resolve()
         self.repository_url = repository_url
@@ -115,6 +142,8 @@ class PatchForgeExecutor:
         self.commands = commands or recipe_commands
         self.lease_duration = lease_duration
         self.model_engine_factory = model_engine_factory
+        self.publisher = publisher
+        self._produced: dict[UUID, _Produced] = {}
         """Builds a model-backed ``RuntimeEngine`` per run; ``None`` keeps model recipes
         as approval-only plans. The factory owns the client, model, and call budget."""
 
@@ -323,6 +352,9 @@ class PatchForgeExecutor:
                 f"the patch is at {root / 'candidate.patch'}"
             )[:500],
         )
+        self._produced[cycle_id] = _Produced(
+            candidate=candidate, root=root, change=change, gates=tuple(gates)
+        )
         return ExecutionOutcome(
             change=change,
             patch=patch,
@@ -339,16 +371,89 @@ class PatchForgeExecutor:
         )
 
     def ship(self, change: ChangeSummary, *, cycle_id: UUID) -> ChangeSummary:
-        raise ExecutorError(
-            "Shipping is not configured: no publisher can push a branch or fast-forward main"
+        """Open a draft pull request for the change this executor produced in this cycle."""
+
+        if self.publisher is None:
+            raise ExecutorError(
+                "Shipping is not configured: no publisher can open a draft pull request"
+            )
+        produced = self._produced.get(cycle_id)
+        if produced is None or produced.change != change:
+            raise ExecutorError("The change to ship is not the one this executor produced")
+        if change.branch is None or change.commit_sha is None or change.publication is not None:
+            raise ExecutorError("The change has no unpublished local branch")
+        gates = produced.gates
+        try:
+            patch = (produced.root / "candidate.patch").read_bytes()
+        except OSError as exc:
+            raise ExecutorError(f"Candidate patch unreadable: {type(exc).__name__}") from exc
+        try:
+            bundle = bundle_from_branch(
+                self.git,
+                produced.root / "branch",
+                base_sha=change.base_sha,
+                commit_sha=change.commit_sha,
+                patch=patch,
+                work_root=produced.root / "publish",
+            )
+            title, body = render_pull_request(
+                candidate=produced.candidate,
+                change=change,
+                gates=gates,
+                request=None,
+                decision=None,
+                cycle_id=cycle_id,
+            )
+            published = self.publisher.publish(
+                PublishSubmission(
+                    bundle=bundle,
+                    branch=change.branch,
+                    title=title,
+                    body=body,
+                    cycle_id=cycle_id,
+                    diff_sha256=change.diff_sha256,
+                    published_by=agent_publisher_identity(),
+                    authority="autonomous_low_risk",
+                )
+            )
+        except PublishError as exc:
+            raise ExecutorError(f"Publishing refused: {exc.code}") from exc
+        _write(produced.root / "publication.json", canonical_json(published))
+        shipped = change.model_copy(
+            update={
+                "publication": published,
+                "rollback_reference": (
+                    f"Draft pull request #{published.pull_request_number} "
+                    f"({published.pull_request_url}) on branch {published.branch}; close it "
+                    "and delete the branch to roll back. Nothing reached main."
+                )[:500],
+            }
         )
+        # From here on the only change this cycle can name is the published one, so a
+        # second ``ship`` cannot publish twice.
+        self._produced[cycle_id] = replace(produced, change=shipped)
+        return shipped
 
     def rollback(self, change: ChangeSummary, *, reason: str) -> RollbackRecord:
+        published = change.publication
+        if published is not None:
+            if self.publisher is None:
+                raise ExecutorError("A published change needs its publisher to roll back")
+            try:
+                self.publisher.withdraw(published, reason=reason)
+            except PublishError as exc:
+                raise ExecutorError(f"Withdrawal failed: {exc.code}") from exc
+            reference = (
+                f"Draft pull request #{published.pull_request_number} closed and branch "
+                f"{published.branch} deleted; main was never touched."
+            )
+        else:
+            reference = (
+                f"Local branch {change.branch or 'unknown'} discarded; nothing was published."
+            )
         return RollbackRecord(
             reverted_commit_sha=change.commit_sha or change.base_sha,
-            revert_reference=(
-                f"Local branch {change.branch or 'unknown'} discarded; nothing was published."
-            ),
+            revert_reference=reference[:500],
             reason=reason[:500],
             occurred_at=self._now(),
         )

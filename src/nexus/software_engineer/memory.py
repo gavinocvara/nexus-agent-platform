@@ -24,10 +24,9 @@ from uuid import UUID, uuid5
 from pydantic import AwareDatetime, Field, StringConstraints, ValidationError, model_validator
 
 from nexus.atlas.models import Sha256, StrictModel
-from nexus.brain.models import contains_secret
 from nexus.patchforge.canonical import canonical_json, canonical_sha256
 from nexus.software_engineer.models import SOFTWARE_ENGINEER_AGENT_ID, Percent
-from nexus.software_engineer.trust import detect_instruction_like_text
+from nexus.software_engineer.trust import contains_credential, detect_instruction_like_text
 
 MEMORY_NAMESPACE: Literal["software_engineer.resident"] = "software_engineer.resident"
 MEMORY_SCHEMA_VERSION = 1
@@ -120,7 +119,7 @@ class EngineerMemory(StrictModel):
         if self.status is EpistemicStatus.INFERENCE and self.confidence > 80:
             raise ValueError("An inference cannot claim more than 80% confidence")
         serialized = canonical_json(self)
-        if contains_secret(serialized):
+        if contains_credential(serialized):
             raise ValueError("Memory content contains a secret-shaped value")
         if detect_instruction_like_text(self.content):
             raise ValueError("Memory content looks like an instruction and is refused")

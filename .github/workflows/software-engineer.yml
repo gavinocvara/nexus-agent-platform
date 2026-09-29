@@ -2,8 +2,10 @@ name: Resident Software Engineer
 
 # Disabled by default. The job runs only when the repository variable
 # NEXUS_SOFTWARE_ENGINEER_ENABLED is exactly "true". It never pushes: the workflow token
-# is read-only, and the engineer's mode defaults to dry_run (observe, prioritize, plan,
-# report). A Slack webhook is optional and lives only in a repository secret.
+# is read-only, no GitHub write token is passed in (so the cycle can never publish), and
+# the engineer's mode defaults to dry_run (observe, prioritize, plan, report). A Slack
+# webhook is optional and lives only in a repository secret. Draft pull requests are
+# opened by the owner running `python -m nexus.software_engineer decide` and `publish`.
 
 on:
   workflow_dispatch:
@@ -77,7 +79,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: resident-engineer-cycle
+          # The branch clone and evidence files let the owner run `publish` from a local
+          # checkout after unpacking the artifact at the repository root.
           path: |
             .nexus/software_engineer/cycles
+            .nexus/software_engineer/runs/*/*/candidate.patch
+            .nexus/software_engineer/runs/*/*/patch_result.json
+            .nexus/software_engineer/runs/*/*/sentinel_verdict.json
+            .nexus/software_engineer/runs/*/*/engine_calls.json
+            .nexus/software_engineer/runs/*/*/branch
             artifacts
+          include-hidden-files: true
           retention-days: 30

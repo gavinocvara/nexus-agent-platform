@@ -19,8 +19,8 @@ import httpx
 from pydantic import StringConstraints
 
 from nexus.atlas.models import StrictModel
-from nexus.brain.models import contains_secret
 from nexus.software_engineer.models import URGENT_EVENTS, NotificationEvent, NotificationRecord
+from nexus.software_engineer.trust import contains_credential
 
 MAX_BODY_CHARS = 4000
 Body = Annotated[str, StringConstraints(min_length=1, max_length=MAX_BODY_CHARS)]
@@ -149,7 +149,7 @@ class Notifier:
         return None
 
     def send_now(self, notification: Notification) -> NotificationRecord:
-        if contains_secret(notification.body) or contains_secret(notification.title):
+        if contains_credential(notification.body) or contains_credential(notification.title):
             return self._record(notification, 0, False, "secret_blocked")
         if len(self.records) >= self.max_per_cycle:
             return self._record(notification, 0, False, "rate_limited_per_cycle")

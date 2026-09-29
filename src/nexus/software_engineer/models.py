@@ -388,6 +388,48 @@ class SelfReview(StrictModel):
         return self.blocking or any(item.answer is ReviewAnswer.UNKNOWN for item in self.items)
 
 
+class PublishedChange(StrictModel):
+    """Runtime evidence that a validated change became a draft pull request.
+
+    The engineer never merges: a publication is a branch plus a draft pull request that a
+    human reviews. The remote tree is verified to equal the locally validated tree before
+    the reference is created, so what the owner approved is what reviewers see.
+    """
+
+    publication_id: UUID
+    cycle_id: UUID
+    request_id: UUID | None = None
+    decision_id: UUID | None = None
+    authority: Literal["owner_decision", "autonomous_low_risk"]
+    provider: Literal["github"]
+    repository: Annotated[str, StringConstraints(min_length=3, max_length=200)]
+    base_branch: Annotated[str, StringConstraints(min_length=1, max_length=255)]
+    base_sha: CommitSha
+    base_head_at_publish: CommitSha
+    branch: Annotated[str, StringConstraints(min_length=1, max_length=255)]
+    tree_sha: CommitSha
+    local_commit_sha: CommitSha
+    remote_commit_sha: CommitSha
+    diff_sha256: Sha256
+    pull_request_number: int = Field(ge=1)
+    pull_request_url: Annotated[str, StringConstraints(pattern=r"^https://", max_length=500)]
+    draft: Literal[True] = True
+    published_by: ActorIdentity
+    published_at: AwareDatetime
+    attested_by: EngineerIssuer = "software_engineer.runtime"
+
+    @model_validator(mode="after")
+    def validate_authority(self) -> PublishedChange:
+        if self.authority == "owner_decision":
+            if self.request_id is None or self.decision_id is None:
+                raise ValueError("A publication under an owner decision names the decision")
+            if self.published_by.actor_type is not ActorType.HUMAN:
+                raise ValueError("An owner-decided publication is published by the human owner")
+        elif self.published_by.actor_type is not ActorType.AGENT:
+            raise ValueError("An autonomous publication is published by the agent")
+        return self
+
+
 class ChangeSummary(StrictModel):
     """Runtime-owned description of a produced change; never authored by a model."""
 
@@ -402,11 +444,19 @@ class ChangeSummary(StrictModel):
     patch_result_sha256: Sha256 | None = None
     sentinel_verdict_sha256: Sha256 | None = None
     rollback_reference: ShortText
+    publication: PublishedChange | None = None
 
     @model_validator(mode="after")
     def validate_unique(self) -> ChangeSummary:
         if len(set(self.changed_files)) != len(self.changed_files):
             raise ValueError("Changed files must be unique")
+        if self.publication is not None:
+            if self.publication.base_sha != self.base_sha:
+                raise ValueError("A publication must build on the change's base")
+            if self.publication.diff_sha256 != self.diff_sha256:
+                raise ValueError("A publication must carry the change's diff")
+            if self.commit_sha is not None and self.publication.local_commit_sha != self.commit_sha:
+                raise ValueError("A publication must publish the change's commit")
         return self
 
 
@@ -713,6 +763,7 @@ __all__ = [
     "NotificationRecord",
     "OwnerDecision",
     "OwnerVerdict",
+    "PublishedChange",
     "ReviewAnswer",
     "ReviewItem",
     "ReviewQuestion",
