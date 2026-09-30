@@ -8,10 +8,11 @@ Subsystem status on `main` (unchanged by the branch below): `PROJECT_STATE.md`.
 | Item | Value |
 | --- | --- |
 | Version | `0.27.0` on `main`; no bump on the branch |
-| `main` | `71fe0a0`, CI green (run `36662165331`); contained in the branch |
-| Active branch | `claude/nexus-command-center`, PR #5 into `main`, **not merged**, awaiting owner review |
+| `main` | `fec1cbb0b78735ccbe8fcb1a59b81c7b45e322e1`: merge of PR #5 (Command Center milestone landed) |
+| PR #5 | Merged. Branch head `836722d` green on `validate`, `compose-integration`, `command-center` (run `36677641470`) |
+| Active branch | none; `claude/nexus-command-center` is fully merged |
 
-## Command Center (ADR 0013, `docs/runbooks/command-center.md`)
+## Command Center (landed; ADR 0013, `docs/runbooks/command-center.md`)
 
 - `src/nexus/command_center/`: GET-only view models, SSE, replay of 8 evaluation scenarios.
   Client in `web/command-center/` (React + R3F).
@@ -25,14 +26,14 @@ Subsystem status on `main` (unchanged by the branch below): `PROJECT_STATE.md`.
   not visible there.
 - Not built (owner decisions): write actions; authentication or non-loopback exposure.
 
-## Validation (branch head, Linux, Python 3.12.3, Node 22)
+## Validation (PR #5 head `836722d`, local Linux, Python 3.12.3, Node 22)
 
 - Ruff, strict mypy (139 files) clean; pytest **971 passed, 28 skipped** (integration).
 - Engineer evaluation and SentinelQA gates passed; scenarios (5) and Compose config valid.
 - Client: typecheck, vitest 8/8, build, Playwright 6/6 (SwiftShader).
 - Compose integration with the profile: 28 passed; CI containment step passed locally.
   Images were built from sandbox-only CA-trusting local bases (Debian mirror denied).
-- CI on PR #5: see its checks; not claimed here.
+- GitHub Actions on `836722d`: `validate`, `compose-integration`, `command-center` all green.
 
 ## Known risks
 
@@ -45,15 +46,24 @@ Subsystem status on `main` (unchanged by the branch below): `PROJECT_STATE.md`.
 
 ## Owner decisions required (nothing below has been done)
 
-1. Review and merge (or not) PR #5.
-2. `nexus.__version__` reports `0.18.0` against `0.27.0`: deliberately untouched.
-3. Finish the Slack exercise (`/nexus bogus` and non-owner re-check pending; a live owner
+1. `nexus.__version__` reports `0.18.0` against `0.27.0`: deliberately untouched.
+2. Finish the Slack exercise (`/nexus bogus` and non-owner re-check pending; a live owner
    decision already works) and authorize the first real `decide` + `publish`.
-4. Remote branch cleanup (`maintenance/repo-hygiene-claude` unmerged).
+3. Remote branch cleanup: `maintenance/repo-hygiene-claude` unmerged;
+   `claude/nexus-command-center` fully merged and deletable.
+
+## Frozen evidence (unchanged, never modify)
+
+Phase 5 investigator hashes, Phase 6 `aegisops-memoryless-v1` baseline and lock, Phase 7
+protocol, calibration evidence, frozen snapshot and self-report (`docs/experiments/`;
+pinned by tests). `nexus.__version__` (`0.18.0`) stays untouched pending an owner decision.
 
 ## Exact next task
 
-Owner review of PR #5. No further Command Center milestone is authorized.
+None is authorized; the next checkpoint is an owner decision. Per `ROADMAP.md` (After
+PatchForge v1, step 2) it is the resident engineer's Slack owner-command exercise
+(`/nexus bogus`, non-owner re-check) and then the first owner-authorized real `decide` +
+`publish` or model run. No further Command Center work is authorized.
 
 ## Resume
 
