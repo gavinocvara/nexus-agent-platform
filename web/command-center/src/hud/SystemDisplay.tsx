@@ -438,9 +438,9 @@ export function SystemDisplay() {
   const replay = mode === "replay";
   if (!snapshot) {
     return (
-      <aside className="nx-display nx-brackets" aria-busy="true" id="nx-main">
+      <main className="nx-display nx-brackets" aria-busy="true" id="nx-main">
         <p className="nx-label">Connecting to NEXUS…</p>
-      </aside>
+      </main>
     );
   }
   const cycle = replay ? (episode?.cycle ?? null) : snapshot.latest_cycle;
@@ -472,7 +472,7 @@ export function SystemDisplay() {
   }
   const title = entry.id === "overview" ? "System overview" : SYSTEMS[systemId].name;
   return (
-    <aside className="nx-display nx-brackets" key={`${entry.id}:${mode}`} id="nx-main" aria-labelledby="nx-display-title" tabIndex={-1}>
+    <main className="nx-display nx-brackets" key={`${entry.id}:${mode}`} id="nx-main" aria-labelledby="nx-display-title" tabIndex={-1}>
       <header className="nx-display__head">
         <span className="nx-display__designation">{entry.id === "overview" ? "NX-ALL" : SYSTEMS[systemId].designation}</span>
         <h2 className="nx-display__name" id="nx-display-title">
@@ -492,6 +492,6 @@ export function SystemDisplay() {
         </>
       ) : null}
       {body}
-    </aside>
+    </main>
   );
 }

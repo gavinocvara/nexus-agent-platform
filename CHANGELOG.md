@@ -6,7 +6,16 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
 
 ## Unreleased
 
-Nothing yet.
+- NEXUS Command Center (ADR 0013, branch `claude/nexus-command-center`): a read-only
+  spatial dashboard. `nexus.command_center` serves GET-only sanitized view models over the
+  resident engineer's records, private memory (SQLite `mode=ro`), lab health through the
+  diagnostics layer, and the lab catalog without its ground truth, plus a Server-Sent
+  Events stream with semantic signals. Replay re-executes curated engineer evaluation
+  scenarios in a temporary directory and names the scripted stand-ins. The React + React
+  Three Fiber client (`web/command-center`) renders the NEXUS core, Atlas ring, five
+  systems, Engram as unbuilt, and conduits whose pulses follow only what a record proves;
+  the owner-question overlay shows the governed Slack and CLI channels and records
+  nothing. No new Python dependency; client dependencies are recorded in the ADR.
 
 ## 0.27.0 — Production hardening: runner integrity, autonomy boundary, reliability
 

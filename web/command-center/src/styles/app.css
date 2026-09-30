@@ -839,10 +839,15 @@ button {
 .nx-status__sub {
   margin-top: 6px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--s2);
   font-size: var(--nx-fs-sm);
   color: var(--nx-text-2);
+}
+
+.nx-status__sub .nx-btn {
+  white-space: nowrap;
 }
 
 .nx-status__key {

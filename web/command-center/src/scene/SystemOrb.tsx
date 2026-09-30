@@ -165,7 +165,7 @@ export function useLabelLit(id: SystemId, label: RefObject<HTMLDivElement | null
     projected.set(...systemPosition(id)).project(state.camera);
     const x = (projected.x + 1) / 2;
     const y = (1 - projected.y) / 2;
-    const underText = state.size.width > 820 && (x < 0.27 || x > 0.69) && y > 0.08 && y < 0.86;
+    const underText = state.size.width > 820 && (x < 0.21 || x > 0.69) && y > 0.08 && y < 0.86;
     let opacity = focus === null || focus === id || lit ? 1 : id === "nexus" ? 0.75 : 0.45;
     if (underText && focus !== id && !lit) opacity = Math.min(opacity, 0.14);
     if (hidden) opacity = 0;

@@ -172,9 +172,11 @@ function Rail() {
   const episode = useStore((state) => state.replay.episode);
   const latest = useStore((state) => state.snapshot?.latest_cycle ?? null);
   const cycle = mode === "replay" ? (episode?.cycle ?? null) : latest;
-  const reached = new Set((cycle?.transitions ?? []).map((item) => item.stage));
-  if (cycle?.change?.publication) reached.add("PUBLISH");
-  if (cycle?.approval) reached.add("OWNER");
+  // While a new cycle is in flight, the previous record's phases say nothing about it.
+  const inFlight = stage?.source === "live";
+  const reached = new Set(inFlight ? [] : (cycle?.transitions ?? []).map((item) => item.stage));
+  if (!inFlight && cycle?.change?.publication) reached.add("PUBLISH");
+  if (!inFlight && cycle?.approval) reached.add("OWNER");
   const currentIndex = stage ? RAIL.indexOf(stage.stage) : -1;
   let source = "NO CYCLE RECORDED";
   if (stage?.source === "replay") source = "REPLAY · EVALUATION EPISODE";
@@ -188,7 +190,7 @@ function Rail() {
         <span className="nx-rail__source" data-source={stage?.source ?? mode}>
           {source}
         </span>
-        {cycle ? <span className="nx-rail__source">{upper(cycle.decision)}</span> : null}
+        {cycle && !inFlight ? <span className="nx-rail__source">{upper(cycle.decision)}</span> : null}
       </div>
       <div className="nx-rail__track" role="list">
         {RAIL.map((name, index) => {
@@ -234,6 +236,8 @@ function Rail() {
 
 function StatusBlock() {
   const snapshot = useStore((state) => state.snapshot);
+  const dismissed = useStore((state) => state.dismissedRequest);
+  const dismiss = useStore((state) => state.dismissRequest);
   const mode = useStore((state) => state.mode);
   const stage = useStore((state) => state.stage);
   const episode = useStore((state) => state.replay.episode);
@@ -268,6 +272,11 @@ function StatusBlock() {
           {mode === "replay" ? "R" : "N"}
         </span>
         {sub}
+        {mode === "live" && snapshot?.pending_approval && dismissed === snapshot.pending_approval.request_id ? (
+          <button className="nx-btn" style={{ marginLeft: 8, padding: "2px 8px" }} onClick={() => dismiss("")}>
+            Show question
+          </button>
+        ) : null}
       </div>
     </div>
   );

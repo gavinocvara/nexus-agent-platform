@@ -24,7 +24,8 @@ export function poseFor(stop: number, aspect: number): Pose {
     return {
       position: new Vector3(0, 8.4 * spread, 19.5 * spread),
       target: new Vector3(0, -0.6, 0),
-      shift: 0,
+      // centre the system between the menu and the display panel
+      shift: narrow ? 0 : 0.045,
     };
   }
   if (entry.system === "nexus") {

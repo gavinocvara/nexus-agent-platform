@@ -190,7 +190,7 @@ function AtlasRing() {
       <lineSegments geometry={ticks} raycast={() => null}>
         <lineBasicMaterial color="#ffb45a" transparent opacity={0.3} depthWrite={false} />
       </lineSegments>
-      <Html position={[0, 0, 4.3]} center zIndexRange={[3, 0]} style={{ pointerEvents: "none" }}>
+      <Html position={[3.05, 0, 3.05]} center zIndexRange={[3, 0]} style={{ pointerEvents: "none" }}>
         <div className="nx-atlas-label">ATLAS · POLICY · APPROVAL · AUDIT</div>
       </Html>
     </group>

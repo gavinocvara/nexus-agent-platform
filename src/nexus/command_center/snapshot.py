@@ -546,7 +546,8 @@ class SnapshotBuilder:
                 pf_facts.append(
                     fact(
                         "Last change",
-                        f"{len(forged.change.changed_files)} files +{forged.change.additions}"
+                        f"{_plural(len(forged.change.changed_files), 'file')}"
+                        f" +{forged.change.additions}"
                         f" -{forged.change.deletions}",
                         "recorded",
                     )
@@ -703,6 +704,10 @@ class SnapshotBuilder:
 
 
 _PF = {"ruff_format", "ruff_lint", "mypy", "pytest_targeted", "pytest_full"}
+
+
+def _plural(count: int, noun: str) -> str:
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
 
 
 def _health_tone(overall: str) -> Tone:
