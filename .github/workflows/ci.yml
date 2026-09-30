@@ -71,12 +71,90 @@ jobs:
       - name: Validate scenario ground truth
         run: python -m nexus.lab.scenarios validate
 
+  command-center:
+    # Client checks for the read-only Command Center (ADR 0013). The Python view layer is
+    # already covered by `validate`; this job installs runtime dependencies only to serve
+    # the built client for browser checks.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web/command-center
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/command-center/package-lock.json
+
+      - name: Install client dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install NEXUS runtime to serve the client
+        working-directory: .
+        run: python -m pip install -e .
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser validation
+        env:
+          # No lab and no state here: the server reads an empty state tree and replay.
+          NEXUS_COMMAND_CENTER_HEALTH_ENABLED: "false"
+          NEXUS_COMMAND_CENTER_ENGINEER_STATE_ROOT: ${{ runner.temp }}/nexus-state
+          NEXUS_COMMAND_CENTER_ENGINEER_MEMORY_PATH: ${{ runner.temp }}/nexus-state/memory.sqlite3
+        run: npx playwright test
+
+      - name: Capture review screenshots
+        if: always()
+        run: |
+          curl --fail --silent http://127.0.0.1:8765/healthz || (
+            cd ../.. && NEXUS_COMMAND_CENTER_HEALTH_ENABLED=false \
+            NEXUS_COMMAND_CENTER_ENGINEER_STATE_ROOT="$RUNNER_TEMP/nexus-state" \
+            python -m nexus.command_center serve --port 8765 &
+          )
+          curl --fail --retry 30 --retry-all-errors --retry-delay 1 --silent http://127.0.0.1:8765/healthz
+          node visual/capture.mjs "$RUNNER_TEMP/command-center-screenshots" http://127.0.0.1:8765
+
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: command-center-browser
+          path: |
+            web/command-center/playwright-report
+            web/command-center/test-results
+            ${{ runner.temp }}/command-center-screenshots
+          if-no-files-found: ignore
+          retention-days: 14
+
   compose-integration:
     runs-on: ubuntu-latest
     env:
       POSTGRES_DB: nexus
       POSTGRES_USER: nexus
       POSTGRES_PASSWORD: ci-only-password
+      # Include the opt-in Command Center service (ADR 0013) in every compose command.
+      COMPOSE_PROFILES: command-center
 
     steps:
       - name: Check out repository
@@ -89,6 +167,9 @@ jobs:
 
       - name: Validate Compose configuration
         run: docker compose config --quiet
+
+      - name: Provide empty engineer state for the read-only mount
+        run: mkdir -p .nexus/software_engineer
 
       - name: Build service images
         run: docker compose build
@@ -109,10 +190,34 @@ jobs:
       - name: Verify Gateway health
         run: curl --fail --show-error http://localhost:8000/health
 
-      - name: Run PostgreSQL and incident lifecycle integration paths
+      - name: Run PostgreSQL, incident lifecycle, and Command Center integration paths
         env:
           RUN_INTEGRATION: "1"
+          NEXUS_INTEGRATION_REQUIRE_COMMAND_CENTER: "1"
         run: python -m pytest -m integration tests/integration
+
+      - name: Verify Command Center containment
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          curl --fail --show-error http://127.0.0.1:8765/healthz
+          # Read-only state mount and root filesystem, non-root user, no secrets.
+          if docker compose exec -T command-center touch /nexus/software_engineer/probe; then
+            fail "state mount is writable"
+          fi
+          if docker compose exec -T command-center touch /app/probe; then
+            fail "root filesystem is writable"
+          fi
+          [ "$(docker compose exec -T command-center id -u)" != "0" ] || fail "runs as root"
+          if docker compose exec -T command-center sh -c 'env | grep -qiE "token|secret|password|webhook|api_key"'; then
+            fail "secret-like variable in the container environment"
+          fi
+          container="$(docker compose ps -q command-center)"
+          # Exactly one mount: the engineer state, read-only (no Docker socket, no brain).
+          mounts="$(docker inspect "$container" --format '{{range .Mounts}}{{.Destination}}:{{.RW}} {{end}}')"
+          [ "$mounts" = "/nexus/software_engineer:false " ] || fail "unexpected mounts: $mounts"
+          host_ip="$(docker inspect "$container" --format '{{(index (index .HostConfig.PortBindings "8765/tcp") 0).HostIp}}')"
+          [ "$host_ip" = "127.0.0.1" ] || fail "port is not loopback-only: $host_ip"
+          [ -z "$(ls -A .nexus/software_engineer)" ] || fail "something wrote into the state tree"
 
       - name: Exercise diagnostic CLI boundary
         run: |

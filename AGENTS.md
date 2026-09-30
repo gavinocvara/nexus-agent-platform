@@ -14,6 +14,7 @@ future application built on NEXUS. Never add Dungeon business logic here.
 | An accepted design decision | the relevant `docs/adr/NNNN-*.md` |
 | Memory or Brain architecture | `BRAIN.md`, ADR 0008 |
 | Running or benchmarking something | the relevant `docs/runbooks/*.md` |
+| The Command Center dashboard | ADR 0013, `docs/runbooks/command-center.md` |
 | Frozen experiment facts or hashes | `docs/experiments/*` |
 | Release history | `CHANGELOG.md` (only when writing a release entry) |
 | Public overview | `README.md` |

@@ -63,6 +63,7 @@ from nexus.software_engineer.policy import (
     PolicyDecision,
     ShipPolicy,
 )
+from nexus.software_engineer.progress import ProgressPublisher, executor_kind
 from nexus.software_engineer.report import build_report, render_approval_request
 from nexus.software_engineer.review import DiffFacts, SelfReviewer, diff_facts
 from nexus.software_engineer.risk import classify_change
@@ -205,6 +206,13 @@ class EngineeringCycle:
         self.transitions: list[CycleTransition] = []
         self.phase = CyclePhase.CREATED
         self._started_at = self._now()
+        # Observers only: the runtime never reads progress back (ADR 0013).
+        self.progress = ProgressPublisher(
+            self.state_root,
+            cycle_id=self.cycle_id,
+            executor=executor_kind(self.executor),
+            started_at=self._started_at,
+        )
 
     # -- public --------------------------------------------------------------------------
 
@@ -222,8 +230,12 @@ class EngineeringCycle:
             max_runtime_seconds=self.budget.max_runtime_seconds,
         )
         try:
+            # Holding the lease, any progress file that is not ours is a dead cycle's.
+            self.progress.discard_stale()
             return self._run(interrupted)
         finally:
+            # Progress goes before the lease: no observer sees progress without a holder.
+            self.progress.finish()
             release_run_lease(lease)
 
     def _run(self, interrupted: InterruptedRun | None) -> tuple[CycleRecord, CycleReport]:
@@ -810,16 +822,18 @@ class EngineeringCycle:
     def _advance(self, target: CyclePhase, reason: str, *, check_budget: bool = True) -> None:
         if _ORDER.index(target) <= _ORDER.index(self.phase):
             raise RuntimeError(f"Cycle cannot move backwards: {self.phase} -> {target}")
-        self.transitions.append(
-            CycleTransition(
-                sequence=len(self.transitions) + 1,
-                source=self.phase,
-                target=target,
-                reason=reason[:500],
-                occurred_at=self._now(),
-            )
+        transition = CycleTransition(
+            sequence=len(self.transitions) + 1,
+            source=self.phase,
+            target=target,
+            reason=reason[:500],
+            occurred_at=self._now(),
         )
+        self.transitions.append(transition)
         self.phase = target
+        self.progress.publish(
+            sequence=transition.sequence, phase=target, now=transition.occurred_at
+        )
         self.usage = self.usage.model_copy(update={"turns": len(self.transitions)})
         if check_budget:
             self._check_budget()
