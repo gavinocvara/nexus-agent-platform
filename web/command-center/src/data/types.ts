@@ -313,7 +313,6 @@ export interface EngineerConfigView {
   slack_channel_label: string;
   schedule_cron_intent: string;
   budget: BudgetLine[];
-  required_autonomous_gates: string[];
 }
 
 export interface SystemView {
@@ -345,7 +344,8 @@ export interface Snapshot {
   memory: MemoryView;
   health: HealthView;
   lab_scenarios: LabScenarioView[];
-  engineer_config: EngineerConfigView;
+  engineer_config: EngineerConfigView | null;
+  required_autonomous_gates: string[];
 }
 
 export interface OwnerStepView {

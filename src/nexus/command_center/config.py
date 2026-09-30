@@ -41,6 +41,11 @@ class CommandCenterSettings(BaseSettings):
     replay_enabled: bool = True
     """Re-execute curated engineer evaluation scenarios in a temporary directory at start."""
 
+    engineer_config_visible: bool = True
+    """Show the resident engineer's configuration as this process sees it. A container that
+    does not share the engineer's environment (it must not: that environment holds its
+    secrets) sets this to false, and the dashboard says so instead of showing defaults."""
+
     max_subscribers: int = Field(default=16, ge=1, le=256)
     max_cycles: int = Field(default=30, ge=1, le=200)
 

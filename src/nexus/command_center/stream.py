@@ -48,7 +48,9 @@ def diff_signals(previous: Snapshot | None, current: Snapshot) -> list[Signal]:
         after is not None
         and after.stage is not None
         and after.sequence is not None
-        and (before is None or before.cycle_id != after.cycle_id or before.sequence != after.sequence)
+        and (
+            before is None or before.cycle_id != after.cycle_id or before.sequence != after.sequence
+        )
     ):
         signals.append(Signal(kind="run.phase", subject=after.cycle_id, detail=after.stage))
     if before is not None and (after is None or after.cycle_id != before.cycle_id):

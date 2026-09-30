@@ -228,7 +228,7 @@ class SnapshotBuilder:
             )
             for item in (self.lab or [])
         ]
-        config = self._config()
+        config = self._config() if self.settings.engineer_config_visible else None
         sources = [
             self._engineer_source(records),
             *memory_sources,
@@ -282,6 +282,9 @@ class SnapshotBuilder:
             health=health,
             lab_scenarios=lab,
             engineer_config=config,
+            required_autonomous_gates=sorted(
+                item.value for item in REQUIRED_GATES_FOR_AUTONOMOUS_SHIP
+            ),
         )
 
     def _active_run(self, lease: LeaseInfo) -> ActiveRunView:
@@ -464,9 +467,6 @@ class SnapshotBuilder:
             slack_channel_label=safe_text(settings.slack_channel_label, 100),
             schedule_cron_intent=safe_text(settings.schedule_cron, 100),
             budget=budget_lines(settings.budget, CycleUsage()),
-            required_autonomous_gates=sorted(
-                item.value for item in REQUIRED_GATES_FOR_AUTONOMOUS_SHIP
-            ),
         )
 
     # -- systems ------------------------------------------------------------------------
@@ -481,7 +481,7 @@ class SnapshotBuilder:
         memory: MemoryView,
         health: HealthView,
         lab: list[LabScenarioView],
-        config: EngineerConfigView,
+        config: EngineerConfigView | None,
     ) -> list[SystemView]:
         latest = records[0] if records else None
         forged = next((item for item in records if patchforge_ran(item)), None)
@@ -653,7 +653,13 @@ class SnapshotBuilder:
         else:
             re_status, re_detail = (
                 "dormant",
-                ("Enabled; no cycle recorded yet" if config.enabled else "Disabled by default"),
+                (
+                    "Configuration not visible to this deployment"
+                    if config is None
+                    else "Enabled; no cycle recorded yet"
+                    if config.enabled
+                    else "Disabled by default"
+                ),
             )
         resident = SystemView(
             id="resident_engineer",
@@ -664,8 +670,12 @@ class SnapshotBuilder:
             status_detail=re_detail,
             last_activity_at=latest.completed_at if latest else None,
             facts=[
-                fact("Enabled", "YES" if config.enabled else "NO", "static"),
-                fact("Mode", config.mode.upper(), "static"),
+                fact(
+                    "Enabled",
+                    "NOT VISIBLE" if config is None else "YES" if config.enabled else "NO",
+                    "static",
+                ),
+                fact("Mode", "NOT VISIBLE" if config is None else config.mode.upper(), "static"),
                 fact(
                     "Last decision",
                     latest.decision.value.upper() if latest else "none",

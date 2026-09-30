@@ -227,6 +227,7 @@ def test_payload_never_carries_secrets_env_values_or_ground_truth(
     payload = snapshot.model_dump_json()
     assert FAKE_TOKEN not in payload and FAKE_WEBHOOK not in payload
     assert WITHHELD in payload
+    assert snapshot.engineer_config is not None
     assert snapshot.engineer_config.slack_webhook_present is True
     assert snapshot.engineer_config.github_token_present is True
     # Lab scenarios carry evaluator ground truth; only identity may leave the server.
@@ -467,3 +468,12 @@ def test_the_dashboard_sees_the_real_phase_sequence_while_a_cycle_runs(
     expected = [(stages.get(stage.lower(), stage), source) for stage, source in expected]
     assert observed == expected
     assert not progress_path(tmp_path / "owner_approval" / "state").exists()
+
+
+def test_a_deployment_without_the_engineer_environment_says_so(tmp_path: Path) -> None:
+    settings = _settings(tmp_path / "state", engineer_config_visible=False)
+    snapshot = SnapshotBuilder(settings, _engineer()).build(1)
+    assert snapshot.engineer_config is None
+    assert snapshot.required_autonomous_gates, "the ship policy is code and stays visible"
+    resident = {item.id: item for item in snapshot.systems}["resident_engineer"]
+    assert {fact.label: fact.value for fact in resident.facts}["Enabled"] == "NOT VISIBLE"

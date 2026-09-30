@@ -10,3 +10,8 @@ __pycache__
 dist
 htmlcov
 tests
+web/command-center/node_modules
+web/command-center/dist
+web/command-center/test-results
+web/command-center/playwright-report
+.nexus

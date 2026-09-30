@@ -199,6 +199,66 @@ services:
     ports:
       - "3000:3000"
 
+  # NEXUS Command Center (ADR 0013): the read-only dashboard over NEXUS records. Opt-in
+  # (profile), because it reads the host's .nexus state and must never create it: run
+  #   mkdir -p .nexus/software_engineer .nexus/brain
+  #   docker compose --profile command-center up -d
+  # then open http://127.0.0.1:8765. It has no authentication, so the port binds loopback
+  # only. It gets no secrets, no Docker socket, no write access, and only the two state
+  # directories it reads, mounted read-only.
+  command-center:
+    profiles: ["command-center"]
+    build:
+      context: .
+      dockerfile: web/command-center/Dockerfile
+      args:
+        PYTHON_IMAGE: ${NEXUS_COMMAND_CENTER_PYTHON_IMAGE:-python:3.12-slim}
+    environment:
+      NEXUS_COMMAND_CENTER_ENGINEER_STATE_ROOT: /nexus/software_engineer
+      NEXUS_COMMAND_CENTER_ENGINEER_MEMORY_PATH: /nexus/software_engineer/memory.sqlite3
+      NEXUS_COMMAND_CENTER_BRAIN_PATH: /nexus/brain/aegisops-investigator.sqlite3
+      NEXUS_COMMAND_CENTER_SCENARIO_DIRECTORY: /app/lab/scenarios/v1
+      NEXUS_COMMAND_CENTER_CLIENT_DIRECTORY: /app/web/command-center/dist
+      # The engineer's environment (with its secrets) is never shared with this container.
+      NEXUS_COMMAND_CENTER_ENGINEER_CONFIG_VISIBLE: "false"
+      NEXUS_DIAGNOSTICS_GATEWAY_URL: http://gateway:8000
+      NEXUS_DIAGNOSTICS_USERS_URL: http://users:8000
+      NEXUS_DIAGNOSTICS_ORDERS_URL: http://orders:8000
+      NEXUS_DIAGNOSTICS_PROMETHEUS_URL: http://prometheus:9090
+      NEXUS_DIAGNOSTICS_LOKI_URL: http://loki:3100
+      NEXUS_DIAGNOSTICS_TEMPO_URL: http://tempo:3200
+    volumes:
+      - type: bind
+        source: ./.nexus/software_engineer
+        target: /nexus/software_engineer
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.nexus/brain
+        target: /nexus/brain
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/healthz')
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    ports:
+      - "127.0.0.1:8765:8765"
+
 volumes:
   postgres-data:
   prometheus-data:

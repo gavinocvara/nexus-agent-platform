@@ -350,7 +350,6 @@ class EngineerConfigView(ViewModel):
     slack_channel_label: str
     schedule_cron_intent: str
     budget: list[BudgetLine]
-    required_autonomous_gates: list[str]
 
 
 class SystemView(ViewModel):
@@ -382,7 +381,10 @@ class Snapshot(ViewModel):
     memory: MemoryView
     health: HealthView
     lab_scenarios: list[LabScenarioView]
-    engineer_config: EngineerConfigView
+    engineer_config: EngineerConfigView | None
+    required_autonomous_gates: list[str]
+    """The ship policy's gates: code, not configuration, so always visible."""
+    """``None`` when this deployment cannot see the engineer's configuration."""
 
 
 # -- replay -----------------------------------------------------------------------------

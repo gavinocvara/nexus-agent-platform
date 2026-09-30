@@ -66,13 +66,12 @@ function Overview({ snapshot, cycle, replay }: { snapshot: Snapshot; cycle: Cycl
 }
 
 function NexusPanel({ snapshot, cycle, replay }: { snapshot: Snapshot; cycle: CycleView | null; replay: boolean }) {
-  const config = snapshot.engineer_config;
   return (
     <>
       <Section title="Ship policy">
         <p className="nx-display__role">Autonomous shipping requires every one of these gates to pass:</p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-          {config.required_autonomous_gates.map((gate) => (
+          {snapshot.required_autonomous_gates.map((gate) => (
             <Chip key={gate} tone="neutral">
               {humanize(gate)}
             </Chip>
@@ -237,16 +236,23 @@ function ResidentPanel({ snapshot, cycle, replay }: { snapshot: Snapshot; cycle:
         )}
       </Section>
       <Section title="Configuration">
-        <dl className="nx-facts">
-          <Row label="Enabled" value={yes(config.enabled)} prov="static" />
-          <Row label="Mode" value={upper(config.mode)} prov="static" />
-          <Row label="Sandbox" value={upper(config.sandbox)} prov="static" />
-          <Row label="Model configured" value={yes(config.model_configured)} prov="static" />
-          <Row label="Publish from cycle" value={yes(config.publish_from_cycle)} prov="static" />
-          <Row label="Slack webhook" value={config.slack_webhook_present ? "PRESENT" : "ABSENT"} prov="static" />
-          <Row label="Slack owner" value={config.slack_owner_configured ? "SET" : "UNSET"} prov="static" />
-          <Row label="Publisher token" value={config.github_token_present ? "PRESENT" : "ABSENT"} prov="static" />
-        </dl>
+        {config ? (
+          <dl className="nx-facts">
+            <Row label="Enabled" value={yes(config.enabled)} prov="static" />
+            <Row label="Mode" value={upper(config.mode)} prov="static" />
+            <Row label="Sandbox" value={upper(config.sandbox)} prov="static" />
+            <Row label="Model configured" value={yes(config.model_configured)} prov="static" />
+            <Row label="Publish from cycle" value={yes(config.publish_from_cycle)} prov="static" />
+            <Row label="Slack webhook" value={config.slack_webhook_present ? "PRESENT" : "ABSENT"} prov="static" />
+            <Row label="Slack owner" value={config.slack_owner_configured ? "SET" : "UNSET"} prov="static" />
+            <Row label="Publisher token" value={config.github_token_present ? "PRESENT" : "ABSENT"} prov="static" />
+          </dl>
+        ) : (
+          <Empty title="Not visible to this deployment">
+            This dashboard does not share the engineer's environment, which holds its secrets, so it cannot show how the
+            engineer is configured.
+          </Empty>
+        )}
       </Section>
       {cycle ? (
         <Section title="Budget">
