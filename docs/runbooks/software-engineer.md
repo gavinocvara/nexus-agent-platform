@@ -224,7 +224,7 @@ Error codes are stable (`publish_credentials_missing`, `publish_base_moved`,
 `publish_ref_mismatch`, `publish_pull_request_mismatch`, `gates_not_passed`, `patch_mismatch`,
 `already_published`, ...) and never include response bodies or the token.
 
-## First live exercises (owner-run; GitHub done, Slack pending)
+## First live exercises (owner-run; GitHub done, Slack largely done)
 
 Run these once, in this order, before relying on either integration. Neither is part of a cycle, and neither is run by the scheduler.
 
@@ -269,6 +269,16 @@ miss the patch; fixed in `6ea5a92`. The next live run passed all eight checks wi
    covers stale, forged, replayed, and oversized requests, which Slack itself cannot send).
 6. Confirm nothing was published and the checkout is unchanged: Slack only records.
 
+Text refusals (`command_unparsable`, `reason_required`) are HTTP 200 so Slack shows them;
+signature, replay, body-size, and credential failures keep their 4xx/5xx statuses, which
+Slack shows as a generic "did not respond".
+
+First live Slack run (owner-reported): a signed request over HTTPS from the configured
+owner recorded REVISE for cycle `f04a800d-ac9a-46d6-a73d-92fcfcfb9ee1`, the repeat returned
+`Refused: already_decided.`, and nothing was published (steps 4-6). Step 3 exposed that
+`command_unparsable` was HTTP 400, so Slack showed its generic error; fixed to HTTP 200.
+Still to confirm live: step 3 after the fix, and step 2 (`not_owner`).
+
 ## Single run and interrupted runs
 
 One cycle runs per state root. A cycle takes `.nexus/software_engineer/run.lock` before
@@ -306,5 +316,5 @@ sends `rollback_occurred`. An owner can do the same by hand at any time.
 Test repair (blocked by SentinelQA-lite's byte-level specification rule); memory
 consolidation; a hosted deployment of the Slack receiver (today it runs wherever the
 owner starts it). The publisher has passed the live GitHub exercise; no real `publish`
-of an engineering change has been made. The issue source and Slack receiver are exercised
-only against fakes in tests; the Slack exercise above is not performed. See ADR 0012.
+of an engineering change has been made. The Slack receiver has handled real owner
+commands (above); the issue source is exercised only against fakes in tests. See ADR 0012.

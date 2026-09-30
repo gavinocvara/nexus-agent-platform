@@ -346,3 +346,40 @@ def test_cli_serve_refuses_without_owner_id_and_secret(
     assert "SLACK_SIGNING_SECRET is not set" in capsys.readouterr().err
     monkeypatch.setenv("NEXUS_SOFTWARE_ENGINEER_SLACK_OWNER_USER_ID", "   ")
     assert SoftwareEngineerSettings(_env_file=None).slack_owner_user_id is None  # type: ignore[call-arg]
+
+
+def test_malformed_command_text_is_an_ephemeral_200_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Slack shows a slash-command reply only on HTTP 200; any other status becomes its
+    # generic "app did not respond". Text refusals come after signature and replay checks.
+    state_root, memory, owner_id = _state_with_request(tmp_path)
+    monkeypatch.setenv("NEXUS_SOFTWARE_ENGINEER_SLACK_SIGNING_SECRET", SECRET)
+    handler = _handler(state_root, memory, owner_id)
+    app = create_app(handler)
+    with TestClient(app) as client:
+        for text, code in (
+            ("bogus", "command_unparsable"),
+            ("", "command_unparsable"),
+            ("ship latest", "reason_required"),
+        ):
+            body = _body(text)
+            response = client.post("/slack/commands", content=body, headers=_signed(body))
+            assert response.status_code == 200
+            assert response.json() == {"response_type": "ephemeral", "text": f"Refused: {code}."}
+        # Security failures on the same malformed text keep their fail-closed statuses.
+        bogus = _body("bogus please")
+        forged = client.post("/slack/commands", content=bogus, headers=_signed(bogus, secret="x"))
+        assert forged.status_code == 401 and "signature_invalid" in forged.json()["text"]
+        unsigned = client.post("/slack/commands", content=bogus)
+        assert unsigned.status_code == 401 and "signature_missing" in unsigned.json()["text"]
+        headers = _signed(bogus)
+        first = client.post("/slack/commands", content=bogus, headers=headers)
+        assert first.status_code == 200 and "command_unparsable" in first.json()["text"]
+        replay = client.post("/slack/commands", content=bogus, headers=headers)
+        assert replay.status_code == 401 and "replayed" in replay.json()["text"]
+        nameless = _body("ship latest ok", user="")
+        missing = client.post("/slack/commands", content=nameless, headers=_signed(nameless))
+        assert missing.status_code == 400 and "user_missing" in missing.json()["text"]
+    decisions = state_root / "decisions"
+    assert not decisions.exists() or not any(decisions.iterdir()), "nothing was decided"

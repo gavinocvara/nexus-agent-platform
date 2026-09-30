@@ -65,7 +65,7 @@ zero disagreements).
 | Secret scan (tracked files, credential shapes) | clean (no credential shapes in tracked files; no .env, .nexus, sqlite, or patch files tracked) |
 | `docker compose config --quiet` | valid |
 | Compose integration (`RUN_INTEGRATION=1`) | not run locally; CI job `compose-integration` last green at 0.26.0. CI has not run on 0.27.0 (branch pushes do not trigger `ci.yml`) |
-| Live model calls / GitHub or Slack traffic from agent code | none, ever (model recipes tested with a scripted client; publisher, issue source, Slack receiver, and `exercise-github` tested against fakes) |
+| Live model calls / GitHub or Slack traffic from agent code | no live model call ever; GitHub: owner-run `exercise-github --confirm-live` passed (draft PR #4, closed unmerged); Slack: owner-run live REVISE decision recorded; see `CODEX_HANDOFF.md` |
 | Frozen evidence (`docs/experiments/`, hash pins in `test_atlas_isolation.py`) | unchanged |
 
 ### Test counts

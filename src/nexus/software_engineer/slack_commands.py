@@ -135,7 +135,11 @@ class ReplayLedger:
 
 
 def parse_slash_command(body: bytes) -> ParsedCommand:
-    """``<ship|revise|reject> [<cycle-id>|latest] <reason>`` from Slack's form body."""
+    """``<ship|revise|reject> [<cycle-id>|latest] <reason>`` from Slack's form body.
+
+    Refusals of the typed text are HTTP 200 so Slack shows them; the handler reaches this
+    only after signature and replay checks, which keep their fail-closed statuses.
+    """
 
     form = {
         key: values[0]
@@ -147,7 +151,7 @@ def parse_slash_command(body: bytes) -> ParsedCommand:
         raise SlackCommandError("user_missing")
     words = form.get("text", "").split()
     if not words or words[0].casefold() not in _VERDICTS:
-        raise SlackCommandError("command_unparsable")
+        raise SlackCommandError("command_unparsable", 200)
     verdict = _VERDICTS[words[0].casefold()]
     rest = words[1:]
     cycle = "latest"
@@ -156,7 +160,7 @@ def parse_slash_command(body: bytes) -> ParsedCommand:
         rest = rest[1:]
     reason = " ".join(rest).strip()
     if not reason:
-        raise SlackCommandError("reason_required")
+        raise SlackCommandError("reason_required", 200)
     return ParsedCommand(
         verdict=verdict,
         cycle=cycle,

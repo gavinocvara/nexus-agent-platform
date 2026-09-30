@@ -56,7 +56,7 @@ self-review fixes, `89c3370` race-safe run lease, `b4afb04` `exercise-github` + 
 | Resident engineer | Ship policy, risk, self-review, memory guards, lease hardened as above. Effective autonomous class is **empty in production**: every recipe (ruff format, ruff `--fix`, model recipes) edits `src/`, which is MEDIUM, so every real change needs the owner; only non-governing Markdown outside `src/`/`lab/` is LOW, and no recipe produces it. Widening that is an owner decision, not built. Autonomous path is still draft-PR-only and off by default. |
 | Persistent brain | Unchanged architecture; guard memories read in full; knowledge never authority. |
 | Scheduler | Unchanged, disabled (repository variable unset); read-only token; reversible by unsetting. |
-| Slack | Receiver hardened; no real Slack call ever made. |
+| Slack | Live owner decision works over signed HTTPS (REVISE recorded, repeat `already_decided`, nothing published; owner-reported). Text refusals now HTTP 200 so Slack shows them. Live re-check of `/nexus bogus` and the non-owner step pending. |
 | GitHub publisher | Validated against the real GitHub API: the first `exercise-github --confirm-live` (after fix `6ea5a92`) passed all 8 checks, `cleaned_up=True`; exercise PR #4 was draft only, closed, never merged; branch `nexus/integration-exercise/c4b393f1d868` deleted. No real `decide` + `publish` yet. |
 | Model spend | Off; no live call ever made. |
 
@@ -72,14 +72,15 @@ self-review fixes, `89c3370` race-safe run lease, `b4afb04` `exercise-github` + 
 
 ## Owner decisions required (nothing below has been done)
 
-1. Authorize hosting `serve-slack` and the six-step Slack exercise.
+1. Finish the Slack exercise live: `/nexus bogus` (expect `Refused: command_unparsable.`)
+   and a non-owner command (expect `Refused: not_owner.`).
 2. Authorize the first real `decide` + `publish` (still before any `PUBLISH_FROM_CYCLE`).
 3. Remote branches: `maintenance/repo-hygiene-claude` is unmerged;
    `maintenance/context-slimming` and `claude/confident-faraday-1drq98` are fully merged. Owner decides
    whether to delete them.
 
-Done: the live GitHub publisher exercise (above). Not yet run: Slack exercise, live
-model-backed cycle, real `publish`, unattended scheduling.
+Done: the live GitHub publisher exercise, and the live Slack owner decision (above). Not
+yet run: live model-backed cycle, real `publish`, unattended scheduling.
 
 ## Exact next task
 
