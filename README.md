@@ -20,7 +20,7 @@ against a baseline before adoption.
 | PatchForge | Built (A-H, J); live run not executed | Contracts through Benchmark v0 plus an opt-in model engine boundary | ADR 0010 |
 | SentinelQA-lite | Built | Independent verification against the pristine specification (content-locked tests, harness boundary, runner-integrity canary); fail-closed verdicts gate Atlas approval | ADR 0011, `docs/runbooks/sentinelqa.md` |
 | Resident Software Engineer | Built, disabled by default | Bounded daily cycle: inspect, rank, run PatchForge + SentinelQA for mechanical and model-backed recipes, risk-classify, self-review, ask the owner; private provenance-backed memory; owner decisions by CLI or signed Slack command; verified draft pull requests only (never a merge) | ADR 0012, `docs/runbooks/software-engineer.md` |
-| Command Center | Built, read-only (branch) | Spatial dashboard over the real records: orb network, live stream, replay of evaluation episodes, accessible data and activity views | ADR 0013, `docs/runbooks/command-center.md` |
+| Command Center | Built, read-only (branch) | Spatial dashboard over the real records: orb network, live cycle phases, replay of evaluation episodes, accessible data and activity views; opt-in Compose service on loopback | ADR 0013, `docs/runbooks/command-center.md` |
 | Engram | Planned | Shared validated knowledge | `ROADMAP.md` |
 
 Lab request path:
@@ -78,6 +78,7 @@ docker compose up --build --detach --wait
 | Gateway / Users / Orders | `http://localhost:8000` / `8001` / `8002` |
 | Grafana | `http://localhost:3000` |
 | Prometheus / Loki / Tempo | `http://localhost:9090` / `3100` / `3200` |
+| Command Center (opt-in, loopback only) | `http://127.0.0.1:8765` with `docker compose --profile command-center up` after `mkdir -p .nexus/software_engineer .nexus/brain` |
 
 Run the integration suite against the running stack, then stop it:
 

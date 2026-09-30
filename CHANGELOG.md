@@ -16,6 +16,17 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
   systems, Engram as unbuilt, and conduits whose pulses follow only what a record proves;
   the owner-question overlay shows the governed Slack and CLI channels and records
   nothing. No new Python dependency; client dependencies are recorded in the ADR.
+- Command Center integration milestone (owner-approved, ADR 0013 amended): the resident
+  engineer publishes `cycles/active.progress.json` after every phase transition while it
+  holds the run lease (atomic replace, owned by the cycle, removed on every exit path before
+  the lease, stale files discarded, write failures never fail the cycle; no reason text,
+  signals, paths, model output, or credentials), and the dashboard shows the live phase
+  with systems following the runtime's code path (a PatchForge executor's PatchForge then
+  SentinelQA as a pipeline). CI job `command-center` (typecheck, vitest, build, Playwright).
+  Opt-in Compose service `command-center`: loopback port, read-only mounts of exactly
+  `.nexus/software_engineer` and `.nexus/brain` (never created by Docker), read-only root
+  filesystem, non-root, no capabilities, no secrets, no Docker socket; integration tests and
+  containment checks in `compose-integration`.
 
 ## 0.27.0 — Production hardening: runner integrity, autonomy boundary, reliability
 

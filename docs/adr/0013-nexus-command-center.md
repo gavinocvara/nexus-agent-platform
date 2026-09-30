@@ -1,6 +1,7 @@
 # ADR 0013: NEXUS Command Center (read-only spatial dashboard)
 
-Status: Accepted for the first release (owner-requested, branch `claude/nexus-command-center`)
+Status: Accepted (owner-requested, branch `claude/nexus-command-center`). Amended by the
+owner-approved integration milestone: live phase progress, CI, and a Compose service.
 
 ## Context
 
@@ -48,6 +49,7 @@ runtime `ChangeSummary` statistics and hashes.
 | Display | Source | Kind |
 | --- | --- | --- |
 | Cycle in flight | `<state_root>/run.lock` (cycle id, start, expiry) | live, 1 s poll |
+| Live phase of that cycle | `cycles/active.progress.json` (`CycleProgress`), only when it names the lease holder | live, 1 s poll |
 | Interrupted cycles | `cycles/*.interrupted.json` | recorded |
 | Cycle history, phases, gates, risk, self-review, decision, budgets, notifications | `cycles/<id>.json` validated as `CycleRecord` | recorded |
 | Pending owner question | `CycleRecord.approval_request` with no `decisions/<request_id>.json` | recorded |
@@ -59,7 +61,8 @@ runtime `ChangeSummary` statistics and hashes.
 | AegisOps brain | `.nexus/brain/aegisops-investigator.sqlite3` opened `mode=ro` | recorded |
 | Lab service health | `DiagnosticServiceLayer.get_system_health()` | live, 15 s poll |
 | Lab incident catalog | `lab/scenarios/v1` via `nexus.lab.catalog` | static |
-| Engineer configuration | `SoftwareEngineerSettings` allow-list (as `preflight`) | static |
+| Engineer configuration | `SoftwareEngineerSettings` allow-list (as `preflight`); `null` in a deployment that does not share the engineer's environment | static |
+| Ship-policy gates | `REQUIRED_GATES_FOR_AUTONOMOUS_SHIP` | static |
 | Replay episodes | engineer evaluation catalog, executed in a temporary directory | replay |
 
 A display with no source shows an intentional empty state; nothing is filled with
@@ -80,14 +83,29 @@ invented telemetry.
   in a distinct hatched blue treatment with a persistent `REPLAY · EVALUATION CATALOG`
   banner; replay state never enters the live store.
 
-### Missing instrumentation (proposed, not built)
+### Live phase progress (built, owner-approved)
 
-A cycle's phase is observable only after its record is written; while it runs, only the
-lease exists. The smallest safe addition is for `EngineeringCycle._advance` to replace
-`cycles/active.progress.json` (cycle id, sequence, phase, reason, time) atomically and delete
-it when the record lands. It adds no authority, but `src/nexus/software_engineer` is a
-governing path, so it waits for the owner. The client already consumes a `phase` field on
-the active run; the server will fill it when the file exists.
+While a cycle holds the run lease, `EngineeringCycle._advance` replaces
+`cycles/active.progress.json` after every authoritative transition
+(`nexus.software_engineer.progress`). The contract is `CycleProgress`: cycle id, sequence,
+phase, executor kind (`dry_run`, `patchforge`, `other`, by exact class), start and update
+times. It carries no reason text, signal, candidate, path, model output, or credential.
+
+- **Atomic**: a per-cycle temporary file, then `os.replace`; a reader sees the previous
+  phase or the next, never part of one.
+- **Owned**: the cycle removes only its own file, on every exit path, before it releases the
+  lease; a cycle that takes the lease discards a dead cycle's leftover; a cycle refused with
+  `concurrent_run` touches nothing.
+- **Fail-safe**: a failed write stops publishing and never fails the cycle; the reader
+  ignores a missing, oversized, invalid, or foreign file, and shows a phase only while the
+  lease naming the same cycle is live. Nothing in NEXUS reads the file back.
+
+Live systems follow the runtime's code path, decided server-side: UNDERSTAND reads private
+memory; IMPLEMENT with a PatchForge executor runs PatchForge and then SentinelQA inside one
+executor call, so both are shown as a **pipeline** (half-lit, status `pipeline`), never as two
+active systems; a dry run lights neither; ASSESS_RISK, DECIDE, and REPORT are the NEXUS ship
+policy. Each newly published phase is dispatched from the core once; a `run.phase` stream
+signal announces it.
 
 ### Experience
 
@@ -112,7 +130,7 @@ the active run; the server will fill it when the file exists.
 ### Real time
 
 Server-Sent Events at `/api/v1/stream`: a `snapshot` on connect and on change (at most one
-per second), semantic `signal` events (`run.started`, `run.ended`, `cycle.recorded`,
+per second), semantic `signal` events (`run.started`, `run.phase`, `run.ended`, `cycle.recorded`,
 `decision.pending`, `decision.recorded`, `publication.recorded`, `health.changed`), and
 heartbeats. Server to client only.
 
@@ -123,6 +141,24 @@ heartbeats. Server to client only.
 `postprocessing` (bloom), `zustand` (store read inside the render loop without re-renders),
 `@fontsource/*` (self-hosted fonts, no third-party requests). Dev: `vite`, `typescript`,
 `vitest`, `@playwright/test`. No new Python dependency.
+
+### Deployment and CI
+
+- **Compose**: service `command-center` behind the `command-center` profile
+  (`web/command-center/Dockerfile`: Node builds the client, a Python image serves it; no Node
+  at runtime). It binds `127.0.0.1:8765` only; mounts exactly `.nexus/software_engineer` and
+  `.nexus/brain`, read-only, with `create_host_path: false` (Docker must never create state
+  directories on the host: on Linux they would be root-owned and break the engineer); runs as
+  a non-root user with a read-only root filesystem, a `/tmp` tmpfs, all capabilities dropped,
+  and `no-new-privileges`; gets no Docker socket and no secret; reads lab health over the
+  Compose network. It is opt-in because it needs those directories to exist.
+  `NEXUS_COMMAND_CENTER_ENGINEER_CONFIG_VISIBLE=false`, so the snapshot says the engineer's
+  configuration is not visible instead of showing the container's defaults.
+- **CI**: job `command-center` (npm ci, typecheck, vitest, build, Playwright against a real
+  server, screenshots as an artifact). `compose-integration` runs with the profile, the
+  Command Center integration tests, and containment checks (read-only mounts and root
+  filesystem, non-root, no secret-like variables, no Docker socket, loopback port, nothing
+  written to the state tree). The Python view layer stays in `validate`.
 
 ### Performance
 
@@ -135,6 +171,7 @@ stream updates do not re-render the canvas tree.
 
 - The dashboard can be wrong only by omission: every value traces to a file or a bounded
   diagnostic read listed above.
-- Not in this release: a Compose service or Docker image for the client (`compose.yaml`
-  and `Dockerfile` are governing), a CI job for the client (`.github` is governing), write
-  actions, and the progress file above. Each is an owner decision.
+- Not built, each an owner decision: write actions (the dashboard stays GET-only and never
+  records SHIP/REVISE/REJECT), authentication and any non-loopback exposure, persistence of
+  AegisOps investigator runs where the dashboard can read them, and observation of the
+  split between PatchForge and SentinelQA inside the executor call.

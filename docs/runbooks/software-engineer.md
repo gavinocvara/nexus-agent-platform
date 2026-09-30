@@ -291,6 +291,12 @@ as soon as its process is gone; the next cycle then writes
 proceeds normally. Nothing else needs cleanup: an interrupted cycle wrote no record, and
 its run directories are inert.
 
+While a cycle holds the lease it also publishes `cycles/active.progress.json` (cycle id,
+sequence, phase, executor kind, times; nothing else) after every phase transition, for
+read-only observers such as the Command Center (ADR 0013). The cycle removes it on every
+exit path before releasing the lease; the next cycle discards a dead cycle's leftover; a
+failed write stops publishing and never affects the cycle. Nothing in NEXUS reads it back.
+
 ## Failure recovery
 
 - A failed cycle still writes its record and report and sends

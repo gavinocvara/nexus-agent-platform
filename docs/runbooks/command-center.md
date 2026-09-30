@@ -18,6 +18,28 @@ python -m nexus.command_center serve
 Development with hot reload: run `serve` as above, then `npm run dev` in
 `web/command-center` (Vite on `127.0.0.1:5173`, proxying `/api` to `:8765`).
 
+### With Docker Compose
+
+The service is opt-in (profile `command-center`) because it bind-mounts the host's state
+read-only and must never let Docker create those directories (on Linux they would be
+root-owned and the resident engineer could no longer write its own state):
+
+```bash
+mkdir -p .nexus/software_engineer .nexus/brain     # as your user, once
+docker compose --profile command-center up -d      # add the lab too: it is the same stack
+# open http://127.0.0.1:8765  (loopback only; there is no authentication)
+docker compose --profile command-center ps command-center   # healthy after a few seconds
+```
+
+In the container the dashboard reads exactly those two directories (read-only), reads lab
+health over the Compose network, runs as a non-root user on a read-only root filesystem with
+a `/tmp` tmpfs, drops all capabilities, and has no Docker socket and no secret. The engineer's
+environment is not shared with it, so the snapshot reports the engineer's configuration as
+not visible (the ship-policy gates, which are code, still show). Where the Debian mirrors
+are unreachable, build from a base that already ships git:
+`NEXUS_COMMAND_CENTER_PYTHON_IMAGE=python:3.12 docker compose --profile command-center build`.
+Grafana, Prometheus, Loki, and Tempo stay the deep-observability tools on their own ports.
+
 Read-only one-shots:
 
 ```bash
@@ -43,8 +65,13 @@ until `docker compose up -d`.
 ## Live, recorded, replay
 
 - **LIVE** (amber): driven by state changes over Server-Sent Events. A lease file
-  (`run.lock`) lights the resident engineer with a slow heartbeat; its phase is not
-  observable until the record lands (see ADR 0013, "Missing instrumentation").
+  (`run.lock`) lights the resident engineer with a slow heartbeat. While the cycle runs, its
+  runtime publishes `cycles/active.progress.json` at every phase transition (ADR 0013), and
+  the dashboard shows that phase only when the file names the lease holder: the rail marks
+  it, the core dispatches a pulse to the systems that phase involves, and UNDERSTAND lights
+  Memory. In IMPLEMENT with the PatchForge executor, PatchForge and SentinelQA are shown as a
+  half-lit **pipeline**: they run one after the other inside one call, and which one is
+  working is not observable. The file disappears when the cycle ends, however it ends.
 - **RECORDED playback**: when a new cycle record appears, its real transition order plays
   once, labelled `RECORDED PLAYBACK`.
 - **REPLAY** (blue, hatched, `NOT LIVE` banner): curated evaluation scenarios re-executed
@@ -83,12 +110,22 @@ URL parameters for demos and tests: `?stop=N`, `?view=data|activity`, `?quality=
 ## Validation
 
 ```bash
-python -m pytest -q tests/unit/test_command_center*.py
+python -m pytest -q tests/unit/test_command_center*.py tests/unit/test_software_engineer_progress.py
 cd web/command-center
 npm run typecheck && npm test && npm run build
 npm run visual            # starts `serve` if nothing listens on :8765; SwiftShader WebGL
 node visual/capture.mjs <out-dir>   # named screenshots for human review
+
+# Compose: the service plus containment (with the stack up, as CI does)
+RUN_INTEGRATION=1 NEXUS_INTEGRATION_REQUIRE_COMMAND_CENTER=1 \
+  python -m pytest -q -m integration tests/integration/test_command_center_stack.py
 ```
+
+CI runs the client job `command-center` (npm ci, typecheck, vitest, build, Playwright
+against a real server, screenshots uploaded as the `command-center-browser` artifact) and,
+in `compose-integration`, the Compose service with its integration tests and containment
+checks (read-only mounts and root filesystem, non-root, no secret-like variables, no Docker
+socket, loopback port, nothing written to the state tree).
 
 The visual suite asserts layout invariants (no horizontal overflow, panels in bounds), a
 non-blank canvas, keyboard navigation, unmistakable replay labelling, GET-only network
@@ -114,3 +151,5 @@ NEXUS focus covers about half the viewport.
   (`assetsInlineLimit: 0` in `vite.config.ts`).
 - `400 Invalid host header`: add the host to `NEXUS_COMMAND_CENTER_ALLOWED_HOSTS`.
 - Replay `PREPARING` for more than a few seconds: check the server log; capture needs `git`.
+- `bind source path does not exist` from Compose: create `.nexus/software_engineer` and
+  `.nexus/brain` as your user; Compose is configured never to create them.
