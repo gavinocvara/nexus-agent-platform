@@ -1,5 +1,7 @@
 // Screenshot capture for visual iteration: node visual/capture.mjs <outDir> [baseUrl] [names...]
-// Uses the preinstalled Chromium with SwiftShader WebGL so it runs headless anywhere.
+// SwiftShader WebGL, so it runs headless anywhere (PW_CHROMIUM or Playwright's Chromium).
+import { existsSync, mkdirSync } from "node:fs";
+
 import { chromium } from "@playwright/test";
 
 const out = process.argv[2] ?? "shots";
@@ -23,9 +25,11 @@ const shots = [
 ];
 
 const browser = await chromium.launch({
-  executablePath: process.env.PW_CHROMIUM ?? "/opt/pw-browsers/chromium",
+  executablePath:
+    process.env.PW_CHROMIUM ?? (existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined),
   args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
 });
+mkdirSync(out, { recursive: true });
 for (const shot of shots) {
   if (only.size && !only.has(shot.name)) continue;
   const page = await browser.newPage({ viewport: { width: shot.size[0], height: shot.size[1] }, deviceScaleFactor: 1 });

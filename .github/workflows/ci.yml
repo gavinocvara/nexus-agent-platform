@@ -71,6 +71,82 @@ jobs:
       - name: Validate scenario ground truth
         run: python -m nexus.lab.scenarios validate
 
+  command-center:
+    # Client checks for the read-only Command Center (ADR 0013). The Python view layer is
+    # already covered by `validate`; this job installs runtime dependencies only to serve
+    # the built client for browser checks.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web/command-center
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/command-center/package-lock.json
+
+      - name: Install client dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install NEXUS runtime to serve the client
+        working-directory: .
+        run: python -m pip install -e .
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser validation
+        env:
+          # No lab and no state here: the server reads an empty state tree and replay.
+          NEXUS_COMMAND_CENTER_HEALTH_ENABLED: "false"
+          NEXUS_COMMAND_CENTER_ENGINEER_STATE_ROOT: ${{ runner.temp }}/nexus-state
+          NEXUS_COMMAND_CENTER_ENGINEER_MEMORY_PATH: ${{ runner.temp }}/nexus-state/memory.sqlite3
+        run: npx playwright test
+
+      - name: Capture review screenshots
+        if: always()
+        run: |
+          curl --fail --silent http://127.0.0.1:8765/healthz || (
+            cd ../.. && NEXUS_COMMAND_CENTER_HEALTH_ENABLED=false \
+            NEXUS_COMMAND_CENTER_ENGINEER_STATE_ROOT="$RUNNER_TEMP/nexus-state" \
+            python -m nexus.command_center serve --port 8765 &
+          )
+          curl --fail --retry 30 --retry-all-errors --retry-delay 1 --silent http://127.0.0.1:8765/healthz
+          node visual/capture.mjs "$RUNNER_TEMP/command-center-screenshots" http://127.0.0.1:8765
+
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: command-center-browser
+          path: |
+            web/command-center/playwright-report
+            web/command-center/test-results
+            ${{ runner.temp }}/command-center-screenshots
+          if-no-files-found: ignore
+          retention-days: 14
+
   compose-integration:
     runs-on: ubuntu-latest
     env:
