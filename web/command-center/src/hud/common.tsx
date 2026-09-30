@@ -31,6 +31,11 @@ export function StatusChip({ status }: { status: SystemStatus }) {
   return <Chip tone={status}>{text}</Chip>;
 }
 
+/** The brain is "disabled" only where a deployment does not read it (ADR 0008 keeps it out of Compose). */
+export function brainLabel(state: SourceState): string {
+  return state === "disabled" ? "NOT VISIBLE" : upper(state);
+}
+
 export function SourceChip({ state }: { state: SourceState }) {
   const tone = state === "ok" ? "good" : state === "unreadable" || state === "unavailable" ? "bad" : "neutral";
   return <Chip tone={tone}>{upper(state)}</Chip>;

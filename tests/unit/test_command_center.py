@@ -477,3 +477,20 @@ def test_a_deployment_without_the_engineer_environment_says_so(tmp_path: Path) -
     assert snapshot.required_autonomous_gates, "the ship policy is code and stays visible"
     resident = {item.id: item for item in snapshot.systems}["resident_engineer"]
     assert {fact.label: fact.value for fact in resident.facts}["Enabled"] == "NOT VISIBLE"
+
+
+def test_a_deployment_that_does_not_read_the_brain_never_opens_it(tmp_path: Path) -> None:
+    brain_path = tmp_path / "brain.sqlite3"
+    brain_path.write_bytes(b"not a database")  # opening it would read as unreadable
+    enabled = SnapshotBuilder(_settings(tmp_path / "state", brain_path=brain_path), _engineer())
+    assert enabled.build(1).memory.aegisops_brain.state == "unreadable"
+    settings = _settings(tmp_path / "state", brain_path=brain_path, brain_enabled=False)
+    snapshot = SnapshotBuilder(settings, _engineer()).build(1)
+    assert snapshot.memory.aegisops_brain.state == "disabled"
+    source = {item.source: item for item in snapshot.sources}["aegisops_brain"]
+    assert source.detail == "Not read by this deployment"
+    systems = {item.id: item for item in snapshot.systems}
+    assert {fact.label: fact.value for fact in systems["aegisops"].facts}[
+        "Investigator memory"
+    ] == "NOT VISIBLE"
+    assert brain_path.read_bytes() == b"not a database"

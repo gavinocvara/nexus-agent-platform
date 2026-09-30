@@ -30,6 +30,10 @@ class CommandCenterSettings(BaseSettings):
     """Defaults to the resident engineer's own ``memory_path`` setting."""
 
     brain_path: Path = Path(".nexus/brain/aegisops-investigator.sqlite3")
+    brain_enabled: bool = True
+    """Read the AegisOps brain at ``brain_path``. ADR 0008 keeps the brain outside Compose,
+    so the Compose service sets this to false and the dashboard says it is not read."""
+
     scenario_directory: Path = Path("lab/scenarios/v1")
     client_directory: Path = Path("web/command-center/dist")
 

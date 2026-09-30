@@ -78,7 +78,7 @@ docker compose up --build --detach --wait
 | Gateway / Users / Orders | `http://localhost:8000` / `8001` / `8002` |
 | Grafana | `http://localhost:3000` |
 | Prometheus / Loki / Tempo | `http://localhost:9090` / `3100` / `3200` |
-| Command Center (opt-in, loopback only) | `http://127.0.0.1:8765` with `docker compose --profile command-center up` after `mkdir -p .nexus/software_engineer .nexus/brain` |
+| Command Center (opt-in, loopback only) | `http://127.0.0.1:8765` with `docker compose --profile command-center up` after `mkdir -p .nexus/software_engineer` |
 
 Run the integration suite against the running stack, then stop it:
 

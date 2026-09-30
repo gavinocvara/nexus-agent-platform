@@ -4,7 +4,7 @@ import type { CycleView, Provenance, Snapshot, SystemView } from "../data/types"
 import { STOPS, SYSTEMS } from "../director/systems";
 import { formatNumber, humanize, shortSha, timeAgo, upper } from "../lib/format";
 import { useStore } from "../state/store";
-import { Chip, Empty, Facts, Gates, Prov, Row, Section, SourceChip, StatusChip } from "./common";
+import { brainLabel, Chip, Empty, Facts, Gates, Prov, Row, Section, SourceChip, StatusChip } from "./common";
 
 function CycleFacts({ cycle, prov }: { cycle: CycleView; prov: Provenance }) {
   return (
@@ -176,6 +176,10 @@ function AegisPanel({ snapshot, replay }: { snapshot: Snapshot; replay: boolean 
               <Row key={type} label={humanize(type)} value={count} prov="recorded" />
             ))}
           </dl>
+        ) : brain.state === "disabled" ? (
+          <Empty title="Not visible to this deployment">
+            The investigator's brain stays outside Compose (ADR 0008); a host-run Command Center reads it.
+          </Empty>
         ) : (
           <Empty title={brain.state === "absent" ? "No private brain on this machine" : "Brain unreadable"}>
             The investigator's memory is created by its benchmarked runs.
@@ -430,7 +434,7 @@ function MemoryPanel({ snapshot, cycle, replay }: { snapshot: Snapshot; cycle: C
         <dl className="nx-facts">
           <Row
             label="Records"
-            value={snapshot.memory.aegisops_brain.state === "ok" ? snapshot.memory.aegisops_brain.total : upper(snapshot.memory.aegisops_brain.state)}
+            value={snapshot.memory.aegisops_brain.state === "ok" ? snapshot.memory.aegisops_brain.total : brainLabel(snapshot.memory.aegisops_brain.state)}
             prov="recorded"
           />
         </dl>

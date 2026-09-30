@@ -20,22 +20,24 @@ Development with hot reload: run `serve` as above, then `npm run dev` in
 
 ### With Docker Compose
 
-The service is opt-in (profile `command-center`) because it bind-mounts the host's state
-read-only and must never let Docker create those directories (on Linux they would be
+The service is opt-in (profile `command-center`) because it bind-mounts the host's engineer
+state read-only and must never let Docker create that directory (on Linux it would be
 root-owned and the resident engineer could no longer write its own state):
 
 ```bash
-mkdir -p .nexus/software_engineer .nexus/brain     # as your user, once
+mkdir -p .nexus/software_engineer                  # as your user, once
 docker compose --profile command-center up -d      # add the lab too: it is the same stack
 # open http://127.0.0.1:8765  (loopback only; there is no authentication)
 docker compose --profile command-center ps command-center   # healthy after a few seconds
 ```
 
-In the container the dashboard reads exactly those two directories (read-only), reads lab
-health over the Compose network, runs as a non-root user on a read-only root filesystem with
-a `/tmp` tmpfs, drops all capabilities, and has no Docker socket and no secret. The engineer's
+In the container the dashboard reads exactly that directory (read-only), reads lab health
+over the Compose network, runs as a non-root user on a read-only root filesystem with a
+`/tmp` tmpfs, drops all capabilities, and has no Docker socket and no secret. The engineer's
 environment is not shared with it, so the snapshot reports the engineer's configuration as
-not visible (the ship-policy gates, which are code, still show). Where the Debian mirrors
+not visible (the ship-policy gates, which are code, still show). The AegisOps brain stays
+outside Compose (ADR 0008), so the container reports it as not visible; run the Command
+Center on the host to see it. Where the Debian mirrors
 are unreachable, build from a base that already ships git:
 `NEXUS_COMMAND_CENTER_PYTHON_IMAGE=python:3.12 docker compose --profile command-center build`.
 Grafana, Prometheus, Loki, and Tempo stay the deep-observability tools on their own ports.
@@ -53,7 +55,7 @@ python -m nexus.command_center replay     # capture replay episodes, print recor
 | --- | --- | --- |
 | Resident engineer state (cycles, lease, decisions, publications, run artifacts) | `.nexus/software_engineer` | engineer `NEXUS_SOFTWARE_ENGINEER_STATE_ROOT` or `NEXUS_COMMAND_CENTER_ENGINEER_STATE_ROOT` |
 | Engineer private memory (opened `mode=ro`) | `.nexus/software_engineer/memory.sqlite3` | `NEXUS_COMMAND_CENTER_ENGINEER_MEMORY_PATH` |
-| AegisOps brain (opened `mode=ro`) | `.nexus/brain/aegisops-investigator.sqlite3` | `NEXUS_COMMAND_CENTER_BRAIN_PATH` |
+| AegisOps brain (opened `mode=ro`) | `.nexus/brain/aegisops-investigator.sqlite3` | `NEXUS_COMMAND_CENTER_BRAIN_PATH`, `..._BRAIN_ENABLED` (false in Compose) |
 | Lab health (diagnostics layer, fixed endpoints) | `localhost:8000-8002` | `NEXUS_COMMAND_CENTER_HEALTH_ENABLED`, `..._HEALTH_INTERVAL_SECONDS` |
 | Lab incident catalog (id, title, target only) | `lab/scenarios/v1` | `NEXUS_COMMAND_CENTER_SCENARIO_DIRECTORY` |
 | Replay episodes | engineer evaluation catalog, run in a temp dir at start | `NEXUS_COMMAND_CENTER_REPLAY_ENABLED` |
@@ -124,8 +126,8 @@ RUN_INTEGRATION=1 NEXUS_INTEGRATION_REQUIRE_COMMAND_CENTER=1 \
 CI runs the client job `command-center` (npm ci, typecheck, vitest, build, Playwright
 against a real server, screenshots uploaded as the `command-center-browser` artifact) and,
 in `compose-integration`, the Compose service with its integration tests and containment
-checks (read-only mounts and root filesystem, non-root, no secret-like variables, no Docker
-socket, loopback port, nothing written to the state tree).
+checks (exactly one read-only mount, read-only root filesystem, non-root, no secret-like
+variables, loopback port, nothing written to the state tree).
 
 The visual suite asserts layout invariants (no horizontal overflow, panels in bounds), a
 non-blank canvas, keyboard navigation, unmistakable replay labelling, GET-only network
@@ -151,5 +153,5 @@ NEXUS focus covers about half the viewport.
   (`assetsInlineLimit: 0` in `vite.config.ts`).
 - `400 Invalid host header`: add the host to `NEXUS_COMMAND_CENTER_ALLOWED_HOSTS`.
 - Replay `PREPARING` for more than a few seconds: check the server log; capture needs `git`.
-- `bind source path does not exist` from Compose: create `.nexus/software_engineer` and
-  `.nexus/brain` as your user; Compose is configured never to create them.
+- `bind source path does not exist` from Compose: create `.nexus/software_engineer` as
+  your user; Compose is configured never to create it.

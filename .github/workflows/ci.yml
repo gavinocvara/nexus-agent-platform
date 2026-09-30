@@ -168,8 +168,8 @@ jobs:
       - name: Validate Compose configuration
         run: docker compose config --quiet
 
-      - name: Provide empty engineer and brain state for the read-only mounts
-        run: mkdir -p .nexus/software_engineer .nexus/brain
+      - name: Provide empty engineer state for the read-only mount
+        run: mkdir -p .nexus/software_engineer
 
       - name: Build service images
         run: docker compose build
@@ -200,7 +200,7 @@ jobs:
         run: |
           fail() { echo "::error::$1"; exit 1; }
           curl --fail --show-error http://127.0.0.1:8765/healthz
-          # Read-only state mounts and root filesystem, non-root user, no secrets, no socket.
+          # Read-only state mount and root filesystem, non-root user, no secrets.
           if docker compose exec -T command-center touch /nexus/software_engineer/probe; then
             fail "state mount is writable"
           fi
@@ -212,9 +212,9 @@ jobs:
             fail "secret-like variable in the container environment"
           fi
           container="$(docker compose ps -q command-center)"
-          if docker inspect "$container" --format '{{range .Mounts}}{{.Source}} {{end}}' | grep -q docker.sock; then
-            fail "Docker socket is mounted"
-          fi
+          # Exactly one mount: the engineer state, read-only (no Docker socket, no brain).
+          mounts="$(docker inspect "$container" --format '{{range .Mounts}}{{.Destination}}:{{.RW}} {{end}}')"
+          [ "$mounts" = "/nexus/software_engineer:false " ] || fail "unexpected mounts: $mounts"
           host_ip="$(docker inspect "$container" --format '{{(index (index .HostConfig.PortBindings "8765/tcp") 0).HostIp}}')"
           [ "$host_ip" = "127.0.0.1" ] || fail "port is not loopback-only: $host_ip"
           [ -z "$(ls -A .nexus/software_engineer)" ] || fail "something wrote into the state tree"

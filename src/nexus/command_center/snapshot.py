@@ -154,7 +154,7 @@ class SnapshotBuilder:
         return (
             self.reader.fingerprint(),
             _stat(self.memory_path),
-            _stat(self.settings.brain_path),
+            _stat(self.settings.brain_path) if self.settings.brain_enabled else None,
             health.state,
             overall,
             self.replay_status,
@@ -386,20 +386,23 @@ class SnapshotBuilder:
                     ],
                 )
         brain: BrainMemoryView
-        try:
-            counts = read_brain_counts(self.settings.brain_path)
-        except (sqlite3.Error, ValueError):
-            brain = BrainMemoryView(state="unreadable")
+        if not self.settings.brain_enabled:
+            brain = BrainMemoryView(state="disabled")
         else:
-            if counts is None:
-                brain = BrainMemoryView(state="absent")
+            try:
+                counts = read_brain_counts(self.settings.brain_path)
+            except (sqlite3.Error, ValueError):
+                brain = BrainMemoryView(state="unreadable")
             else:
-                brain = BrainMemoryView(
-                    state="ok",
-                    total=sum(item[2] for item in counts),
-                    by_type=counter_dict([(item[0], item[2]) for item in counts]),
-                    by_state=counter_dict([(item[1], item[2]) for item in counts]),
-                )
+                if counts is None:
+                    brain = BrainMemoryView(state="absent")
+                else:
+                    brain = BrainMemoryView(
+                        state="ok",
+                        total=sum(item[2] for item in counts),
+                        by_type=counter_dict([(item[0], item[2]) for item in counts]),
+                        by_state=counter_dict([(item[1], item[2]) for item in counts]),
+                    )
         sources = [
             SourceStatus(
                 source="engineer_memory",
@@ -413,7 +416,11 @@ class SnapshotBuilder:
                 label="AegisOps investigator brain",
                 state=brain.state,
                 provenance="recorded",
-                detail=f"{brain.total} records" if brain.state == "ok" else None,
+                detail=f"{brain.total} records"
+                if brain.state == "ok"
+                else "Not read by this deployment"
+                if brain.state == "disabled"
+                else None,
             ),
         ]
         return MemoryView(engineer=engineer, aegisops_brain=brain), sources
@@ -554,7 +561,7 @@ class SnapshotBuilder:
                     "Investigator memory",
                     f"{memory.aegisops_brain.total} records"
                     if memory.aegisops_brain.state == "ok"
-                    else memory.aegisops_brain.state,
+                    else _brain_state_label(memory.aegisops_brain),
                     "recorded",
                 ),
             ],
@@ -737,7 +744,7 @@ class SnapshotBuilder:
                     "Investigator records",
                     str(memory.aegisops_brain.total)
                     if memory.aegisops_brain.state == "ok"
-                    else memory.aegisops_brain.state,
+                    else _brain_state_label(memory.aegisops_brain),
                     "recorded",
                 ),
             ],
@@ -770,6 +777,10 @@ def _health_tone(overall: str) -> Tone:
     if overall == "unavailable":
         return "warn"
     return "neutral"
+
+
+def _brain_state_label(brain: BrainMemoryView) -> str:
+    return "NOT VISIBLE" if brain.state == "disabled" else brain.state
 
 
 def _stat(path: Path) -> tuple[int, int] | None:

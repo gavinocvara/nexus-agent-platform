@@ -23,10 +23,11 @@ that version. Design rationale lives in `docs/adr/`, detail in Git history.
   signals, paths, model output, or credentials), and the dashboard shows the live phase
   with systems following the runtime's code path (a PatchForge executor's PatchForge then
   SentinelQA as a pipeline). CI job `command-center` (typecheck, vitest, build, Playwright).
-  Opt-in Compose service `command-center`: loopback port, read-only mounts of exactly
-  `.nexus/software_engineer` and `.nexus/brain` (never created by Docker), read-only root
-  filesystem, non-root, no capabilities, no secrets, no Docker socket; integration tests and
-  containment checks in `compose-integration`.
+  Opt-in Compose service `command-center`: loopback port, exactly one read-only mount
+  (`.nexus/software_engineer`, never created by Docker; the AegisOps brain stays outside
+  Compose per ADR 0008 and is reported as not visible), read-only root filesystem, non-root,
+  no capabilities, no secrets, no Docker socket; integration tests and containment checks
+  in `compose-integration`.
 
 ## 0.27.0 — Production hardening: runner integrity, autonomy boundary, reliability
 

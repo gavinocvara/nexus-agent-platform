@@ -44,6 +44,8 @@ def test_serves_the_client_and_a_sanitized_snapshot(command_center_url: str) -> 
     assert snapshot["schema_version"] == 1
     assert snapshot["engineer_config"] is None, "the container never sees the engineer's env"
     assert snapshot["required_autonomous_gates"]
+    brain = snapshot["memory"]["aegisops_brain"]  # type: ignore[index]
+    assert brain["state"] == "disabled", "the brain stays outside Compose (ADR 0008)"
 
 
 def test_reads_lab_health_over_the_compose_network(command_center_url: str) -> None:

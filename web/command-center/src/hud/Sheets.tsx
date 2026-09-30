@@ -5,7 +5,7 @@ import type { CycleView, Snapshot } from "../data/types";
 import { SYSTEMS } from "../director/systems";
 import { humanize, shortSha, timeAgo, upper, utcStamp } from "../lib/format";
 import { useStore } from "../state/store";
-import { Chip, Empty, Facts, Gates, Prov, SourceChip, StatusChip } from "./common";
+import { brainLabel, Chip, Empty, Facts, Gates, Prov, SourceChip, StatusChip } from "./common";
 
 /** The whole Command Center as a document: the accessible equivalent of the scene. */
 export function DataView({ fallback = false }: { fallback?: boolean }) {
@@ -114,7 +114,7 @@ export function DataView({ fallback = false }: { fallback?: boolean }) {
             ))}
           </div>
           <div className="nx-card">
-            <h4>AegisOps brain · {upper(snapshot.memory.aegisops_brain.state)}</h4>
+            <h4>AegisOps brain · {brainLabel(snapshot.memory.aegisops_brain.state)}</h4>
             {Object.entries(snapshot.memory.aegisops_brain.by_type).map(([type, count]) => (
               <div key={type} className="nx-gate">
                 <span />

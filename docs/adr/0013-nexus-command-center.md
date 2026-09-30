@@ -58,7 +58,7 @@ runtime `ChangeSummary` statistics and hashes.
 | SentinelQA verdict and findings | `runs/<cycle>/<candidate>/sentinel_verdict.json` (`SentinelVerdict`) plus `sentinel_*` gates | recorded |
 | PatchForge activity | `IMPLEMENT`/`TEST` transitions, PatchForge gates, `ChangeSummary` | recorded |
 | Engineer memory | `memory.sqlite3` opened `mode=ro` | recorded |
-| AegisOps brain | `.nexus/brain/aegisops-investigator.sqlite3` opened `mode=ro` | recorded |
+| AegisOps brain | `.nexus/brain/aegisops-investigator.sqlite3` opened `mode=ro`; `disabled` (not visible) where a deployment does not read it | recorded |
 | Lab service health | `DiagnosticServiceLayer.get_system_health()` | live, 15 s poll |
 | Lab incident catalog | `lab/scenarios/v1` via `nexus.lab.catalog` | static |
 | Engineer configuration | `SoftwareEngineerSettings` allow-list (as `preflight`); `null` in a deployment that does not share the engineer's environment | static |
@@ -146,18 +146,21 @@ heartbeats. Server to client only.
 
 - **Compose**: service `command-center` behind the `command-center` profile
   (`web/command-center/Dockerfile`: Node builds the client, a Python image serves it; no Node
-  at runtime). It binds `127.0.0.1:8765` only; mounts exactly `.nexus/software_engineer` and
-  `.nexus/brain`, read-only, with `create_host_path: false` (Docker must never create state
-  directories on the host: on Linux they would be root-owned and break the engineer); runs as
+  at runtime). It binds `127.0.0.1:8765` only; mounts exactly `.nexus/software_engineer`,
+  read-only, with `create_host_path: false` (Docker must never create state directories on
+  the host: on Linux they would be root-owned and break the engineer); runs as
   a non-root user with a read-only root filesystem, a `/tmp` tmpfs, all capabilities dropped,
   and `no-new-privileges`; gets no Docker socket and no secret; reads lab health over the
   Compose network. It is opt-in because it needs those directories to exist.
   `NEXUS_COMMAND_CENTER_ENGINEER_CONFIG_VISIBLE=false`, so the snapshot says the engineer's
-  configuration is not visible instead of showing the container's defaults.
+  configuration is not visible instead of showing the container's defaults. The AegisOps
+  brain is not mounted: ADR 0008 keeps it outside the Compose project (a unit test pins
+  that), so `NEXUS_COMMAND_CENTER_BRAIN_ENABLED=false` and the snapshot reports it as not
+  visible rather than absent; a host-run Command Center still reads it `mode=ro`.
 - **CI**: job `command-center` (npm ci, typecheck, vitest, build, Playwright against a real
   server, screenshots as an artifact). `compose-integration` runs with the profile, the
-  Command Center integration tests, and containment checks (read-only mounts and root
-  filesystem, non-root, no secret-like variables, no Docker socket, loopback port, nothing
+  Command Center integration tests, and containment checks (exactly the one read-only mount,
+  read-only root filesystem, non-root, no secret-like variables, loopback port, nothing
   written to the state tree). The Python view layer stays in `validate`.
 
 ### Performance
