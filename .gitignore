@@ -37,3 +37,8 @@ CLAUDE.local.md
 # Local databases outside .nexus/
 *.sqlite3
 *.db
+
+# Command Center client (ADR 0013)
+node_modules/
+web/command-center/test-results/
+web/command-center/playwright-report/
