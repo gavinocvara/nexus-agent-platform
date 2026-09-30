@@ -8,7 +8,7 @@ Subsystem status on `main` (unchanged by the branch below): `PROJECT_STATE.md`.
 | Item | Value |
 | --- | --- |
 | Version | `0.27.0` on `main`; no bump on the branch |
-| `main` | CI green at `6ea5a92` (run `36641561380`) |
+| `main` | `71fe0a0`, CI green (run `36662165331`); contained in the branch |
 | Active branch | `claude/nexus-command-center`, PR #5 into `main`, **not merged**, awaiting owner review |
 
 ## Command Center (ADR 0013, `docs/runbooks/command-center.md`)
