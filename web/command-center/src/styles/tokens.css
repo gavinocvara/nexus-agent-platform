@@ -1,0 +1,106 @@
+/* NEXUS Command Center design tokens (ADR 0013).
+   Amber is structure and selection; blue is energy and activity, never decoration.
+   System accents appear only when a system is lit by a real event. */
+
+:root {
+  color-scheme: dark;
+
+  /* Void and surfaces */
+  --nx-void: #040507;
+  --nx-ink-0: #07090c;
+  --nx-ink-1: #0b0e13;
+  --nx-ink-2: #11151c;
+  --nx-panel: rgba(8, 10, 14, 0.62);
+  --nx-panel-strong: rgba(7, 9, 12, 0.86);
+  --nx-scrim: rgba(3, 4, 6, 0.78);
+
+  /* Text: warm off-white, like lit paper in a dark room */
+  --nx-text: #ece6d8;
+  --nx-text-2: #b9b3a6;
+  --nx-text-3: #7f7a70;
+  --nx-text-4: #4f4c47;
+
+  /* Structure */
+  --nx-amber: #ffab3d;
+  --nx-amber-hot: #ffd08a;
+  --nx-amber-deep: #b86a12;
+  --nx-ember: #ff6a1f;
+  --nx-line: rgba(255, 190, 110, 0.16);
+  --nx-line-2: rgba(255, 190, 110, 0.3);
+  --nx-line-strong: rgba(255, 171, 61, 0.7);
+
+  /* Energy (activity only) */
+  --nx-energy: #3b82ff;
+  --nx-energy-hot: #a8ccff;
+  --nx-energy-deep: #0c2a78;
+  --nx-energy-line: rgba(90, 150, 255, 0.45);
+
+  /* Verdict tones: desaturated so they never outshout structure */
+  --nx-good: #7fdcaa;
+  --nx-warn: #ffc55a;
+  --nx-bad: #ff5d4d;
+  --nx-idle: #8e8a82;
+
+  /* System accents (lit state only) */
+  --sys-nexus: #ffab3d;
+  --sys-aegisops: #ff6f4a;
+  --sys-patchforge: #ffc14d;
+  --sys-sentinelqa: #52e0b8;
+  --sys-resident_engineer: #a393ff;
+  --sys-memory: #9cc3ff;
+  --sys-engram: #6b7280;
+
+  /* Type */
+  --nx-font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --nx-font-label: "Chakra Petch", "Barlow Condensed", sans-serif;
+  --nx-font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --nx-fs-2xs: 10px;
+  --nx-fs-xs: 11px;
+  --nx-fs-sm: 12.5px;
+  --nx-fs-md: 14px;
+  --nx-fs-lg: 17px;
+  --nx-fs-xl: 22px;
+  --nx-fs-2xl: 30px;
+  --nx-fs-3xl: 44px;
+  --nx-fs-4xl: 64px;
+
+  --nx-track-label: 0.14em;
+  --nx-track-display: 0.01em;
+
+  /* Space (4px grid) */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+  --s8: 64px;
+
+  /* Geometry */
+  --nx-cut: 10px;
+  --nx-bracket: 12px;
+  --nx-hair: 1px;
+
+  /* Motion */
+  --nx-ease-out: cubic-bezier(0.2, 0.7, 0.1, 1);
+  --nx-ease-inout: cubic-bezier(0.7, 0, 0.2, 1);
+  --nx-t-micro: 120ms;
+  --nx-t-ui: 240ms;
+  --nx-t-panel: 560ms;
+
+  /* Layout */
+  --nx-gutter: clamp(16px, 3.4vw, 56px);
+  --nx-topbar: 56px;
+  --nx-menu-w: clamp(260px, 24vw, 360px);
+  --nx-panel-w: clamp(320px, 27vw, 420px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --nx-t-micro: 0ms;
+    --nx-t-ui: 0ms;
+    --nx-t-panel: 0ms;
+  }
+}
