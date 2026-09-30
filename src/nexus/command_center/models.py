@@ -20,7 +20,9 @@ Actor = Literal["nexus", "aegisops", "patchforge", "sentinelqa", "resident_engin
 SystemId = Literal[
     "nexus", "aegisops", "patchforge", "sentinelqa", "resident_engineer", "memory", "engram"
 ]
-SystemStatus = Literal["idle", "dormant", "active", "attention", "offline", "not_built"]
+SystemStatus = Literal["idle", "dormant", "active", "pipeline", "attention", "offline", "not_built"]
+"""``pipeline``: part of the executor stage now running, where which member is working
+at this instant is not observable (PatchForge, then SentinelQA, inside one call)."""
 GateOwner = Literal["patchforge", "sentinelqa", "repository"]
 Tone = Literal["neutral", "good", "warn", "bad"]
 
@@ -260,6 +262,17 @@ class ActiveRunView(ViewModel):
     lease_expires_at: datetime
     phase: str | None = None
     phase_source: Literal["unobservable", "progress_file"] = "unobservable"
+    sequence: int | None = None
+    stage: str | None = None
+    description: str | None = None
+    phase_updated_at: datetime | None = None
+    executor: Literal["dry_run", "patchforge", "other"] | None = None
+    actors: list[Actor] = Field(default_factory=list)
+    """Systems the runtime's own code path involves in this phase, fully active."""
+
+    pipeline: list[Actor] = Field(default_factory=list)
+    """Systems running inside the executor call, one after another, not individually
+    observable."""
 
 
 class InterruptedRunView(ViewModel):
@@ -411,6 +424,7 @@ class Signal(ViewModel):
 
     kind: Literal[
         "run.started",
+        "run.phase",
         "run.ended",
         "cycle.recorded",
         "decision.pending",

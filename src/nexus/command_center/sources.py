@@ -27,10 +27,9 @@ from nexus.lab.catalog import ScenarioCatalog, ScenarioCatalogError
 from nexus.sentinelqa.models import SentinelVerdict
 from nexus.software_engineer.memory import EngineerMemory
 from nexus.software_engineer.models import CycleRecord, OwnerDecision, PublishedChange
+from nexus.software_engineer.progress import PROGRESS_FILENAME, CycleProgress, read_progress
 
 LEASE_FILENAME = "run.lock"
-PROGRESS_FILENAME = "active.progress.json"
-"""Proposed instrumentation (ADR 0013); read when present, never written here."""
 
 _MAX_RECORD_BYTES = 5_000_000
 _MAX_CYCLE_FILES = 400
@@ -41,12 +40,6 @@ class LeaseInfo:
     cycle_id: UUID
     started_at: datetime
     expires_at: datetime
-
-
-@dataclass(frozen=True, slots=True)
-class ProgressInfo:
-    cycle_id: UUID
-    phase: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,14 +84,10 @@ class EngineerStateReader:
         except (KeyError, TypeError, ValueError):
             return None
 
-    def progress(self) -> ProgressInfo | None:
-        data = _read_json(self.cycles_dir / PROGRESS_FILENAME)
-        if data is None:
-            return None
-        try:
-            return ProgressInfo(cycle_id=UUID(str(data["cycle_id"])), phase=str(data["phase"]))
-        except (KeyError, TypeError, ValueError):
-            return None
+    def progress(self) -> CycleProgress | None:
+        """The running cycle's published phase (written only by the cycle runtime)."""
+
+        return read_progress(self.state_root)
 
     def interrupted(self) -> list[InterruptedInfo]:
         found: list[InterruptedInfo] = []
@@ -355,7 +344,6 @@ __all__ = [
     "InterruptedInfo",
     "LabScenario",
     "LeaseInfo",
-    "ProgressInfo",
     "read_brain_counts",
     "read_engineer_memory",
     "read_lab_scenarios",

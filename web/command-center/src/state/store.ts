@@ -180,6 +180,8 @@ function describeSignal(signal: StreamSignal): string | null {
   switch (signal.kind) {
     case "run.started":
       return "A resident engineer cycle started.";
+    case "run.phase":
+      return `Resident engineer phase: ${signal.detail ?? "unknown"}.`;
     case "run.ended":
       return "The resident engineer cycle ended.";
     case "cycle.recorded":

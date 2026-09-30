@@ -5,7 +5,7 @@ export type Provenance = "live" | "recorded" | "replay" | "static";
 export type SourceState = "ok" | "absent" | "unreadable" | "unavailable" | "disabled" | "preparing";
 export type Actor = "nexus" | "aegisops" | "patchforge" | "sentinelqa" | "resident_engineer" | "memory";
 export type SystemId = Actor | "engram";
-export type SystemStatus = "idle" | "dormant" | "active" | "attention" | "offline" | "not_built";
+export type SystemStatus = "idle" | "dormant" | "active" | "pipeline" | "attention" | "offline" | "not_built";
 export type Tone = "neutral" | "good" | "warn" | "bad";
 export type GateStatus = "passed" | "failed" | "error" | "not_run";
 export type Verdict = "ship" | "revise" | "reject";
@@ -231,6 +231,13 @@ export interface ActiveRunView {
   lease_expires_at: string;
   phase: string | null;
   phase_source: "unobservable" | "progress_file";
+  sequence: number | null;
+  stage: string | null;
+  description: string | null;
+  phase_updated_at: string | null;
+  executor: "dry_run" | "patchforge" | "other" | null;
+  actors: Actor[];
+  pipeline: Actor[];
 }
 
 export interface InterruptedRunView {
@@ -372,6 +379,7 @@ export interface ReplayCatalog {
 
 export type SignalKind =
   | "run.started"
+  | "run.phase"
   | "run.ended"
   | "cycle.recorded"
   | "decision.pending"

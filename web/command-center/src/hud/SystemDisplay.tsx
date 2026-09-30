@@ -204,8 +204,15 @@ function ResidentPanel({ snapshot, cycle, replay }: { snapshot: Snapshot; cycle:
           <dl className="nx-facts">
             <Row label="Cycle" value={shortSha(snapshot.active_run.cycle_id, 8)} prov="live" />
             <Row label="Started" value={timeAgo(snapshot.active_run.started_at)} prov="live" />
-            <Row label="Phase" value={snapshot.active_run.phase ? upper(snapshot.active_run.phase) : "NOT OBSERVABLE"} prov="live" />
+            <Row label="Phase" value={snapshot.active_run.stage ?? "NOT PUBLISHED"} prov="live" />
+            {snapshot.active_run.sequence !== null ? <Row label="Transition" value={`#${snapshot.active_run.sequence}`} prov="live" /> : null}
+            {snapshot.active_run.executor ? <Row label="Executor" value={upper(snapshot.active_run.executor)} prov="live" /> : null}
           </dl>
+          {snapshot.active_run.description ? (
+            <p className="nx-display__role" style={{ marginTop: 8 }}>
+              {snapshot.active_run.description}
+            </p>
+          ) : null}
         </Section>
       ) : null}
       <Section title={replay ? "Episode cycle" : "Latest cycle"}>

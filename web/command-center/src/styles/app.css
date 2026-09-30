@@ -455,6 +455,10 @@ button {
   --status: var(--nx-warn);
 }
 
+.nx-menu__item[data-status="pipeline"] {
+  --status: #7fa8e6;
+}
+
 .nx-menu__item[data-status="offline"] {
   --status: var(--nx-bad);
 }
@@ -570,6 +574,10 @@ button {
 
 .nx-chip[data-tone="active"] {
   --tone: var(--nx-energy-hot);
+}
+
+.nx-chip[data-tone="pipeline"] {
+  --tone: #7fa8e6;
 }
 
 .nx-chip[data-tone="attention"],
@@ -1075,6 +1083,10 @@ button {
 
 .nx-orb-label__state[data-status="attention"] {
   color: var(--nx-warn);
+}
+
+.nx-orb-label__state[data-status="pipeline"] {
+  color: #7fa8e6;
 }
 
 .nx-orb-label__state[data-status="offline"] {

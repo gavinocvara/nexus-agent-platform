@@ -67,6 +67,54 @@ STAGE: dict[CyclePhase, str] = {
     CyclePhase.CLOSED: "CLOSED",
 }
 
+# Static descriptions of what the runtime does in each phase; never taken from a record.
+PHASE_DESCRIPTION: dict[CyclePhase, str] = {
+    CyclePhase.CREATED: "Cycle created",
+    CyclePhase.OBSERVE: "Collecting repository, check, and gate evidence",
+    CyclePhase.UNDERSTAND: "Reading its private memory",
+    CyclePhase.PRIORITIZE: "Ranking candidates by value, urgency, confidence, and cost",
+    CyclePhase.INVESTIGATE: "Confirming the selected candidate against its evidence",
+    CyclePhase.PLAN: "Planning the smallest correct change",
+    CyclePhase.IMPLEMENT: "Producing the change through the executor",
+    CyclePhase.TEST: "Reading the validation gates the executor returned",
+    CyclePhase.SELF_REVIEW: "Challenging the change with an independent checklist",
+    CyclePhase.ASSESS_RISK: "Classifying the change's risk",
+    CyclePhase.DECIDE: "Applying the ship policy",
+    CyclePhase.OBSERVE_RESULTS: "Checking the result for regressions",
+    CyclePhase.LEARN: "Recording validated lessons only",
+    CyclePhase.REPORT: "Writing the record and the report",
+    CyclePhase.CLOSED: "Closing the cycle",
+}
+
+IMPLEMENT_DESCRIPTION: dict[str, str] = {
+    "patchforge": (
+        "Executor running: PatchForge produces the change, then SentinelQA verifies it "
+        "against the locked specification. Which of the two is working right now is not "
+        "observable."
+    ),
+    "dry_run": "Dry run: the executor plans only and changes no code",
+    "other": "A non-PatchForge executor is producing the change",
+}
+
+
+def live_phase_systems(phase: CyclePhase, executor: str) -> tuple[list[Actor], list[Actor]]:
+    """``(active, pipeline)`` for a running phase, following the runtime's code path.
+
+    Memory is read in every UNDERSTAND. PatchForge and SentinelQA run only inside a
+    PatchForge executor's IMPLEMENT call, one after the other, so they are a pipeline, not
+    two active systems. Everything else is the engineer or the NEXUS ship policy.
+    """
+
+    if phase is CyclePhase.UNDERSTAND:
+        return ["resident_engineer", "memory"], []
+    if phase is CyclePhase.IMPLEMENT:
+        pipeline: list[Actor] = ["patchforge", "sentinelqa"] if executor == "patchforge" else []
+        return ["resident_engineer"], pipeline
+    if phase in {CyclePhase.ASSESS_RISK, CyclePhase.DECIDE, CyclePhase.REPORT, CyclePhase.CLOSED}:
+        return ["resident_engineer", "nexus"], []
+    return ["resident_engineer"], []
+
+
 PATCHFORGE_GATES = frozenset(
     {
         ValidationGate.RUFF_FORMAT,
@@ -440,7 +488,9 @@ def counter_dict(values: Sequence[tuple[str, int]]) -> dict[str, int]:
 
 
 __all__ = [
+    "IMPLEMENT_DESCRIPTION",
     "PATCHFORGE_GATES",
+    "PHASE_DESCRIPTION",
     "SENTINEL_GATES",
     "STAGE",
     "approval_view",
@@ -454,6 +504,7 @@ __all__ = [
     "gate_owner",
     "gate_views",
     "governed_channels",
+    "live_phase_systems",
     "patchforge_ran",
     "publication_view",
     "risk_view",

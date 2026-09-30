@@ -251,7 +251,9 @@ function StatusBlock() {
   } else if (snapshot) {
     if (snapshot.active_run) {
       big = "CYCLE IN FLIGHT";
-      sub = `Started ${timeAgo(snapshot.active_run.started_at)} · lease held`;
+      sub = snapshot.active_run.stage
+        ? `Phase ${snapshot.active_run.stage} · started ${timeAgo(snapshot.active_run.started_at)}`
+        : `Started ${timeAgo(snapshot.active_run.started_at)} · phase not published`;
       tone = "active";
     } else if (snapshot.pending_approval) {
       big = "OWNER DECISION";

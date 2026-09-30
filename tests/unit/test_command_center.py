@@ -5,9 +5,9 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -20,8 +20,13 @@ from nexus.command_center.sanitize import WITHHELD, safe_text
 from nexus.command_center.snapshot import SnapshotBuilder
 from nexus.patchforge.canonical import canonical_json
 from nexus.software_engineer.config import SoftwareEngineerSettings
-from nexus.software_engineer.evaluation import EngineerEvaluationHarness, default_catalog
-from nexus.software_engineer.models import CycleRecord, OwnerDecision, OwnerVerdict
+from nexus.software_engineer.evaluation import (
+    EVALUATION_TIME,
+    EngineerEvaluationHarness,
+    default_catalog,
+)
+from nexus.software_engineer.models import CyclePhase, CycleRecord, OwnerDecision, OwnerVerdict
+from nexus.software_engineer.progress import CycleProgress, ProgressPublisher, progress_path
 
 FAKE_TOKEN = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
 FAKE_WEBHOOK = "https://hooks.slack.com/services/T0000/B0000/" + "x" * 24
@@ -354,3 +359,111 @@ def _copy_tree(source: Path, target: Path) -> None:
         else:
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(path.read_bytes())
+
+
+# -- live phase (progress file written by the cycle runtime) -----------------------------
+
+
+def _live_lease(state_root: Path, cycle_id: UUID, *, minutes: int = 60) -> None:
+    now = datetime.now(UTC)
+    state_root.mkdir(parents=True, exist_ok=True)
+    (state_root / "run.lock").write_text(
+        json.dumps(
+            {
+                "cycle_id": str(cycle_id),
+                "started_at": now.isoformat(),
+                "expires_at": (now + timedelta(minutes=minutes)).isoformat(),
+                "pid": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _progress(state_root: Path, cycle_id: UUID, phase: CyclePhase, executor: str) -> None:
+    now = datetime.now(UTC)
+    path = progress_path(state_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        CycleProgress(
+            cycle_id=cycle_id,
+            sequence=6,
+            phase=phase,
+            executor=executor,  # type: ignore[arg-type]
+            started_at=now,
+            updated_at=now,
+        ).model_dump_json(),
+        encoding="utf-8",
+    )
+
+
+def test_implement_with_patchforge_is_a_pipeline_not_two_active_systems(tmp_path: Path) -> None:
+    state_root = tmp_path / "state"
+    cycle_id = uuid4()
+    _live_lease(state_root, cycle_id)
+    _progress(state_root, cycle_id, CyclePhase.IMPLEMENT, "patchforge")
+    snapshot = _builder(state_root).build(1)
+    run = snapshot.active_run
+    assert run is not None and run.phase_source == "progress_file"
+    assert (run.phase, run.stage, run.sequence) == ("implement", "IMPLEMENT", 6)
+    assert run.actors == ["resident_engineer"]
+    assert run.pipeline == ["patchforge", "sentinelqa"]
+    assert run.description is not None and "not observable" in run.description
+    systems = {item.id: item.status for item in snapshot.systems}
+    assert systems["patchforge"] == "pipeline" and systems["sentinelqa"] == "pipeline"
+    assert systems["resident_engineer"] == "active"
+
+
+def test_dry_run_implement_and_understand_light_only_what_runs(tmp_path: Path) -> None:
+    state_root = tmp_path / "state"
+    cycle_id = uuid4()
+    _live_lease(state_root, cycle_id)
+    _progress(state_root, cycle_id, CyclePhase.IMPLEMENT, "dry_run")
+    snapshot = _builder(state_root).build(1)
+    assert snapshot.active_run is not None and snapshot.active_run.pipeline == []
+    systems = {item.id: item.status for item in snapshot.systems}
+    assert systems["patchforge"] == "dormant" and systems["sentinelqa"] == "dormant"
+    _progress(state_root, cycle_id, CyclePhase.UNDERSTAND, "dry_run")
+    snapshot = _builder(state_root).build(2)
+    assert {item.id: item.status for item in snapshot.systems}["memory"] == "active"
+
+
+def test_progress_is_ignored_without_its_own_live_lease(tmp_path: Path) -> None:
+    state_root = tmp_path / "state"
+    holder, stranger = uuid4(), uuid4()
+    _live_lease(state_root, holder)
+    _progress(state_root, stranger, CyclePhase.IMPLEMENT, "patchforge")
+    run = _builder(state_root).build(1).active_run
+    assert run is not None and run.phase is None and run.phase_source == "unobservable"
+    _live_lease(state_root, stranger, minutes=-5)  # expired: the cycle died
+    snapshot = _builder(state_root).build(2)
+    assert snapshot.active_run is None
+    assert {item.id: item.status for item in snapshot.systems}["patchforge"] == "dormant"
+
+
+def test_the_dashboard_sees_the_real_phase_sequence_while_a_cycle_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    observed: list[tuple[str | None, str | None]] = []
+    original = ProgressPublisher.publish
+
+    def spy(self: ProgressPublisher, **kwargs: object) -> None:
+        original(self, **kwargs)  # type: ignore[arg-type]
+        state_root = self.path.parent.parent
+        before = _tree_digest(state_root)
+        # The evaluation cycle runs on a fixed clock; observe on the same one.
+        builder = SnapshotBuilder(_settings(state_root), _engineer(), clock=lambda: EVALUATION_TIME)
+        run = builder.build(1).active_run
+        assert _tree_digest(state_root) == before, "observing never writes"
+        observed.append((run.stage, run.phase_source) if run else (None, None))
+
+    monkeypatch.setattr(ProgressPublisher, "publish", spy)
+    scenario = next(item for item in default_catalog() if item.name == "owner_approval")
+    record = EngineerEvaluationHarness(tmp_path).run(scenario).record
+    expected = [
+        (transition.target.value.upper(), "progress_file") for transition in record.transitions
+    ]
+    stages = {"self_review": "REVIEW", "assess_risk": "RISK", "observe_results": "VERIFY"}
+    expected = [(stages.get(stage.lower(), stage), source) for stage, source in expected]
+    assert observed == expected
+    assert not progress_path(tmp_path / "owner_approval" / "state").exists()

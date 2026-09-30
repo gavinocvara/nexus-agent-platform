@@ -41,11 +41,15 @@ from nexus.command_center.sanitize import safe_list, safe_text
 from nexus.command_center.sources import (
     EngineerStateReader,
     LabScenario,
+    LeaseInfo,
     read_brain_counts,
     read_engineer_memory,
     read_lab_scenarios,
 )
 from nexus.command_center.views import (
+    IMPLEMENT_DESCRIPTION,
+    PHASE_DESCRIPTION,
+    STAGE,
     approval_view,
     budget_lines,
     counter_dict,
@@ -54,6 +58,7 @@ from nexus.command_center.views import (
     decision_view,
     effective_decision,
     effective_publication,
+    live_phase_systems,
     patchforge_ran,
     publication_view,
     sentinel_ran,
@@ -61,6 +66,7 @@ from nexus.command_center.views import (
 from nexus.diagnostics.models import HealthState, SystemHealthResult
 from nexus.software_engineer.config import SoftwareEngineerSettings
 from nexus.software_engineer.models import (
+    CyclePhase,
     CycleRecord,
     CycleUsage,
     GateStatus,
@@ -166,15 +172,7 @@ class SnapshotBuilder:
         lease = self.reader.lease()
         active: ActiveRunView | None = None
         if lease is not None and lease.expires_at > now:
-            progress = self.reader.progress()
-            phase = progress.phase if progress and progress.cycle_id == lease.cycle_id else None
-            active = ActiveRunView(
-                cycle_id=str(lease.cycle_id),
-                started_at=lease.started_at,
-                lease_expires_at=lease.expires_at,
-                phase=None if phase is None else safe_text(phase, 40),
-                phase_source="unobservable" if phase is None else "progress_file",
-            )
+            active = self._active_run(lease)
         interrupted = [
             InterruptedRunView(
                 cycle_id=str(item.cycle_id),
@@ -284,6 +282,39 @@ class SnapshotBuilder:
             health=health,
             lab_scenarios=lab,
             engineer_config=config,
+        )
+
+    def _active_run(self, lease: LeaseInfo) -> ActiveRunView:
+        """The lease proves a cycle is in flight; its progress file, when it is the same
+        cycle's, names the phase. A mismatched or unreadable file is ignored."""
+
+        progress = self.reader.progress()
+        if progress is None or progress.cycle_id != lease.cycle_id:
+            return ActiveRunView(
+                cycle_id=str(lease.cycle_id),
+                started_at=lease.started_at,
+                lease_expires_at=lease.expires_at,
+            )
+        phase = progress.phase
+        actors, pipeline = live_phase_systems(phase, progress.executor)
+        description = (
+            IMPLEMENT_DESCRIPTION[progress.executor]
+            if phase is CyclePhase.IMPLEMENT
+            else PHASE_DESCRIPTION[phase]
+        )
+        return ActiveRunView(
+            cycle_id=str(lease.cycle_id),
+            started_at=lease.started_at,
+            lease_expires_at=lease.expires_at,
+            phase=phase.value,
+            phase_source="progress_file",
+            sequence=progress.sequence,
+            stage=STAGE[phase],
+            description=description,
+            phase_updated_at=progress.updated_at,
+            executor=progress.executor,
+            actors=actors,
+            pipeline=pipeline,
         )
 
     # -- sources ------------------------------------------------------------------------
@@ -554,16 +585,17 @@ class SnapshotBuilder:
                 )
         else:
             pf_facts.append(fact("Last change", "none recorded", "recorded"))
-        in_forge = active is not None and active.phase in {"implement", "test"}
+        in_pipeline = active is not None and "patchforge" in active.pipeline
+        pipeline_detail = "In the running executor pipeline (PatchForge, then SentinelQA)"
         patchforge = SystemView(
             id="patchforge",
             name="PatchForge",
             designation="PF-02",
             role="Issue to tested patch inside a disposable, attested workspace",
-            status="active" if in_forge else "dormant",
+            status="pipeline" if in_pipeline else "dormant",
             status_detail=(
-                "Producing a change"
-                if in_forge
+                pipeline_detail
+                if in_pipeline
                 else "Last produced a change in a recorded cycle"
                 if forged
                 else "No recorded work yet"
@@ -599,21 +631,21 @@ class SnapshotBuilder:
                 sq_status, sq_detail = "attention", "Last review rejected the candidate"
             else:
                 sq_detail = f"Last review {status}"
-        in_verify = active is not None and active.phase == "test"
         sentinel = SystemView(
             id="sentinelqa",
             name="SentinelQA",
             designation="SQ-03",
             role="Independent verification against the locked pristine specification",
-            status="active" if in_verify else sq_status,
-            status_detail="Verifying a candidate" if in_verify else sq_detail,
+            status="pipeline" if in_pipeline else sq_status,
+            status_detail=pipeline_detail if in_pipeline else sq_detail,
             last_activity_at=verified.completed_at if verified else None,
             facts=sq_facts,
         )
 
         re_status: SystemStatus
         if active is not None:
-            re_status, re_detail = "active", "Cycle in flight"
+            re_status = "active"
+            re_detail = f"Cycle in flight: {active.stage}" if active.stage else "Cycle in flight"
         elif pending is not None:
             re_status, re_detail = "attention", "Waiting on the owner's decision"
         elif latest is not None:
@@ -649,15 +681,25 @@ class SnapshotBuilder:
         )
 
         engineer_memory = memory.engineer
+        reading = active is not None and "memory" in active.actors
+        memory_status: SystemStatus = (
+            "attention"
+            if engineer_memory.state == "unreadable"
+            else "active"
+            if reading
+            else "dormant"
+        )
         memory_system = SystemView(
             id="memory",
             name="Memory",
             designation="MM-05",
             role="Private per-agent memory: knowledge, never authority",
-            status="attention" if engineer_memory.state == "unreadable" else "dormant",
+            status=memory_status,
             status_detail=(
                 "Engineer memory could not be read"
                 if engineer_memory.state == "unreadable"
+                else "The resident engineer is reading its private memory"
+                if reading
                 else f"{engineer_memory.total + memory.aegisops_brain.total} private records"
             ),
             last_activity_at=(

@@ -27,7 +27,7 @@ export function Chip({ tone, children }: { tone: string; children: ReactNode }) 
 }
 
 export function StatusChip({ status }: { status: SystemStatus }) {
-  const text = status === "not_built" ? "NOT BUILT" : status.toUpperCase();
+  const text = status === "not_built" ? "NOT BUILT" : status === "pipeline" ? "IN PIPELINE" : status.toUpperCase();
   return <Chip tone={status}>{text}</Chip>;
 }
 
