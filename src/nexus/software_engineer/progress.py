@@ -100,20 +100,22 @@ class ProgressPublisher:
     def publish(self, *, sequence: int, phase: CyclePhase, now: datetime) -> None:
         if self.failed:
             return
-        record = CycleProgress(
-            cycle_id=self.cycle_id,
-            sequence=sequence,
-            phase=phase,
-            executor=self.executor,
-            started_at=self.started_at,
-            updated_at=now,
-        )
         temporary = self.path.with_name(f".{PROGRESS_FILENAME}.{self.cycle_id.hex}.tmp")
         try:
+            record = CycleProgress(
+                cycle_id=self.cycle_id,
+                sequence=sequence,
+                phase=phase,
+                executor=self.executor,
+                started_at=self.started_at,
+                updated_at=now,
+            )
             self.path.parent.mkdir(parents=True, exist_ok=True)
             temporary.write_text(record.model_dump_json() + "\n", encoding="utf-8")
             os.replace(temporary, self.path)
-        except OSError:
+        except (OSError, ValueError):
+            # ValueError covers a record that fails validation: observability never fails
+            # the cycle it observes.
             self.failed = True
             with contextlib.suppress(OSError):
                 temporary.unlink(missing_ok=True)

@@ -418,3 +418,13 @@ def test_finish_never_removes_another_cycles_file_and_reader_rejects_garbage(
     assert read_progress(state_root) is None
     progress_path(state_root).unlink()
     assert read_progress(state_root) is None
+
+
+def test_an_invalid_progress_record_stops_publishing_without_failing_the_cycle(
+    tmp_path: Path,
+) -> None:
+    publisher = ProgressPublisher(tmp_path, cycle_id=CYCLE, executor="other", started_at=NOW)
+    publisher.publish(sequence=101, phase=CyclePhase.OBSERVE, now=NOW)  # beyond the contract
+    assert publisher.failed and not progress_path(tmp_path).exists()
+    publisher.publish(sequence=1, phase=CyclePhase.OBSERVE, now=NOW)
+    assert not progress_path(tmp_path).exists(), "publishing stays stopped"
