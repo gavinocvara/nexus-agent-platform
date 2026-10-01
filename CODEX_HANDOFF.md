@@ -1,16 +1,16 @@
 # Codex Handoff
 
 Current state only. History: Git and `CHANGELOG.md`. Rules and invariants: `AGENTS.md`.
-Subsystem status on `main` (unchanged by the branch below): `PROJECT_STATE.md`.
+Subsystem status on `main`: `PROJECT_STATE.md`.
 
 ## Checkpoint
 
 | Item | Value |
 | --- | --- |
-| Version | `0.27.0` on `main`; no bump on the branch |
-| `main` | `fec1cbb0b78735ccbe8fcb1a59b81c7b45e322e1`: merge of PR #5 (Command Center milestone landed) |
+| Version | `0.27.0`; no bump since |
+| `main` | `95c1c96`: core label fix (direct, owner request) on PR #5's merge `fec1cbb0b78735ccbe8fcb1a59b81c7b45e322e1`. CI run `36834353149`: `validate` and client browser checks green; `compose-integration` hit a PyPI read timeout building the lab `orders` image, before any test |
 | PR #5 | Merged. Branch head `836722d` green on `validate`, `compose-integration`, `command-center` (run `36677641470`) |
-| Active branch | none; `claude/nexus-command-center` is fully merged |
+| Active branch | none |
 
 ## Command Center (landed; ADR 0013, `docs/runbooks/command-center.md`)
 
@@ -24,6 +24,7 @@ Subsystem status on `main` (unchanged by the branch below): `PROJECT_STATE.md`.
   (`.nexus/software_engineer`), read-only rootfs, non-root, no caps, secrets or socket.
   The AegisOps brain is not mounted (ADR 0008; `tests/unit/test_brain.py`) and shows as
   not visible there.
+- Core label (`95c1c96`): mounts once R3F connects events; the visual suite checks all 7.
 - Not built (owner decisions): write actions; authentication or non-loopback exposure.
 
 ## Validation (PR #5 head `836722d`, local Linux, Python 3.12.3, Node 22)
@@ -50,13 +51,13 @@ Subsystem status on `main` (unchanged by the branch below): `PROJECT_STATE.md`.
 2. Finish the Slack exercise (`/nexus bogus` and non-owner re-check pending; a live owner
    decision already works) and authorize the first real `decide` + `publish`.
 3. Remote branch cleanup: `maintenance/repo-hygiene-claude` unmerged;
-   `claude/nexus-command-center` fully merged and deletable.
+   `claude/nexus-command-center` and `claude/fix-core-label` fully merged, deletable.
 
 ## Frozen evidence (unchanged, never modify)
 
 Phase 5 investigator hashes, Phase 6 `aegisops-memoryless-v1` baseline and lock, Phase 7
 protocol, calibration evidence, frozen snapshot and self-report (`docs/experiments/`;
-pinned by tests). `nexus.__version__` (`0.18.0`) stays untouched pending an owner decision.
+pinned by tests).
 
 ## Exact next task
 
