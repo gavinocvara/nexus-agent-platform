@@ -55,6 +55,9 @@ test("spatial view renders, stays in bounds, and only reads", async ({ page }) =
   await canvasHasContent(page);
   await noHorizontalOverflow(page);
   await expect(page.locator(".nx-display")).toBeVisible();
+  // Every system carries its in-scene label, the NEXUS core included.
+  await expect(page.locator(".nx-orb-label__name")).toHaveCount(7);
+  await expect(page.locator(".nx-orb-label[data-core='true']")).toContainText("NEXUS");
   expect(errors).toEqual([]);
   expect(writes, "the Command Center never writes").toEqual([]);
 });

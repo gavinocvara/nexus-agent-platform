@@ -107,15 +107,21 @@ function World({ quality, reducedMotion }: { quality: Quality; reducedMotion: bo
   const goTo = useStore((state) => state.goTo);
   const coreLabel = useRef<HTMLDivElement>(null);
   const coreHovered = useRef(false);
+  // drei's <Html> picks its DOM parent from the event layer. Mounted before R3F connects
+  // events (as the core label is, on the first frame), it re-parents once they connect and
+  // leaves an empty wrapper behind. The orb labels mount later, so only the core needs this.
+  const eventsConnected = useThree((state) => Boolean(state.events.connected));
   useLabelLit("nexus", coreLabel, coreHovered);
   return (
     <>
       <Director reducedMotion={reducedMotion} />
       <Environment quality={quality} />
       <NexusCore quality={quality} onSelect={() => goTo(stopIndexFor("nexus"))} />
-      <Html position={[CORE_RADIUS * 0.78, CORE_RADIUS * 1.05, 0]} zIndexRange={[4, 0]} style={{ pointerEvents: "none" }}>
-        <OrbLabel id="nexus" info={labels.nexus} labelRef={coreLabel} />
-      </Html>
+      {eventsConnected ? (
+        <Html position={[CORE_RADIUS * 0.78, CORE_RADIUS * 1.05, 0]} zIndexRange={[4, 0]} style={{ pointerEvents: "none" }}>
+          <OrbLabel id="nexus" info={labels.nexus} labelRef={coreLabel} />
+        </Html>
+      ) : null}
       <Conduits quality={quality} />
       {ORBITING.map((id) => (
         <SystemOrb
